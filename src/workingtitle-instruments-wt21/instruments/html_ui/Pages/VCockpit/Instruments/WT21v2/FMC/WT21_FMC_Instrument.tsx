@@ -1,9 +1,9 @@
-/// <reference types="@microsoft/msfs-types/Pages/VCockpit/Instruments/Shared/BaseInstrument" />
-/// <reference types="@microsoft/msfs-types/Pages/VCockpit/Core/VCockpit" />
-/// <reference types="@microsoft/msfs-types/js/simvar" />
-/// <reference types="@microsoft/msfs-types/js/radionav" />
-/// <reference types="@microsoft/msfs-types/js/netbingmap" />
-/// <reference types="@microsoft/msfs-types/Coherent/Facilities" />
+/// <reference types="@microsoft/msfs-types/pages/vcockpit/instruments/shared/baseinstrument" preserve="true" />
+/// <reference types="@microsoft/msfs-types/pages/vcockpit/core/vcockpit" preserve="true" />
+/// <reference types="@microsoft/msfs-types/js/simvar" preserve="true" />
+/// <reference types="@microsoft/msfs-types/js/radionav" preserve="true" />
+/// <reference types="@microsoft/msfs-types/js/netbingmap" preserve="true" />
+/// <reference types="@microsoft/msfs-types/coherent/facilities" preserve="true" />
 
 import {
   AdcPublisher, AhrsPublisher, APEvents, AutopilotInstrument, BaseInstrumentPublisher, Clock, ClockEvents, ControlPublisher,
@@ -13,8 +13,10 @@ import {
   SmoothingPathCalculator, UserSettingSaveManager, VNavSimVarPublisher, Wait, XPDRInstrument
 } from '@microsoft/msfs-sdk';
 
+import { FmsPos, WT21FlightPlanRouteLoader, WT21FlightPlanRouteSyncManager } from '@microsoft/msfs-wt21-shared';
+
 import {
-  DefaultsUserSettings, FgpUserSettings, FmcSimVarPublisher, FmcSimVars, FMS_MESSAGE_ID, MESSAGE_TARGET, MessageManager, MessageService, PfdMessageReceiver,
+  WT21Fms, DefaultsUserSettings, FgpUserSettings, FmcSimVarPublisher, FmcSimVars, FMS_MESSAGE_ID, MESSAGE_TARGET, MessageManager, MessageService, PfdMessageReceiver,
   PFDUserSettings, WT21ControlEvents, WT21ControlPublisher, WT21FixInfoConfig, WT21FixInfoManager, WT21FmsUtils, WT21SettingSaveManager
 } from '@microsoft/msfs-wt21-shared';
 
@@ -26,17 +28,15 @@ import { WT21NavDataComputer } from './Autopilot/WT21NavDataComputer';
 import { WT21SpeedConstraintStore } from './Autopilot/WT21SpeedConstraintStore';
 import { WT21SpeedMessagesManager } from './Autopilot/WT21SpeedMessagesManager';
 import { DescentAdvisoryManager, FmcMessageReceiver } from './Data';
-import { WT21FlightPlanRouteLoader } from './FlightPlan/WT21FlightPlanRouteLoader';
-import { WT21FlightPlanRouteSyncManager } from './FlightPlan/WT21FlightPlanRouteSyncManager';
-import { WT21Fms } from './FlightPlan/WT21Fms';
 import { mapHEventToFmcEvent } from './FmcHEvents';
-import { FmsPos } from './FmsPos';
 import { FmcEventPublisher } from './Framework/FmcEventPublisher';
 import { FmcKeyboardInput } from './Framework/FmcKeyboardInput';
 import { WT21FlightLogger } from './Systems/WT21FlightLogger';
 import { WT21VorManager } from './Systems/WT21VorManager';
 import { WT21CduDisplay } from './WT21CduDisplay';
 import { WT21FmcAvionicsPlugin, WT21FmcPluginBinder } from './WT21FmcAvionicsPlugin';
+import { FmcMiscEvents } from './FmcEvent';
+import { WT21FmcEvents } from './WT21FmcEvents';
 
 import './WT21_FMC.css';
 
@@ -236,6 +236,11 @@ export class WT21_FMC_Instrument implements FsInstrument {
       this.bus.getSubscriber<WT21ControlEvents>().on('new_flight_plan_created').handle(() => {
         this.flightLogger.reset();
       });
+    });
+
+    // Handle EXEC
+    this.bus.getSubscriber<WT21FmcEvents>().on(FmcMiscEvents.BTN_EXEC).handle(() => {
+      this.fms.execModFlightPlan();
     });
 
     this.renderComponents();

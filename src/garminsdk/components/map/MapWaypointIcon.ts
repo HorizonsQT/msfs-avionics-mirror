@@ -1,4 +1,4 @@
-/// <reference types="@microsoft/msfs-types/js/avionics" />
+/// <reference types="@microsoft/msfs-types/js/avionics" preserve="true" />
 
 import {
   AbstractMapWaypointIcon, AbstractMapWaypointIconOptions, MapProjection, MapWaypointSpriteIcon, NavMath, ReadonlyFloat64Array, Subscribable, SubscribableUtils,

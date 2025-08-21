@@ -41,7 +41,7 @@ export class LodBoundaryCache {
     const boundary = new LodBoundary(facility, this.lodDistanceThresholds, this.lodVectorCountTargets);
     this.cache.set(facility.id, boundary);
     if (this.cache.size > this.size) {
-      this.cache.delete(this.cache.keys().next().value);
+      this.cache.delete(this.cache.keys().next().value!);
     }
     return boundary;
   }

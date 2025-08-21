@@ -231,6 +231,7 @@ export class WTG3000GtcInstrument extends WTG3000FsInstrument {
       vnavDataProvider: this.vnavDataProvider,
       obsSuspDataProvider: this.obsSuspDataProvider,
       fmsSpeedTargetDataProvider: this.fmsSpeedTargetDataProvider,
+      terrainSystemStateDataProvider: this.terrainSystemStateDataProvider,
       flightPlanListManager: this.flightPlanListManager,
       wptInfoSelectedIntersection: Subject.create<FacilityWaypoint<IntersectionFacility> | null>(null),
       wptInfoSelectedVor: Subject.create<FacilityWaypoint<VorFacility> | null>(null),
@@ -390,8 +391,8 @@ export class WTG3000GtcInstrument extends WTG3000FsInstrument {
           <GtcPfdMapSettingsPage
             gtcService={gtcService}
             controlMode={controlMode}
-            trafficSystemType={this.config.traffic.type}
-            adsb={this.config.traffic.supportAdsb}
+            config={this.config}
+            terrainSystemStateDataProvider={context.terrainSystemStateDataProvider}
           />
         );
       }
@@ -429,7 +430,7 @@ export class WTG3000GtcInstrument extends WTG3000FsInstrument {
             controlMode={controlMode}
             displayPaneIndex={displayPaneIndex}
             config={this.config}
-            terrainSystemStateDataProvider={this.terrainSystemStateDataProvider}
+            terrainSystemStateDataProvider={context.terrainSystemStateDataProvider}
           />
         );
       }
@@ -496,7 +497,7 @@ export class WTG3000GtcInstrument extends WTG3000FsInstrument {
               controlMode={controlMode}
               displayPaneIndex={displayPaneIndex}
               terrainConfig={this.config.terrain}
-              terrainSystemStateDataProvider={this.terrainSystemStateDataProvider}
+              terrainSystemStateDataProvider={context.terrainSystemStateDataProvider}
             />
           );
         }

@@ -145,13 +145,17 @@ export class UnsFlightPlanRouteLoader {
           );
 
           if (departureIndexes.procedureIndex >= 0) {
-            this.fms.insertDeparture(
+            await this.fms.insertDeparture(
               origin.airport,
               departureIndexes.procedureIndex,
               departureIndexes.runwayTransitionIndex,
               departureIndexes.enrouteTransitionIndex,
               origin.runway
             );
+
+            if (opId !== this.loadOpId) {
+              return false;
+            }
           } else {
             this.fms.setOrigin(origin.airport, origin.runway);
           }
@@ -181,13 +185,17 @@ export class UnsFlightPlanRouteLoader {
           );
 
           if (arrivalIndexes.procedureIndex >= 0) {
-            this.fms.insertArrival(
+            await this.fms.insertArrival(
               destination.airport,
               arrivalIndexes.procedureIndex,
               arrivalIndexes.runwayTransitionIndex,
               arrivalIndexes.enrouteTransitionIndex,
               destination.runway
             );
+
+            if (opId !== this.loadOpId) {
+              return false;
+            }
           }
 
           const approachIndexes = this.retrieveApproachIndexes(
@@ -204,6 +212,10 @@ export class UnsFlightPlanRouteLoader {
                 approachTransitionIndex: approachIndexes.transitionIndex,
               }
             );
+
+            if (opId !== this.loadOpId) {
+              return false;
+            }
           }
 
           if (plan.procedureDetails.arrivalIndex < 0 && plan.procedureDetails.approachIndex < 0) {

@@ -1,5 +1,5 @@
 import {
-  Animator, APEvents, AvionicsSystemState, AvionicsSystemStateEvent, ComponentProps, ConsumerSubject, DefaultUserSettingManager, DisplayComponent, Easing,
+  Animator, APEvents, AvionicsSystemState, AvionicsSystemStateEvent, ComponentProps, ConsumerSubject, UserSettingManager, DisplayComponent, Easing,
   EventBus, FSComponent, MathUtils, MinimumsEvents, MinimumsMode, NodeReference, Subject, Subscription, VNode
 } from '@microsoft/msfs-sdk';
 
@@ -56,7 +56,7 @@ export class Altimeter extends DisplayComponent<AltimeterProps> {
   private baroMinsBugRef = FSComponent.createRef<HTMLDivElement>();
   private baroMinsBugFlashRef = FSComponent.createRef<SVGGElement>();
   private radioMinsBarRef = FSComponent.createRef<HTMLDivElement>();
-  private pfdSettingsManager!: DefaultUserSettingManager<PFDSettings>;
+  private pfdSettingsManager!: UserSettingManager<PFDSettings>;
 
   private altitude = Simplane.getAltitude();
   private altOffset = -this.altitude;

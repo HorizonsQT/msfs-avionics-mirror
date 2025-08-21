@@ -3,6 +3,7 @@ import { NavReferenceSource } from '@microsoft/msfs-garminsdk';
 /**
  * A manager that automatically slews a selected OBS course setting to the localizer course when a localizer is tuned
  * and received.
+ * @deprecated
  */
 export class ObsAutoSlew {
   /**

@@ -3,6 +3,7 @@ import { IcaoValue } from '../navigation/Icao';
 import { ICAO } from '../navigation/IcaoUtils';
 import { UUID } from '../utils/uuid/UUID';
 import { FlightPathCalculator } from './flightpath/FlightPathCalculator';
+import { FlightPathVector } from './flightpath/FlightPathVector';
 import {
   FlightPlanLegIndexes, FlightPlanSegment, FlightPlanSegmentType, LegDefinition, ProcedureDetails, SpeedUnit, VerticalData, VerticalFlightPhase
 } from './FlightPlanning';
@@ -1830,7 +1831,6 @@ export class FlightPlan {
    * @param approachTransitionIndex The index of the approach transition in the approach procedure's transitions array.
    * Defaults to `-1`.
    * @param notify Whether to notify subscribers of the change. Defaults to `true`.
-   * @deprecated Please use the signature that takes an `IcaoValue` for the `facilityIcao` parameter.
    */
   public setApproach(facilityIcao?: IcaoValue, approachIndex?: number, approachTransitionIndex?: number, notify?: boolean): void;
   /**
@@ -1992,6 +1992,8 @@ export class FlightPlan {
    */
   private static copyLegCalculations(existingLeg: LegDefinition, newLeg: LegDefinition): LegDefinition {
     if (existingLeg.calculated !== undefined) {
+      const copyVector = (vector: FlightPathVector): FlightPathVector => Object.assign({}, vector);
+
       newLeg.calculated = {
         courseMagVar: existingLeg.calculated.courseMagVar,
         initialDtk: existingLeg.calculated.initialDtk,
@@ -2003,12 +2005,20 @@ export class FlightPlan {
         startLon: existingLeg.calculated.startLon,
         endLat: existingLeg.calculated.endLat,
         endLon: existingLeg.calculated.endLon,
-        flightPath: existingLeg.calculated.flightPath.map(vector => Object.assign({}, vector)),
-        ingress: existingLeg.calculated.ingress.map(vector => Object.assign({}, vector)),
+        flightPath: existingLeg.calculated.flightPath.map(copyVector),
+
+        // NOTE: Nullish coalesce is added for backwards compatibility with older versions of FlightPlan that did not
+        // have the ingressBase/egressBase properties on the leg calculations.
+        ingressBase: (existingLeg.calculated.ingressBase ?? existingLeg.calculated.ingress).map(copyVector),
+        ingressBaseJoinIndex: existingLeg.calculated.ingressBaseJoinIndex ?? existingLeg.calculated.ingressJoinIndex,
+        egressBase: (existingLeg.calculated.egressBase ?? existingLeg.calculated.egress).map(copyVector),
+        egressBaseJoinIndex: existingLeg.calculated.egressBaseJoinIndex ?? existingLeg.calculated.egressJoinIndex,
+
+        ingress: existingLeg.calculated.ingress.map(copyVector),
         ingressJoinIndex: existingLeg.calculated.ingressJoinIndex,
-        ingressToEgress: existingLeg.calculated.ingressToEgress.map(vector => Object.assign({}, vector)),
+        ingressToEgress: existingLeg.calculated.ingressToEgress.map(copyVector),
         egressJoinIndex: existingLeg.calculated.egressJoinIndex,
-        egress: existingLeg.calculated.egress.map(vector => Object.assign({}, vector)),
+        egress: existingLeg.calculated.egress.map(copyVector),
         endsInDiscontinuity: existingLeg.calculated.endsInDiscontinuity,
         endsInFallback: existingLeg.calculated.endsInFallback
       };

@@ -16,7 +16,7 @@ import { FlightPathVector, FlightPathVectorFlags } from '../FlightPathVector';
 import { CircleInterceptVectorBuilder } from '../vectorbuilders/CircleInterceptVectorBuilder';
 import { CircleVectorBuilder } from '../vectorbuilders/CircleVectorBuilder';
 import { DirectToPointVectorBuilder } from '../vectorbuilders/DirectToPointVectorBuilder';
-import { InterceptGreatCircleToPointVectorBuilder } from '../vectorbuilders/InterceptGreatCircleToPointVectorBuilder';
+import { InterceptCircleToPointVectorBuilder } from '../vectorbuilders/InterceptCircleToPointVectorBuilder';
 import { AbstractFlightPathLegCalculator } from './AbstractFlightPathLegCalculator';
 
 /**
@@ -106,7 +106,7 @@ export abstract class CircleInterceptLegCalculator extends AbstractFlightPathLeg
   protected readonly circleVectorBuilder = new CircleVectorBuilder();
   protected readonly circleInterceptVectorBuilder = new CircleInterceptVectorBuilder();
   protected readonly directToPointVectorBuilder = new DirectToPointVectorBuilder();
-  protected readonly interceptGreatCircleToPointVectorBuilder = new InterceptGreatCircleToPointVectorBuilder();
+  protected readonly interceptCircleToPointVectorBuilder = new InterceptCircleToPointVectorBuilder();
 
   private readonly interceptCourseInfo: CircleInterceptLegInterceptCourseInfo = {
     course: 0,
@@ -512,12 +512,13 @@ export abstract class CircleInterceptLegCalculator extends AbstractFlightPathLeg
           const flags = FlightPathVectorFlags.Fallback;
           const turnFlags = FlightPathVectorFlags.TurnToCourse | FlightPathVectorFlags.Fallback;
 
-          const vectorCount = this.interceptGreatCircleToPointVectorBuilder.build(
+          const vectorCount = this.interceptCircleToPointVectorBuilder.build(
             vectors, vectorIndex,
             fallbackCalcStartVec, initialPath,
             desiredTurnRadius, undefined,
             interceptAngle,
-            undefined, pathToInterceptInfo.circle,
+            pathToInterceptInfo.circle,
+            undefined, undefined,
             undefined,
             turnFlags, flags, turnFlags,
             interceptCourseInfo.heading, interceptCourseInfo.isHeadingTrue

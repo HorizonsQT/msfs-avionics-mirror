@@ -27,7 +27,7 @@ export interface TrafficContact {
   /** A unique ID number assigned to this contact. */
   readonly uid: number;
 
-  /** The last time of contact, in sim time, as a UNIX millisecond timestamp. */
+  /** The last time of contact, in sim time, as a Javascript timestamp. */
   readonly lastContactTime: number;
 
   /** The position of this contact at time of last contact. */
@@ -36,16 +36,16 @@ export interface TrafficContact {
   /** The altitude of this contact at time of last contact. */
   readonly lastAltitude: NumberUnitReadOnly<UnitFamily.Distance>;
 
-  /** The heading of this contact at time of last contact. */
-  readonly lastHeading: number,
+  /** The heading of this contact at time of last contact, in degrees. */
+  readonly lastHeading: number;
 
   /** The most recent calculated ground speed of this contact. Equal to NaN if not yet been calculated. */
   readonly groundSpeed: NumberUnitReadOnly<UnitFamily.Speed>;
 
   /** The most recent calculated ground track of this contact. Equal to NaN if not yet been calculated. */
-  readonly groundTrack: number,
+  readonly groundTrack: number;
 
-  /** The most recent calculaed vertical speed of this contact. Equal to NaN if not yet been calculated. */
+  /** The most recent calculated vertical speed of this contact. Equal to NaN if not yet been calculated. */
   readonly verticalSpeed: NumberUnitReadOnly<UnitFamily.Speed>;
 
   /**
@@ -60,7 +60,7 @@ export interface TrafficContact {
 }
 
 /**
- * Initialization options for TrafficInstrument.
+ * Configuration options for {@link TrafficInstrument}.
  */
 export type TrafficInstrumentOptions = {
   /** The maximum update frequency (Hz) in real time. */
@@ -81,21 +81,33 @@ export type TrafficInstrumentOptions = {
  * heading, and uses these data to compute ground speed, ground track, and vertical speed.
  */
 export class TrafficInstrument implements Instrument {
+  private readonly listenerPromise: Promise<ViewListener.ViewListener>;
+  private listener?: ViewListener.ViewListener;
+
   private readonly options: TrafficInstrumentOptions;
 
   private readonly tracked = new Map<number, TrafficContactClass>();
+
+  private isInitStarted = false;
 
   private lastUpdateRealTime = 0;
   private lastUpdateSimTime = 0;
   private isBusy = false;
 
   /**
-   * Constructor.
+   * Creates a new instance of TrafficInstrument.
    * @param bus The event bus.
-   * @param options Options with which to initialize this instrument.
+   * @param options Options with which to configure this instrument.
    */
-  constructor(private readonly bus: EventBus, options: TrafficInstrumentOptions) {
+  public constructor(private readonly bus: EventBus, options: Readonly<TrafficInstrumentOptions>) {
     this.options = Object.assign({}, options);
+
+    this.listenerPromise = new Promise(resolve => {
+      const listener = RegisterViewListener('JS_LISTENER_AIR_TRAFFIC', () => {
+        this.listener = listener;
+        resolve(listener);
+      });
+    });
   }
 
   /**
@@ -117,9 +129,27 @@ export class TrafficInstrument implements Instrument {
 
   /**
    * Initializes this instrument. Once initialized, this instrument will automatically track and update traffic
-   * contacts.
+   * contacts. Initialization is asynchronous and is not guaranteed to have completed by the time this method returns.
    */
   public init(): void {
+    this.doInit();
+  }
+
+  /**
+   * Initializes this instrument. Once initialized, this instrument will automatically track and update traffic
+   * contacts.
+   */
+  private async doInit(): Promise<void> {
+    if (this.isInitStarted) {
+      return;
+    }
+
+    this.isInitStarted = true;
+
+    if (!this.listener) {
+      await this.listenerPromise;
+    }
+
     this.bus.getSubscriber<ClockEvents>()
       .on('simTime')
       .whenChanged()
@@ -153,7 +183,7 @@ export class TrafficInstrument implements Instrument {
     const contact = new TrafficContactClass(entry.uId, 1000 / this.options.simTimeUpdateFreq * 5);
     this.tracked.set(contact.uid, contact);
 
-    contact.update(entry.lat, entry.lon, UnitType.METER.convertTo(entry.alt, UnitType.FOOT), entry.heading, simTime);
+    contact.update(simTime, entry);
     this.bus.pub('traffic_contact_added', contact.uid, false, false);
   }
 
@@ -164,7 +194,7 @@ export class TrafficInstrument implements Instrument {
    * @param simTime The sim time at which the traffic data entry was generated.
    */
   private updateContact(contact: TrafficContactClass, entry: TrafficDataEntry, simTime: number): void {
-    contact.update(entry.lat, entry.lon, UnitType.METER.convertTo(entry.alt, UnitType.FOOT), entry.heading, simTime);
+    contact.update(simTime, entry);
     this.bus.pub('traffic_contact_updated', contact.uid, false, false);
   }
 
@@ -197,7 +227,7 @@ export class TrafficInstrument implements Instrument {
 
     this.isBusy = true;
     try {
-      const data = await Promise.race([Coherent.call('GET_AIR_TRAFFIC'), Wait.awaitDelay(1000)]);
+      const data = await Promise.race([this.listener!.call('GET_AIR_TRAFFIC'), Wait.awaitDelay(1000)]);
 
       if (data) {
         this.updateContacts(data, simTime);
@@ -228,19 +258,19 @@ export class TrafficInstrument implements Instrument {
  */
 type TrafficDataEntry = {
   /** A unique ID number assigned to this entry. */
-  readonly uId: number,
+  readonly uId: number;
 
-  /** This entry's current reported latitude. */
-  readonly lat: number,
+  /** This entry's current reported latitude, in degrees. */
+  readonly lat: number;
 
-  /** This entry's current reported longitude. */
-  readonly lon: number,
+  /** This entry's current reported longitude, in degrees. */
+  readonly lon: number;
 
-  /** This entry's current reported altitude. */
-  readonly alt: number,
+  /** This entry's current reported altitude, in meters. */
+  readonly alt: number;
 
-  /** This entry's current reported heading. */
-  readonly heading: number
+  /** This entry's current reported heading, in degrees. */
+  readonly heading: number;
 };
 
 /**
@@ -268,30 +298,23 @@ class TrafficContactClass implements TrafficContact {
   private readonly _lastAltitude = UnitType.FOOT.createNumber(NaN);
   public readonly lastAltitude = this._lastAltitude.readonly;
 
-  private _lastHeading = NaN;
-  // eslint-disable-next-line jsdoc/require-jsdoc
-  public get lastHeading(): number {
-    return this._lastHeading;
-  }
+  /** @inheritDoc */
+  public lastHeading = NaN;
 
-  private _lastContactTime = NaN;
-  // eslint-disable-next-line jsdoc/require-jsdoc
-  public get lastContactTime(): number {
-    return this._lastContactTime;
-  }
+  /** @inheritDoc */
+  public lastContactTime = NaN;
 
   // computed data
 
   private readonly _groundSpeed = UnitType.KNOT.createNumber(NaN);
+  /** @inheritDoc */
   public readonly groundSpeed = this._groundSpeed.readonly;
 
-  private _groundTrack = NaN;
-  // eslint-disable-next-line jsdoc/require-jsdoc
-  public get groundTrack(): number {
-    return this._groundTrack;
-  }
+  /** @inheritDoc */
+  public groundTrack = NaN;
 
   private readonly _verticalSpeed = UnitType.FPM.createNumber(NaN);
+  /** @inheritDoc */
   public readonly verticalSpeed = this._verticalSpeed.readonly;
 
   private readonly groundSpeedSmoother = new ExpSmoother(TrafficContactClass.GROUND_SPEED_TIME_CONSTANT, null, this.contactTimeResetThreshold / 1000);
@@ -304,10 +327,13 @@ class TrafficContactClass implements TrafficContact {
    * @param contactTimeResetThreshold The maximum allowed elapsed sim time, in milliseconds, since time of last contact
    * before this contact's computed values are reset.
    */
-  constructor(public readonly uid: number, private readonly contactTimeResetThreshold: number) {
+  public constructor(
+    public readonly uid: number,
+    private readonly contactTimeResetThreshold: number
+  ) {
   }
 
-  // eslint-disable-next-line jsdoc/require-jsdoc
+  /** @inheritDoc */
   public predict(simTime: number, positionOut: GeoPoint, altitudeOut: NumberUnit<UnitFamily.Distance>): void {
     if (this.groundSpeed.isNaN()) {
       positionOut.set(NaN, NaN);
@@ -318,88 +344,78 @@ class TrafficContactClass implements TrafficContact {
     const dt = simTime - this.lastContactTime;
 
     const distance = UnitType.NMILE.convertTo(this._groundSpeed.number * (dt / 3600000), UnitType.GA_RADIAN);
-    this._lastPosition.offset(this._groundTrack, distance, positionOut);
+    this._lastPosition.offset(this.groundTrack, distance, positionOut);
 
     const deltaAlt = this._verticalSpeed.number * (dt / 60000);
     this._lastAltitude.add(deltaAlt, UnitType.FOOT, altitudeOut);
   }
 
   /**
-   * Updates this contact with the current reported position, altitude and heading. Also updates the computed ground
-   * speed, ground track, and vertical speed if there are sufficient data to do so.
-   * @param lat The current reported latitude.
-   * @param lon The current reported longitude.
-   * @param altitude The current reported altitude, in feet.
-   * @param heading The current reported heading.
+   * Updates this contact from a traffic data entry. Also updates the computed ground speed, ground track, and vertical
+   * speed if there are sufficient data to do so.
    * @param simTime The current sim time.
+   * @param entry The data entry to use to update this contact.
    */
-  public update(lat: number, lon: number, altitude: number, heading: number, simTime: number): void {
-    const dt = simTime - this._lastContactTime;
+  public update(simTime: number, entry: TrafficDataEntry): void {
+    const dt = simTime - this.lastContactTime;
 
     if (!isNaN(dt) && (dt < 0 || dt > this.contactTimeResetThreshold)) {
-      this.reset(lat, lon, altitude, heading, simTime);
+      this.reset(simTime, entry);
       return;
     }
 
     if (!isNaN(dt) && dt > 0) {
-      this.updateComputedValues(dt / 1000, lat, lon, altitude);
+      this.updateComputedValues(dt / 1000, entry);
     }
 
-    this.setReportedValues(lat, lon, altitude, heading);
+    this.setReportedValues(entry);
 
     if (this.areComputedValuesValid()) {
-      this._lastContactTime = simTime;
+      this.lastContactTime = simTime;
     } else {
-      this.reset(lat, lon, altitude, heading, simTime);
+      this.reset(simTime, entry);
     }
   }
 
   /**
-   * Erases this contact's tracking history and sets the initial reported position, altitude, and heading.
-   * @param lat The current reported latitude.
-   * @param lon The current reported longitude.
-   * @param altitude The current reported altitude, in feet.
-   * @param heading The current reported heading.
+   * Erases this contact's tracking history and sets the initial reported name, position, altitude, and heading from a
+   * traffic data entry.
    * @param simTime The current sim time.
+   * @param entry The data entry to use to reset this contact.
    */
-  public reset(lat: number, lon: number, altitude: number, heading: number, simTime: number): void {
-    this.setReportedValues(lat, lon, altitude, heading);
+  public reset(simTime: number, entry: TrafficDataEntry): void {
+    this.setReportedValues(entry);
     this._groundSpeed.set(NaN);
-    this._groundTrack = NaN;
+    this.groundTrack = NaN;
     this._verticalSpeed.set(NaN);
     this.groundSpeedSmoother.reset();
     this.groundTrackSmoother.reset();
     this.verticalSpeedSmoother.reset();
-    this._lastContactTime = simTime;
+    this.lastContactTime = simTime;
   }
 
   /**
-   * Sets the most recent reported values.
-   * @param lat The reported latitude.
-   * @param lon The reported longitude.
-   * @param altitude The reported altitude, in feet.
-   * @param heading The reported heading.
+   * Sets this contact's most recent reported values from a traffic data entry.
+   * @param entry The data entry to use to update this contact.
    */
-  private setReportedValues(lat: number, lon: number, altitude: number, heading: number): void {
-    this._lastPosition.set(lat, lon);
-    this._lastAltitude.set(altitude);
-    this._lastHeading = heading;
+  private setReportedValues(entry: TrafficDataEntry): void {
+    this._lastPosition.set(entry.lat, entry.lon);
+    this._lastAltitude.set(entry.alt, UnitType.METER);
+    this.lastHeading = entry.heading;
   }
 
   /**
-   * Updates this contact's computed values.
+   * Updates this contact's computed values from a traffic data entry.
    * @param dt The elapsed time, in seconds, since last contact.
-   * @param lat The current reported latitude.
-   * @param lon The current reported longitude.
-   * @param altitude The current reported altitude, in feet.
+   * @param entry The data entry to use to update this contact.
    */
-  private updateComputedValues(dt: number, lat: number, lon: number, altitude: number): void {
-    const pos = TrafficContactClass.tempGeoPoint.set(lat, lon);
+  private updateComputedValues(dt: number, entry: TrafficDataEntry): void {
+    const pos = TrafficContactClass.tempGeoPoint.set(entry.lat, entry.lon);
     const distanceNM = UnitType.GA_RADIAN.convertTo(this.lastPosition.distance(pos), UnitType.NMILE);
     const track = pos.bearingFrom(this._lastPosition);
     this.updateGroundSpeed(dt, distanceNM);
     this.updateGroundTrack(dt, track, distanceNM);
-    this.updateVerticalSpeed(dt, altitude);
+    this.updateVerticalSpeed(dt, UnitType.METER.convertTo(entry.alt, UnitType.FOOT));
   }
 
   /**
@@ -442,7 +458,7 @@ class TrafficContactClass implements TrafficContact {
       track = last === null ? NaN : last;
     }
     const next = last !== null && isNaN(last) ? this.groundTrackSmoother.reset(track) : this.groundTrackSmoother.next(track, dt);
-    this._groundTrack = (next + 360) % 360; // enforce range 0-359
+    this.groundTrack = (next + 360) % 360; // enforce range 0-359
   }
 
   /**

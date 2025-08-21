@@ -1,6 +1,6 @@
 import {
-  ApproachIdentifier, ArrayUtils, BuiltInChartProvider, ChartIndex, ChartMetadata, ChartUrl, GeoReferencedChartArea,
-  LidoChartType, RunwayIdentifier
+  ApproachIdentifier, ArrayUtils, BuiltInChartProvider, ChartImageSupplier, ChartIndex, ChartMetadata, ChartsClient,
+  ChartService, ChartUrl, ChartView, GeoReferencedChartArea, LidoChartType, RunwayIdentifier, SimChartService
 } from '@microsoft/msfs-sdk';
 
 import { GarminLidoChartsUtils } from '@microsoft/msfs-garminsdk';
@@ -32,6 +32,20 @@ export class G3XLidoChartsSource implements G3XChartsSource {
 
   /** @inheritDoc */
   public readonly supportsNightMode = true;
+
+  private readonly chartService = new SimChartService();
+
+  /** @inheritDoc */
+  public getChartService(): ChartService {
+    return this.chartService;
+  }
+
+  /** @inheritDoc */
+  public createChartImageSupplier(): ChartImageSupplier {
+    const view = new ChartView();
+    ChartsClient.initializeChartView(view);
+    return view;
+  }
 
   /** @inheritDoc */
   public getAirportDiagramCharts(chartIndex: ChartIndex<string>): ChartMetadata[] {

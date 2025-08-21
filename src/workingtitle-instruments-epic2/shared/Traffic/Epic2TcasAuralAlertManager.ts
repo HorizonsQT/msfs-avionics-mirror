@@ -1,4 +1,4 @@
-/// <reference types="@microsoft/msfs-types/js/avionics" />
+/// <reference types="@microsoft/msfs-types/js/avionics" preserve="true" />
 
 import {
   AhrsEvents, AuralAlertActivation, AuralAlertControlEvents, AuralAlertRegistrationManager, ConsumerValue, EventBus, Subscription, TcasAlertLevel, TcasEvents,

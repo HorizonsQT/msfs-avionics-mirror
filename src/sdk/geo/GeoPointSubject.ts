@@ -50,7 +50,7 @@ export class GeoPointSubject extends AbstractSubscribable<GeoPointInterface> imp
    * Sets the new value and notifies the subscribers if the value changed.
    * @param value The new value.
    */
-  public set(value: LatLonInterface): void;
+  public set(value: Readonly<LatLonInterface>): void;
   /**
    * Sets the new value and notifies the subscribers if the value changed.
    * @param lat The latitude of the new value.
@@ -58,11 +58,13 @@ export class GeoPointSubject extends AbstractSubscribable<GeoPointInterface> imp
    */
   public set(lat: number, lon: number): void;
   // eslint-disable-next-line jsdoc/require-jsdoc
-  public set(arg1: LatLonInterface | number, arg2?: number): void {
+  public set(arg1: Readonly<LatLonInterface> | number, arg2?: number): void {
     const isArg1Number = typeof arg1 === 'number';
-    const equals = isArg1Number ? this.value.equals(arg1 as number, arg2 as number, this.tolerance) : this.value.equals(arg1 as LatLonInterface, this.tolerance);
+    const equals = isArg1Number
+      ? this.value.equals(arg1 as number, arg2 as number, this.tolerance)
+      : this.value.equals(arg1 as Readonly<LatLonInterface>, this.tolerance);
     if (!equals) {
-      isArg1Number ? (this.value as GeoPoint).set(arg1 as number, arg2 as number) : (this.value as GeoPoint).set(arg1 as LatLonInterface);
+      isArg1Number ? (this.value as GeoPoint).set(arg1 as number, arg2 as number) : (this.value as GeoPoint).set(arg1 as Readonly<LatLonInterface>);
       this.notify();
     }
   }

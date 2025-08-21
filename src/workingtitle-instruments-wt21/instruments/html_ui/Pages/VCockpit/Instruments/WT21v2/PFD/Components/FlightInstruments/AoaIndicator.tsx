@@ -1,6 +1,6 @@
 import {
-  AvionicsSystemState, AvionicsSystemStateEvent, ComponentProps, ComputedSubject, ConsumerSubject, ControlSurfacesEvents, DefaultUserSettingManager, DisplayComponent, EventBus,
-  FSComponent, MathUtils, Subject, VNode,
+  AvionicsSystemState, AvionicsSystemStateEvent, ComponentProps, ComputedSubject, ConsumerSubject, ControlSurfacesEvents, DisplayComponent, EventBus,
+  FSComponent, MathUtils, Subject, UserSettingManager, VNode,
 } from '@microsoft/msfs-sdk';
 
 import { AOASystemEvents, PFDSettings, PFDUserSettings } from '@microsoft/msfs-wt21-shared';
@@ -28,7 +28,7 @@ export class AoaIndicator extends DisplayComponent<AoaIndicatorProps> {
   private showArrow = Subject.create(false);
   private showLowRhombus = Subject.create(false);
   private pixelPerTick = 241.875;
-  private pfdSettingsManager!: DefaultUserSettingManager<PFDSettings>;
+  private pfdSettingsManager!: UserSettingManager<PFDSettings>;
   private auto = false;
   private flaps = 0;
   private gear = 0;

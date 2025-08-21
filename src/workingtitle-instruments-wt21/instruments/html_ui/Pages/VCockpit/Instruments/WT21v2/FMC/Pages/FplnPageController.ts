@@ -8,14 +8,15 @@ import {
   Subject, TextInputField, UnitType
 } from '@microsoft/msfs-sdk';
 
-import { WT21FmsUtils, WT21LegDefinitionFlags } from '@microsoft/msfs-wt21-shared';
+import { PilotWaypointError, WT21PilotWaypointUtils } from '@microsoft/msfs-wt21-shared';
 
-import { WT21Fms } from '../FlightPlan/WT21Fms';
+import { WT21Fms, WT21FmsUtils, WT21LegDefinitionFlags } from '@microsoft/msfs-wt21-shared';
+
 import { RawFormatter, StringInputFormat } from '../Framework/FmcFormats';
-import { WT21PilotWaypointUtils } from '../Navigation/WT21PilotWaypointUtils';
 import { WT21FmcPage } from '../WT21FmcPage';
 import { FplnPage } from './FplnPage';
 import { FplnPageStore, RoutePageLegItem } from './FplnPageStore';
+import { WaypointAlreadyExistsPrompt } from './Common/WaypointAlreadyExistsPrompt';
 
 /**
  * FPLN page controller
@@ -144,9 +145,15 @@ export class FplnPageController {
    * @param fms The FMS.
    * @param store The store.
    * @param page The FMC Page.
+   * @param wptAlreadyExistsPrompt The WPT ALREADY EXISTS prompt wrapper
    */
-  constructor(private readonly eventBus: EventBus, private readonly fms: WT21Fms, private readonly store: FplnPageStore,
-    private readonly page: WT21FmcPage) {
+  constructor(
+    private readonly eventBus: EventBus,
+    private readonly fms: WT21Fms,
+    private readonly store: FplnPageStore,
+    private readonly page: WT21FmcPage,
+    private readonly wptAlreadyExistsPrompt: WaypointAlreadyExistsPrompt,
+  ) {
 
     this.page.addBinding(this.legChangeConsumerFpln.handle(this.handleFlightPlanChangeEvent));
     this.page.addBinding(this.activeLegChangeConsumerFpln.handle(this.handleFlightPlanChangeEvent));
@@ -634,18 +641,55 @@ export class FplnPageController {
 
       // Pilot-defined waypoints
       if (!selectedFacility) {
-        const result = await WT21PilotWaypointUtils.createFromScratchpadEntry(
+        const results = await WT21PilotWaypointUtils.parseFromString(
           this.fms,
           (ident, refPos) => this.page.screen.selectWptFromIdent(ident, refPos),
           scratchpadContents,
         );
 
-        if (result) {
-          const [userFacility] = result;
+        if (Array.isArray(results) && results.length > 0) {
+          this.page.screen.clearScratchpad();
 
-          this.fms.addUserFacility(userFacility);
+          const result = results.length > 1 ? await this.page.screen.selectPilotWaypointEntry(results) : results[0];
 
-          selectedFacility = userFacility;
+          if (result) {
+            const userFacility = result.facility;
+
+            // Prompt to replace waypoint if needed
+            if (this.fms.pilotDefinedWaypointExistsWithIdent(result.facility.icaoStruct.ident)) {
+              try {
+                const replace = await this.wptAlreadyExistsPrompt.showPromptAndWaitForResponse();
+
+                if (!replace) {
+                  return true;
+                }
+              } catch (e) {
+                // Do nothing if the page is navigated away from
+                return true;
+              }
+            }
+
+            this.fms.addUserFacility(userFacility);
+
+            selectedFacility = userFacility;
+          }
+
+          // TODO handle null better (probably just return from the whole method)
+        } else if (typeof results === 'number' && results in PilotWaypointError) {
+          switch (results) {
+            case PilotWaypointError.PilotWaypointListFull:
+              return Promise.reject('PILOT WPT LIST FULL');
+            case PilotWaypointError.ReferenceFixInPolarRegion:
+              return Promise.reject('N/A IN POLAR REGION');
+            case PilotWaypointError.NoIntersection:
+              return Promise.reject('NO INTERSECTION');
+            case PilotWaypointError.AlongTrackOffsetDistanceTooLarge:
+              return Promise.reject('DISTANCE TOO LARGE');
+            case PilotWaypointError.AlongTrackOffsetNotAvailable:
+              return Promise.reject('ALONG TRK WPT N/A');
+            case PilotWaypointError.AlongTrackOffsetFixNotMatched:
+              return Promise.reject('WPT NOT MATCHED');
+          }
         }
       }
 

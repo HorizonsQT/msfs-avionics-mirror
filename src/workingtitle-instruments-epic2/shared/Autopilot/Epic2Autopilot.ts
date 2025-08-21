@@ -1,4 +1,4 @@
-/// <reference types="@microsoft/msfs-types/js/simvar" />
+/// <reference types="@microsoft/msfs-types/js/simvar" preserve="true" />
 
 import {
   AdcEvents, AltitudeSelectManager, AltitudeSelectManagerAccelType, AltitudeSelectManagerOptions, APAltitudeModes, APConfig, APEvents, APLateralModes, APVerticalModes, Autopilot,

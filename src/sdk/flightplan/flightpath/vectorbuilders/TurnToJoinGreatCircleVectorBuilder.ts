@@ -1,4 +1,4 @@
-import { GeoCircle } from '../../../geo/GeoCircle';
+import { GeoCircle, ReadonlyGeoCircle } from '../../../geo/GeoCircle';
 import { LatLonInterface } from '../../../geo/GeoInterfaces';
 import { GeoPoint } from '../../../geo/GeoPoint';
 import { UnitType } from '../../../math/NumberUnit';
@@ -38,7 +38,7 @@ export class TurnToJoinGreatCircleVectorBuilder {
     index: number,
     start: ReadonlyFloat64Array | LatLonInterface,
     startCourse: number,
-    endPath: GeoCircle,
+    endPath: ReadonlyGeoCircle,
     radius: number,
     flags?: number,
     heading?: number | null,
@@ -65,8 +65,8 @@ export class TurnToJoinGreatCircleVectorBuilder {
     vectors: FlightPathVector[],
     index: number,
     start: ReadonlyFloat64Array | LatLonInterface,
-    startPath: GeoCircle,
-    endPath: GeoCircle,
+    startPath: ReadonlyGeoCircle,
+    endPath: ReadonlyGeoCircle,
     radius: number,
     flags?: number,
     heading?: number | null,
@@ -77,8 +77,8 @@ export class TurnToJoinGreatCircleVectorBuilder {
     vectors: FlightPathVector[],
     index: number,
     start: ReadonlyFloat64Array | LatLonInterface,
-    startPathArg: GeoCircle | number,
-    endPath: GeoCircle,
+    startPathArg: ReadonlyGeoCircle | number,
+    endPath: ReadonlyGeoCircle,
     radius: number,
     flags = FlightPathVectorFlags.TurnToCourse,
     heading: number | null = null,
@@ -98,7 +98,7 @@ export class TurnToJoinGreatCircleVectorBuilder {
 
       startPath = startPathArg;
     } else {
-      startPath = TurnToJoinGreatCircleVectorBuilder.geoCircleCache[0].setAsGreatCircle(start, startPathArg);
+      startPath = TurnToJoinGreatCircleVectorBuilder.geoCircleCache[0].setAsGreatCircle(start, startPathArg as number);
     }
 
     if (!(start instanceof Float64Array)) {

@@ -1,4 +1,4 @@
-/// <reference types="@microsoft/msfs-types/pages/vcockpit/instruments/shared/baseinstrument" />
+/// <reference types="@microsoft/msfs-types/pages/vcockpit/instruments/shared/baseinstrument" preserve="true" />
 
 import { EventBus } from '../data/EventBus';
 import { PublishPacer } from '../data/EventBusPacer';

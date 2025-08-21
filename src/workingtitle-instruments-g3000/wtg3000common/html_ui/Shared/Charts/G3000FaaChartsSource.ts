@@ -1,6 +1,7 @@
 import {
-  ApproachIdentifier, ArrayUtils, BuiltInChartProvider, ChartArea, ChartIndex, ChartMetadata, ChartUrl, FaaChartType,
-  GeoReferencedChartArea, Subject, Subscribable
+  ApproachIdentifier, ArrayUtils, BuiltInChartProvider, ChartArea, ChartImageSupplier, ChartIndex, ChartMetadata,
+  ChartsClient, ChartService, ChartUrl, ChartView, FaaChartType, GeoReferencedChartArea, SimChartService, Subject,
+  Subscribable
 } from '@microsoft/msfs-sdk';
 
 import { GarminFaaChartsUtils } from '@microsoft/msfs-garminsdk';
@@ -39,6 +40,20 @@ export class G3000FaaChartsSource implements G3000ChartsSource {
 
   /** @inheritDoc */
   public readonly pageSectionDefinitions: readonly G3000ChartsSourcePageSectionDefinition[] = [];
+
+  private readonly chartService = new SimChartService();
+
+  /** @inheritDoc */
+  public getChartService(): ChartService {
+    return this.chartService;
+  }
+
+  /** @inheritDoc */
+  public createChartImageSupplier(): ChartImageSupplier {
+    const view = new ChartView();
+    ChartsClient.initializeChartView(view);
+    return view;
+  }
 
   /** @inheritDoc */
   public getInfoCharts(chartIndex: ChartIndex<string>): ChartMetadata[] {

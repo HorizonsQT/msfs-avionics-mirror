@@ -544,7 +544,8 @@ export class GarminAPConfig implements GarminAPConfigInterface {
     return new APGSDirector(this.bus, apValues, {
       canArm: GarminAPUtils.glideslopeCanArm,
       canActivate: GarminAPUtils.glideslopeCanActivate,
-      canRemainActive: GarminAPUtils.glideslopeCanRemainActive
+      canRemainActive: GarminAPUtils.glideslopeCanRemainActive,
+      vsTarget: GarminAPUtils.glideslopeVsTarget,
     });
   }
 

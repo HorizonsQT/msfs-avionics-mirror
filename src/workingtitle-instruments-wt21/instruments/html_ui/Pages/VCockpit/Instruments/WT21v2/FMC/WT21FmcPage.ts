@@ -1,6 +1,7 @@
 import { AbstractFmcPage, DisplayField, EventBus, FmcRenderCallback, FmcRenderTemplate, Formatter, MappedSubject } from '@microsoft/msfs-sdk';
 
-import { WT21Fms } from './FlightPlan/WT21Fms';
+import { WT21Fms } from '@microsoft/msfs-wt21-shared';
+
 import { WT21_FMC_Instrument } from './WT21_FMC_Instrument';
 import { WT21FmcScreen } from './WT21FmcScreen';
 

@@ -1,4 +1,4 @@
-import { DisplayComponent, FSComponent, NodeReference, SubscribableArray, UserSettingRecord, VNode } from '@microsoft/msfs-sdk';
+import { DisplayComponent, FSComponent, NodeReference, PropertyTypeOf, SubscribableArray, ToNonNullable, UserSettingRecord, VNode } from '@microsoft/msfs-sdk';
 
 import { ContextMenuDialog, ContextMenuItemDefinition } from '../Dialogs/ContextMenuDialog';
 import { SelectControl } from '../UIControls/SelectControl';
@@ -14,7 +14,7 @@ export interface UserSettingSelectControlProps<T extends UserSettingRecord, K ex
   viewService: ViewService;
 
   /** A subscribable array which provides the possible values of the controlled setting. */
-  values: SubscribableArray<NonNullable<T[K]>>;
+  values: SubscribableArray<ToNonNullable<PropertyTypeOf<T, K>>>;
 
   /**
    * A subscribable array which provides the text representation of the possible setting values. Each value provided by
@@ -31,7 +31,7 @@ export interface UserSettingSelectControlProps<T extends UserSettingRecord, K ex
    * @param value A setting value.
    * @param index The index of the setting value in the list displayed by SelectControl.
    */
-  buildMenuItem?: (value: NonNullable<T[K]>, index: number) => ContextMenuItemDefinition
+  buildMenuItem?: (value: ToNonNullable<PropertyTypeOf<T, K>>, index: number) => ContextMenuItemDefinition
 
   /** A reference to the HTML element that constrains the location of the SelectControl's selection pop-up.  */
   outerContainer: NodeReference<HTMLElement>;
@@ -45,7 +45,7 @@ export class UserSettingSelectControl<
   K extends keyof T & string,
   P extends UserSettingSelectControlProps<T, K> = UserSettingSelectControlProps<T, K>> extends DisplayComponent<P> {
 
-  protected readonly selectControlRef = FSComponent.createRef<SelectControl<NonNullable<T[K]>>>();
+  protected readonly selectControlRef = FSComponent.createRef<SelectControl<ToNonNullable<PropertyTypeOf<T, K>>>>();
 
   protected readonly selectController = new UserSettingSelectController(this.props.settingManager, this.props.settingName, this.props.values, this.selectControlRef);
 
@@ -62,7 +62,7 @@ export class UserSettingSelectControl<
    * @param index The index of the value in the menu.
    * @returns a menu item definition for the setting value.
    */
-  private buildMenuItem(value: NonNullable<T[K]>, index: number): ContextMenuItemDefinition {
+  private buildMenuItem(value: ToNonNullable<PropertyTypeOf<T, K>>, index: number): ContextMenuItemDefinition {
     if (this.props.buildMenuItem) {
       return this.props.buildMenuItem(value, index);
     }

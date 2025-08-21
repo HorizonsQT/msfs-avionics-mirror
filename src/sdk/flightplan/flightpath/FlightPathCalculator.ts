@@ -125,6 +125,15 @@ export interface FlightPathCalculatorStaticOptions {
    * calculated discontinuity vectors will have the `Discontinuity` flag applied to them.
    */
   calculateDiscontinuityVectors: boolean;
+
+  /**
+   * Whether to calculate strictly great-circle paths to span discontinuities in the flight path. If `true`, then any
+   * discontinuity-spanning path will always be the shortest great-circle path between the two ends of the
+   * discontinuity. If `false`, then the discontinuity-spanning path will be calculated in a manner that smoothly joins
+   * the two ends the discontinuity, if possible. Ignored if `calculateDiscontinuityVectors` is `false`. Defaults to
+   * `false`.
+   */
+  useGreatCirclePathForDiscontinuity: boolean;
 }
 
 /**
@@ -148,6 +157,15 @@ export type FlightPathCalculatorInitOptions = FlightPathCalculatorOptions & {
    * calculated discontinuity vectors will have the `Discontinuity` flag applied to them. Defaults to `false`.
    */
   calculateDiscontinuityVectors?: boolean;
+
+  /**
+   * Whether to calculate strictly great-circle paths to span discontinuities in the flight path. If `true`, then any
+   * discontinuity-spanning path will always be the shortest great-circle path between the two ends of the
+   * discontinuity. If `false`, then the discontinuity-spanning path will be calculated in a manner that smoothly joins
+   * the two ends the discontinuity, if possible. Ignored if `calculateDiscontinuityVectors` is `false`. Defaults to
+   * `false`.
+   */
+  useGreatCirclePathForDiscontinuity?: boolean;
 
   /**
    * A provider of data for the calculator. If not defined, then a default data provider will be created and used that
@@ -246,7 +264,8 @@ export class FlightPathCalculator {
   private readonly options: FlightPathCalculatorOptions;
 
   private readonly legCalcOptions: FlightPathLegCalculationOptions = {
-    calculateDiscontinuityVectors: false
+    calculateDiscontinuityVectors: false,
+    useGreatCirclePathForDiscontinuity: false,
   };
 
   private readonly calculateQueue: (() => void)[] = [];
@@ -290,10 +309,11 @@ export class FlightPathCalculator {
       options.anticipatedDataCalculator);
 
     this.staticOptions = {
-      calculateDiscontinuityVectors: options.calculateDiscontinuityVectors ?? false
+      calculateDiscontinuityVectors: options.calculateDiscontinuityVectors ?? false,
+      useGreatCirclePathForDiscontinuity: options.useGreatCirclePathForDiscontinuity ?? false,
     };
 
-    this.legCalcOptions.calculateDiscontinuityVectors = this.staticOptions.calculateDiscontinuityVectors;
+    this.updateLegCalculatorOptions();
 
     this.initSyncSubscriptions(options.initSyncRole ?? 'none');
   }
@@ -339,6 +359,9 @@ export class FlightPathCalculator {
    */
   private setStaticOptions(options: Readonly<FlightPathCalculatorStaticOptions>): void {
     this.staticOptions.calculateDiscontinuityVectors = options.calculateDiscontinuityVectors;
+    this.staticOptions.useGreatCirclePathForDiscontinuity = options.useGreatCirclePathForDiscontinuity;
+
+    this.updateLegCalculatorOptions();
   }
 
   /**
@@ -461,6 +484,14 @@ export class FlightPathCalculator {
   }
 
   /**
+   * Updates the flight path leg calculation options used by this calculator.
+   */
+  private updateLegCalculatorOptions(): void {
+    this.legCalcOptions.calculateDiscontinuityVectors = this.staticOptions.calculateDiscontinuityVectors;
+    this.legCalcOptions.useGreatCirclePathForDiscontinuity = this.staticOptions.useGreatCirclePathForDiscontinuity;
+  }
+
+  /**
    * Calculates a flight path for a given set of flight plan legs.
    * @param legs The legs of the flight plan to calculate.
    * @param activeLegIndex The index of the active leg.
@@ -506,13 +537,13 @@ export class FlightPathCalculator {
       initialIndex = Math.max(0, initialIndex);
       count = Math.max(0, Math.min(legs.length - initialIndex, count));
 
-      this.state.updatePlaneState();
-
-      this.state.updateAnticipatedData(legs, initialIndex, initialIndex + count);
-
       // Because some facilities can be mutated, we always want to get the most up-to-date version from the facility loader
       this.facilityMap.clear();
       await this.loadFacilities(legs, initialIndex, count);
+
+      this.state.updatePlaneState();
+
+      this.state.updateAnticipatedData(legs, initialIndex, initialIndex + count, activeLegIndex);
 
       this.initState(legs, initialIndex);
 
@@ -722,13 +753,13 @@ class FlightPathStateClass implements FlightPathState {
   /** @inheritDoc */
   public readonly planeAltitude = this._planeAltitude.readonly;
 
-  private readonly _planeSpeed = UnitType.KNOT.createNumber(0);
-  /** @inheritDoc */
-  public readonly planeSpeed = this._planeSpeed.readonly;
-
   private readonly _planeClimbRate = UnitType.FPM.createNumber(0);
   /** @inheritDoc */
   public readonly planeClimbRate = this._planeClimbRate.readonly;
+
+  private readonly _planeSpeed = UnitType.KNOT.createNumber(0);
+  /** @inheritDoc */
+  public readonly planeSpeed = this._planeSpeed.readonly;
 
   private readonly _planeTrueAirspeed = UnitType.KNOT.createNumber(0);
   /** @inheritDoc */
@@ -760,9 +791,27 @@ class FlightPathStateClass implements FlightPathState {
   /** @inheritDoc */
   public readonly desiredTurnAnticipationTurnRadius = this._desiredTurnAnticipationTurnRadius.readonly;
 
+  private currentAltitude = NaN;
+  private currentVs = NaN;
+  private currentTas = NaN;
+  private currentGs = NaN;
+
   // For the new radius determination based on anticipated speed:
-  private anticipatedData: FlightPathAnticipatedData[] = [];
-  private anticipatedSpeedsContext: FlightPathAnticipatedDataContext = { planeSpeed: 0, planeWindSpeed: 0, planeWindDirection: 0 };
+  private readonly anticipatedData: FlightPathAnticipatedData[] = [];
+
+  private readonly anticipatedSpeedsContext = {
+    activeLegIndex: 0,
+    altitude: NaN,
+    verticalSpeed: NaN,
+    tas: NaN,
+    gs: NaN,
+    planeAltitude: 0,
+    planeClimbRate: 0,
+    planeSpeed: 0,
+    planeTrueAirspeed: 0,
+    planeWindSpeed: 0,
+    planeWindDirection: 0,
+  } satisfies FlightPathAnticipatedDataContext;
 
   /**
    * Creates an instance of a plane state class.
@@ -816,19 +865,28 @@ class FlightPathStateClass implements FlightPathState {
     this._planePosition.set(this.dataProvider.getPlanePosition());
     this._planeHeading = this.dataProvider.getPlaneTrueHeading();
 
-    const altitude = this.dataProvider.getPlaneAltitude();
-    if (isFinite(altitude)) {
-      this._planeAltitude.set(altitude);
+    this.currentAltitude = this.dataProvider.getPlaneAltitude();
+    if (isFinite(this.currentAltitude)) {
+      this._planeAltitude.set(this.currentAltitude);
     } else {
       this._planeAltitude.set(0);
     }
 
-    const tas = this.dataProvider.getPlaneTrueAirspeed();
-    if (isFinite(tas)) {
-      this._planeTrueAirspeed.set(Math.max(tas, this.options.defaultSpeed));
+    this.currentVs = this.dataProvider.getPlaneVerticalSpeed();
+    if (isFinite(this.currentVs)) {
+      this._planeClimbRate.set(Math.max(this.currentVs, this.options.defaultClimbRate));
+    } else {
+      this._planeClimbRate.set(this.options.defaultClimbRate);
+    }
+
+    this.currentTas = this.dataProvider.getPlaneTrueAirspeed();
+    if (isFinite(this.currentTas)) {
+      this._planeTrueAirspeed.set(Math.max(this.currentTas, this.options.defaultSpeed));
     } else {
       this._planeTrueAirspeed.set(this.options.defaultSpeed);
     }
+
+    this.currentGs = this.dataProvider.getPlaneGroundSpeed();
 
     switch (this.options.airplaneWindMode) {
       case FlightPathAirplaneWindMode.Automatic: {
@@ -852,9 +910,8 @@ class FlightPathStateClass implements FlightPathState {
 
     switch (this.options.airplaneSpeedMode) {
       case FlightPathAirplaneSpeedMode.GroundSpeed: {
-        const gs = this.dataProvider.getPlaneGroundSpeed();
-        if (isFinite(gs)) {
-          this._planeSpeed.set(Math.max(gs, this.options.defaultSpeed));
+        if (isFinite(this.currentGs)) {
+          this._planeSpeed.set(Math.max(this.currentGs, this.options.defaultSpeed));
         } else {
           this._planeSpeed.set(this.options.defaultSpeed);
         }
@@ -862,26 +919,19 @@ class FlightPathStateClass implements FlightPathState {
       }
       case FlightPathAirplaneSpeedMode.TrueAirspeed:
       case FlightPathAirplaneSpeedMode.TrueAirspeedPlusWind: {
-        if (isFinite(tas)) {
+        if (isFinite(this.currentTas)) {
           const windSpeed = this.options.airplaneSpeedMode === FlightPathAirplaneSpeedMode.TrueAirspeedPlusWind
             ? this._planeWindSpeed.number
             : 0;
 
-          this._planeSpeed.set(Math.max(tas + windSpeed, this.options.defaultSpeed));
+          this._planeSpeed.set(Math.max(this.currentTas + windSpeed, this.options.defaultSpeed));
         } else {
           this._planeSpeed.set(this.options.defaultSpeed);
         }
         break;
       }
-      default:
+      default: // Default, Custom
         this._planeSpeed.set(this.options.defaultSpeed);
-    }
-
-    const vs = this.dataProvider.getPlaneVerticalSpeed();
-    if (isFinite(vs)) {
-      this._planeClimbRate.set(Math.max(vs, this.options.defaultClimbRate));
-    } else {
-      this._planeClimbRate.set(this.options.defaultClimbRate);
     }
 
     const planeSpeedKnots = this._planeSpeed.asUnit(UnitType.KNOT);
@@ -892,65 +942,189 @@ class FlightPathStateClass implements FlightPathState {
   }
 
   /**
-   * Iterates over all the waypoints to determine an anticipated turn radius for each waypoint, which belongs to the
-   * approach and which will likely be below 10000ft (assuming a 3° descent towards the MAP leg).
-   *
-   * @param legs flightplan legs
-   * @param startIndex first index to calculate
-   * @param endIndex end index to calculate
+   * Updates this state's anticipated data.
+   * @param legs The flight plan legs for which to get anticipated data.
+   * @param startIndex The index of the first leg for which to get anticipated data, inclusive.
+   * @param endIndex The index of the last leg for which to get anticipated data, exclusive.
+   * @param activeLegIndex The index of the active flight plan leg.
    */
-  public updateAnticipatedData(legs: LegDefinition[], startIndex: number, endIndex: number): void {
-    if (this.anticipatedDataCalculator) {
-      this.anticipatedSpeedsContext.planeSpeed = this._planeSpeed.number;
-      this.anticipatedSpeedsContext.planeWindSpeed = this._planeWindSpeed.number;
-      this.anticipatedSpeedsContext.planeWindDirection = this._planeWindDirection;
+  public updateAnticipatedData(legs: LegDefinition[], startIndex: number, endIndex: number, activeLegIndex: number): void {
+    if (!this.anticipatedDataCalculator) {
+      return;
+    }
 
-      // Prepare and clear data in output array.
-      this.anticipatedData.length = legs.length;
-      for (let i = 0; i < this.anticipatedData.length; i++) {
-        const data = this.anticipatedData[i];
-        if (data) {
-          data.tas = undefined;
-          data.windDirection = undefined;
-          data.windSpeed = undefined;
+    this.anticipatedSpeedsContext.activeLegIndex = activeLegIndex;
+    this.anticipatedSpeedsContext.altitude = this.currentAltitude;
+    this.anticipatedSpeedsContext.verticalSpeed = this.currentVs;
+    this.anticipatedSpeedsContext.tas = this.currentTas;
+    this.anticipatedSpeedsContext.gs = this.currentGs;
+    this.anticipatedSpeedsContext.planeAltitude = this._planeAltitude.number;
+    this.anticipatedSpeedsContext.planeClimbRate = this._planeClimbRate.number;
+    this.anticipatedSpeedsContext.planeSpeed = this._planeSpeed.number;
+    this.anticipatedSpeedsContext.planeTrueAirspeed = this._planeTrueAirspeed.number;
+    this.anticipatedSpeedsContext.planeWindSpeed = this._planeWindSpeed.number;
+    this.anticipatedSpeedsContext.planeWindDirection = this._planeWindDirection;
+
+    // Prepare and clear data in output array.
+    this.anticipatedData.length = legs.length;
+    for (let i = 0; i < this.anticipatedData.length; i++) {
+      const data = this.anticipatedData[i] as FlightPathAnticipatedData | undefined;
+      if (data) {
+        data.altitude = undefined;
+        data.climbRate = undefined;
+        data.gs = undefined;
+        data.tas = undefined;
+        data.windDirection = undefined;
+        data.windSpeed = undefined;
+        data.turnAnticipationLimit = undefined;
+      } else {
+        this.anticipatedData[i] = {
+          altitude: undefined,
+          climbRate: undefined,
+          gs: undefined,
+          tas: undefined,
+          windDirection: undefined,
+          windSpeed: undefined,
+          turnAnticipationLimit: undefined,
+        };
+      }
+    }
+
+    this.anticipatedDataCalculator.getAnticipatedData(legs, startIndex, endIndex, this.anticipatedSpeedsContext, this.anticipatedData);
+  }
+
+  /** @inheritDoc */
+  public getPlaneAltitude(legIndex: number): number {
+    const anticipatedData = this.anticipatedData[legIndex] as FlightPathAnticipatedData | undefined;
+    if (anticipatedData && anticipatedData.altitude !== undefined) {
+      return isFinite(anticipatedData.altitude) ? anticipatedData.altitude : 0;
+    }
+    return this._planeAltitude.number;
+  }
+
+  /** @inheritDoc */
+  public getPlaneClimbRate(legIndex: number): number {
+    const anticipatedData = this.anticipatedData[legIndex] as FlightPathAnticipatedData | undefined;
+    if (anticipatedData && anticipatedData.climbRate !== undefined) {
+      return isFinite(anticipatedData.climbRate)
+        ? Math.max(anticipatedData.climbRate, this.options.defaultClimbRate)
+        : this.options.defaultClimbRate;
+    }
+    return this._planeClimbRate.number;
+  }
+
+  /** @inheritDoc */
+  public getPlaneSpeed(legIndex: number): number {
+    const anticipatedData = this.anticipatedData[legIndex] as FlightPathAnticipatedData | undefined;
+    if (anticipatedData) {
+      return this.getAnticipatedPlaneSpeed(anticipatedData);
+    } else {
+      return this._planeSpeed.number;
+    }
+  }
+
+  /**
+   * Gets the airplane's anticipated ground speed to use for flight path calculations, in knots, at a given flight plan
+   * leg.
+   * @param anticipatedData The anticipated data for the flight plan leg for which to get the ground speed.
+   * @returns The airplane's anticipated ground speed to use for flight path calculations, in knots, at the flight plan
+   * leg associated with the specified anticipated data. If an anticipated speed is not available, then the current
+   * ground speed will be returned instead.
+   */
+  private getAnticipatedPlaneSpeed(anticipatedData: FlightPathAnticipatedData): number {
+    switch (this.options.airplaneSpeedMode) {
+      case FlightPathAirplaneSpeedMode.GroundSpeed: {
+        const anticipatedGs = anticipatedData.gs;
+        if (anticipatedGs !== undefined) {
+          if (isFinite(anticipatedGs)) {
+            return Math.max(anticipatedGs, this.options.defaultSpeed);
+          } else {
+            return this.options.defaultSpeed;
+          }
         } else {
-          this.anticipatedData[i] = {
-            tas: undefined,
-            windDirection: undefined,
-            windSpeed: undefined,
-          };
+          return this._planeSpeed.number;
         }
       }
-
-      this.anticipatedDataCalculator.getAnticipatedData(legs, startIndex, endIndex, this.anticipatedSpeedsContext, this.anticipatedData);
+      case FlightPathAirplaneSpeedMode.TrueAirspeed:
+      case FlightPathAirplaneSpeedMode.TrueAirspeedPlusWind: {
+        const tas = anticipatedData.tas ?? this.currentTas;
+        if (isFinite(tas)) {
+          const windSpeed = this.getAnticipatedWindSpeed(anticipatedData);
+          return Math.max(tas + windSpeed, this.options.defaultSpeed);
+        } else {
+          return this.options.defaultSpeed;
+        }
+      }
+      default: // Default or Custom
+        return this._planeSpeed.number;
     }
   }
 
   /** @inheritDoc */
   public getPlaneTrueAirspeed(legIndex: number): number {
-    const anticipatedData = this.anticipatedData[legIndex];
+    const anticipatedData = this.anticipatedData[legIndex] as FlightPathAnticipatedData | undefined;
     if (anticipatedData && anticipatedData.tas !== undefined) {
-      return Math.max(anticipatedData.tas, this.options.defaultSpeed);
+      if (isFinite(anticipatedData.tas)) {
+        return Math.max(anticipatedData.tas, this.options.defaultSpeed);
+      } else {
+        return this.options.defaultSpeed;
+      }
+    } else {
+      return this._planeTrueAirspeed.number;
     }
-    return this._planeTrueAirspeed.number;
-  }
-
-  /** @inheritDoc */
-  public getWindSpeed(legIndex: number): number {
-    const anticipatedData = this.anticipatedData[legIndex];
-    if (anticipatedData && anticipatedData.windSpeed !== undefined) {
-      return anticipatedData.windSpeed;
-    }
-    return this._planeWindSpeed.number;
   }
 
   /** @inheritDoc */
   public getWindDirection(legIndex: number): number {
-    const anticipatedData = this.anticipatedData[legIndex];
-    if (anticipatedData && anticipatedData.windDirection !== undefined) {
-      return anticipatedData.windDirection;
+    if (this.options.airplaneWindMode === FlightPathAirplaneWindMode.Automatic) {
+      const anticipatedData = this.anticipatedData[legIndex] as FlightPathAnticipatedData | undefined;
+      if (anticipatedData && anticipatedData.windDirection !== undefined) {
+        return isFinite(anticipatedData.windDirection) ? anticipatedData.windDirection : 0;
+      } else {
+        return this._planeWindDirection;
+      }
+    } else {
+      return 0;
     }
-    return this._planeWindDirection;
+  }
+
+  /** @inheritDoc */
+  public getWindSpeed(legIndex: number): number {
+    const anticipatedData = this.anticipatedData[legIndex] as FlightPathAnticipatedData | undefined;
+    if (anticipatedData) {
+      return this.getAnticipatedWindSpeed(anticipatedData);
+    } else {
+      return this._planeWindSpeed.number;
+    }
+  }
+
+  /**
+   * Gets the anticipated wind speed, in knots, at a given flight plan leg.
+   * @param anticipatedData The anticipated data for the flight plan leg for which to get the wind speed.
+   * @returns The anticipated wind speed, in knots, at the flight plan leg associated with the specified anticipated
+   * data. If an anticipated wind speed is not available, then the wind speed at the airplane's current position will
+   * be returned instead.
+   */
+  private getAnticipatedWindSpeed(anticipatedData: FlightPathAnticipatedData): number {
+    if (this.options.airplaneWindMode === FlightPathAirplaneWindMode.Automatic) {
+      if (anticipatedData.windSpeed !== undefined) {
+        return isFinite(anticipatedData.windSpeed) ? anticipatedData.windSpeed : 0;
+      } else {
+        return this._planeWindSpeed.number;
+      }
+    } else {
+      return 0;
+    }
+  }
+
+  /** @inheritDoc */
+  public getTurnAnticipationLimit(legIndex: number): number {
+    const anticipatedData = this.anticipatedData[legIndex] as FlightPathAnticipatedData | undefined;
+    if (anticipatedData && anticipatedData.turnAnticipationLimit !== undefined) {
+      return anticipatedData.turnAnticipationLimit;
+    } else {
+      return Infinity;
+    }
   }
 
   /** @inheritDoc */
@@ -985,15 +1159,14 @@ class FlightPathStateClass implements FlightPathState {
     bankAngleTable: LerpLookupTable | undefined,
     legIndex: number
   ): number {
+    // If the speed mode is Default or Custom, then the airplane speed to use to calculate turn radius is always the
+    // default speed, and so the turn radius will be equal to the fallback turn radius. Therefore, we will only attempt
+    // to calculate a different turn radius if the speed mode is not Default or Custom.
     if (this.options.airplaneSpeedMode !== FlightPathAirplaneSpeedMode.Default && this.options.airplaneSpeedMode !== FlightPathAirplaneSpeedMode.Custom) {
       const anticipatedData = this.anticipatedData[legIndex];
-      if (anticipatedData && anticipatedData.tas !== undefined) {
-        let speed = anticipatedData.tas;
-        if (this.options.airplaneSpeedMode !== FlightPathAirplaneSpeedMode.TrueAirspeed && anticipatedData.windSpeed !== undefined) {
-          // Need to do wind correction.
-          speed += anticipatedData.windSpeed;
-        }
-        return this.calculateRadius(Math.max(speed, this.options.defaultSpeed), bankAngleTable);
+      if (anticipatedData) {
+        const speed = this.getAnticipatedPlaneSpeed(anticipatedData);
+        return this.calculateRadius(speed, bankAngleTable);
       }
     }
     return defaultTurnRadius.number;

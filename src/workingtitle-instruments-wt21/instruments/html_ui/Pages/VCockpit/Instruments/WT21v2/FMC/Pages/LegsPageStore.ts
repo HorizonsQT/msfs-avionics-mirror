@@ -35,8 +35,8 @@ export class LegPageItem {
  * LEGS Page Store
  */
 export class LegsPageStore {
-
     private readonly _legs = ArraySubject.create<LegPageItem>();
+
     public readonly legs = this._legs as SubscribableArray<LegPageItem>;
 
     public selectedLeg: LegPageItem | undefined;
@@ -44,12 +44,6 @@ export class LegsPageStore {
     public holdAtFacilitySubject = Subject.create<Facility | null>(null);
 
     public lastRenderPlanIndex: number | undefined = undefined;
-
-    // /**
-    //  * Creates the store.
-    //  */
-    // constructor() {
-    // }
 
     /**
      * Sets the legs array.

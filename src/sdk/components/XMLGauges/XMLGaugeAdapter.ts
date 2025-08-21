@@ -1,5 +1,5 @@
-/// <reference types="@microsoft/msfs-types/pages/vcockpit/instruments/shared/utils/xmllogic" />
-/// <reference types="@microsoft/msfs-types/pages/vcockpit/instruments/shared/baseinstrument" />
+/// <reference types="@microsoft/msfs-types/pages/vcockpit/instruments/shared/utils/xmllogic" preserve="true" />
+/// <reference types="@microsoft/msfs-types/pages/vcockpit/instruments/shared/baseinstrument" preserve="true" />
 
 import { EventBus } from '../../data';
 import * as d from './GaugeDefinitions';
@@ -178,38 +178,38 @@ export class XMLGaugeConfigFactory {
           }
           break;
         case 'Text':
-        {
-          const textProps: XMLTextElementProps = {};
-          const className = gauge.getAttribute('id');
-          if (className !== null) {
-            textProps.class = className;
-          }
+          {
+            const textProps: XMLTextElementProps = {};
+            const className = gauge.getAttribute('id');
+            if (className !== null) {
+              textProps.class = className;
+            }
 
-          const leftElem = gauge.getElementsByTagName('Left');
-          if (leftElem.length > 0) {
-            textProps.left = this.makeTextColumn(leftElem[0]);
-          }
+            const leftElem = gauge.getElementsByTagName('Left');
+            if (leftElem.length > 0) {
+              textProps.left = this.makeTextColumn(leftElem[0]);
+            }
 
-          const centerElem = gauge.getElementsByTagName('Center');
-          if (centerElem.length > 0) {
-            textProps.center = this.makeTextColumn(centerElem[0]);
-          }
+            const centerElem = gauge.getElementsByTagName('Center');
+            if (centerElem.length > 0) {
+              textProps.center = this.makeTextColumn(centerElem[0]);
+            }
 
-          const rightElem = gauge.getElementsByTagName('Right');
-          if (rightElem.length > 0) {
-            textProps.right = this.makeTextColumn(rightElem[0]);
-          }
+            const rightElem = gauge.getElementsByTagName('Right');
+            if (rightElem.length > 0) {
+              textProps.right = this.makeTextColumn(rightElem[0]);
+            }
 
-          const style = XMLGaugeConfigFactory.parseStyleDefinition(gauge.getElementsByTagName('Style'));
-          if (style !== undefined) {
-            textProps.style = style;
-          }
+            const style = XMLGaugeConfigFactory.parseStyleDefinition(gauge.getElementsByTagName('Style'));
+            if (style !== undefined) {
+              textProps.style = style;
+            }
 
-          gaugeSpecs.push({
-            gaugeType: XMLGaugeType.Text,
-            configuration: textProps
-          });
-        }
+            gaugeSpecs.push({
+              gaugeType: XMLGaugeType.Text,
+              configuration: textProps
+            });
+          }
           break;
         case 'ColumnGroup':
           gaugeSpecs.push({

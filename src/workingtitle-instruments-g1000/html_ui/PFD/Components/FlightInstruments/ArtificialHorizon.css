@@ -1,8 +1,8 @@
 .artificial-horizon {
   position: absolute;
-  height: 5000px;
-  width: 5000px;
-  margin: -2500px;
+  height: 2900px;
+  width: 1450px;
+  margin: -1450px -725px;
   top: 36%;
   left: 461px;
   --translateY: 0;

@@ -1,6 +1,7 @@
 import {
-  Consumer, DefaultUserSettingManager, EventBus, UserSetting, UserSettingDefinition, UserSettingManager,
-  UserSettingMap, UserSettingRecord, UserSettingValue
+  DefaultUserSettingManager, EventBus, OptionalUserSettingFromManager, UserSetting, UserSettingConsumerFromManager,
+  UserSettingDefinition, UserSettingFromManager, UserSettingManager, UserSettingMap, UserSettingRecord,
+  UserSettingValue
 } from '@microsoft/msfs-sdk';
 
 import { SynVisUserSettingTypes } from '@microsoft/msfs-garminsdk';
@@ -215,17 +216,17 @@ export class PfdUserSettingManager implements UserSettingManager<PfdAllUserSetti
   }
 
   /** @inheritDoc */
-  public tryGetSetting<K extends string>(name: K): K extends keyof PfdAllUserSettingTypes ? UserSetting<PfdAllUserSettingTypes[K]> : undefined {
-    return this.manager.tryGetSetting(name) as any;
+  public tryGetSetting<K extends string>(name: K): OptionalUserSettingFromManager<PfdAllUserSettingTypes, K> {
+    return this.manager.tryGetSetting(name);
   }
 
   /** @inheritDoc */
-  public getSetting<K extends keyof PfdAllUserSettingTypes & string>(name: K): UserSetting<NonNullable<PfdAllUserSettingTypes[K]>> {
+  public getSetting<K extends keyof PfdAllUserSettingTypes & string>(name: K): UserSettingFromManager<PfdAllUserSettingTypes, K> {
     return this.manager.getSetting(name);
   }
 
   /** @inheritDoc */
-  public whenSettingChanged<K extends keyof PfdAllUserSettingTypes & string>(name: K): Consumer<NonNullable<PfdAllUserSettingTypes[K]>> {
+  public whenSettingChanged<K extends keyof PfdAllUserSettingTypes & string>(name: K): UserSettingConsumerFromManager<PfdAllUserSettingTypes, K> {
     return this.manager.whenSettingChanged(name);
   }
 
@@ -305,7 +306,7 @@ export class PfdUserSettingManager implements UserSettingManager<PfdAllUserSetti
     const map: UserSettingMap<PfdUserSettingTypes, PfdIndexedUserSettingTypes<Index>> = {};
 
     for (const name of PfdUserSettingManager.INDEXED_SETTING_NAMES) {
-      map[name] = `${name}_${index}_g3x`;
+      map[name] = `${name}_${index}_g3x` as const;
     }
 
     return map;

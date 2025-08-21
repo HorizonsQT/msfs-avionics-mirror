@@ -1,6 +1,7 @@
 import {
-  ClippedPathStream, EventBus, FacilityLoader, FacilityRepository, FSComponent, GeoCircleResampler, GeoProjectionPathStreamStack, MapCachedCanvasLayer,
-  MapLayer, MapLayerProps, MapProjection, MapSyncedCanvasLayer, NullPathStream, VecNSubject, VNode
+  ClippedPathStream, EventBus, FacilityLoader, FacilityRepository, FSComponent, GeoCircleResampler,
+  GeoCylindricalClippedPathStream, GeoProjection, GeoProjectionPathStreamStack, MapCachedCanvasLayer, MapLayer,
+  MapLayerProps, MapProjection, MapSyncedCanvasLayer, NullPathStream, VecNSubject, VNode
 } from '@microsoft/msfs-sdk';
 
 import { ProcedureType } from '../../../flightplan/FmsTypes';
@@ -41,7 +42,13 @@ export interface MapProcedurePreviewLayerProps extends MapLayerProps<MapProcedur
  * A map layer which displays a procedure preview.
  */
 export class MapProcedurePreviewLayer extends MapLayer<MapProcedurePreviewLayerProps> {
-  private static readonly CLIP_BOUNDS_BUFFER = 10; // number of pixels from edge of canvas to extend the clipping bounds, in pixels
+  /** The amount to offset the pre-projection longitude clipping boundaries from the anti-meridian, in degrees. */
+  private static readonly GEO_CLIP_ANTI_MERIDIAN_GAP = 0.1;
+  /** The pre-projection latitude clipping boundary, in degrees. */
+  private static readonly GEO_CLIP_LATITUDE = 89;
+
+  /** The distance from each edge of the canvas to extend the post-projection clipping bounds, in pixels. */
+  private static readonly CLIP_BOUNDS_BUFFER = 10;
 
   private readonly flightPathLayerRef = FSComponent.createRef<MapCachedCanvasLayer>();
   private readonly waypointLayerRef = FSComponent.createRef<MapSyncedCanvasLayer>();
@@ -52,8 +59,11 @@ export class MapProcedurePreviewLayer extends MapLayer<MapProcedurePreviewLayerP
   private readonly facLoader = this.props.facilityLoader ?? new FacilityLoader(FacilityRepository.getRepository(this.props.bus));
   private readonly waypointCache = GarminFacilityWaypointCache.getCache(this.props.bus);
 
-  private readonly clipBoundsSub = VecNSubject.createFromVector(new Float64Array(4));
-  private readonly clippedPathStream = new ClippedPathStream(NullPathStream.INSTANCE, this.clipBoundsSub);
+  private readonly geoClipBounds = VecNSubject.create(new Float64Array(4));
+  private readonly geoClippedPathStream = new GeoCylindricalClippedPathStream(NullPathStream.INSTANCE, this.geoClipBounds);
+
+  private readonly clipBounds = VecNSubject.createFromVector(new Float64Array(4));
+  private readonly clippedPathStream = new ClippedPathStream(NullPathStream.INSTANCE, this.clipBounds);
 
   private readonly pathStreamStack = new GeoProjectionPathStreamStack(NullPathStream.INSTANCE, this.props.mapProjection.getGeoProjection(), this.resampler);
 
@@ -79,6 +89,7 @@ export class MapProcedurePreviewLayer extends MapLayer<MapProcedurePreviewLayerP
     this.flightPathLayerRef.instance.onAttached();
     this.waypointLayerRef.instance.onAttached();
 
+    this.pathStreamStack.pushPreProjected(this.geoClippedPathStream);
     this.pathStreamStack.pushPostProjected(this.clippedPathStream);
     this.pathStreamStack.setConsumer(this.flightPathLayerRef.instance.display.context);
 
@@ -111,11 +122,11 @@ export class MapProcedurePreviewLayer extends MapLayer<MapProcedurePreviewLayerP
   }
 
   /**
-   * Updates this layer's canvas clipping bounds.
+   * Updates this sublayer's post-projection clipping bounds.
    */
   private updateClipBounds(): void {
     const size = this.flightPathLayerRef.instance.getSize();
-    this.clipBoundsSub.set(
+    this.clipBounds.set(
       -MapProcedurePreviewLayer.CLIP_BOUNDS_BUFFER,
       -MapProcedurePreviewLayer.CLIP_BOUNDS_BUFFER,
       size + MapProcedurePreviewLayer.CLIP_BOUNDS_BUFFER,
@@ -167,6 +178,7 @@ export class MapProcedurePreviewLayer extends MapLayer<MapProcedurePreviewLayerP
     const procedurePlan = this.procPreviewModule.procedurePlan.get();
     const transitionPlan = this.procPreviewModule.transitionPlan.get();
 
+    this.updateGeoClipBounds(display.geoProjection);
     this.pathStreamStack.setProjection(display.geoProjection);
     if (transitionPlan) {
       this.props.pathRenderer.render(transitionPlan, context, this.pathStreamStack, true);
@@ -174,6 +186,22 @@ export class MapProcedurePreviewLayer extends MapLayer<MapProcedurePreviewLayerP
     if (procedurePlan) {
       this.props.pathRenderer.render(procedurePlan, context, this.pathStreamStack, false);
     }
+  }
+
+  /**
+   * Updates this layer's pre-projection clipping bounds.
+   * @param projection The projection used to draw the flight plan.
+   */
+  private updateGeoClipBounds(projection: GeoProjection): void {
+    const centralMeridian = -projection.getPreRotation()[0] * Avionics.Utils.RAD2DEG;
+    const antiMeridian = centralMeridian + 180;
+
+    this.geoClipBounds.set(
+      antiMeridian + MapProcedurePreviewLayer.GEO_CLIP_ANTI_MERIDIAN_GAP,
+      -MapProcedurePreviewLayer.GEO_CLIP_LATITUDE,
+      antiMeridian - MapProcedurePreviewLayer.GEO_CLIP_ANTI_MERIDIAN_GAP,
+      MapProcedurePreviewLayer.GEO_CLIP_LATITUDE
+    );
   }
 
   /**

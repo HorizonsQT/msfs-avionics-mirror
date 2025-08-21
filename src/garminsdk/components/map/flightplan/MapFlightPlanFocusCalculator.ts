@@ -38,7 +38,7 @@ export class MapFlightPlanFocusCalculator {
   public calculateRangeTarget(
     focus: FlightPlanFocus,
     margins: Float64Array,
-    ppos: LatLonInterface,
+    ppos: Readonly<LatLonInterface>,
     out: MapFlightPlanFocusRangeTarget
   ): MapFlightPlanFocusRangeTarget {
     out.range = NaN;

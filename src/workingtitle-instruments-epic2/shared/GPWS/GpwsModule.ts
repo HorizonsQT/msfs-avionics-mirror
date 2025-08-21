@@ -36,6 +36,9 @@ export type GpwsData = {
   /** The altitude of the nearest runway, in feet, or `null` if nearest runway data are not available. */
   nearestRunwayAltitude: number | null;
 
+  /** The distance from the nearest runway, in nautical miles, or `null` if nearest runway data are not available. */
+  nearestRunwayDistance: number | null;
+
   /** Whether the steep approach mode is activated */
   isSteepApproachActive: boolean;
 

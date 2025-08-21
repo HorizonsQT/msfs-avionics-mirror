@@ -1,5 +1,5 @@
 import { HandlerSubscription } from './HandlerSubscription';
-import { MutableSubscribable, Subscribable } from './Subscribable';
+import { MutableSubscribable, Subscribable, SubscribableType } from './Subscribable';
 
 /**
  * A pipe from an input subscribable to an output mutable subscribable. Each notification received by the pipe is used
@@ -12,7 +12,11 @@ export class SubscribablePipe<I, O, HandlerType extends (...args: any[]) => void
    * @param to The output mutable subscribable.
    * @param onDestroy A function which is called when this subscription is destroyed.
    */
-  constructor(from: Subscribable<I>, to: MutableSubscribable<any, I>, onDestroy: (sub: SubscribablePipe<I, O, HandlerType>) => void);
+  public constructor(
+    from: Subscribable<I>,
+    to: MutableSubscribable<any, I>,
+    onDestroy: (sub: SubscribablePipe<I, O, HandlerType>) => void
+  );
   /**
    * Constructor.
    * @param from The input subscribable.
@@ -20,19 +24,24 @@ export class SubscribablePipe<I, O, HandlerType extends (...args: any[]) => void
    * @param map A function which transforms this pipe's inputs.
    * @param onDestroy A function which is called when this subscription is destroyed.
    */
-  constructor(from: Subscribable<I>, to: MutableSubscribable<any, O>, map: (fromVal: I, toVal: O) => O, onDestroy: (sub: SubscribablePipe<I, O, HandlerType>) => void);
+  public constructor(
+    from: Subscribable<I>,
+    to: MutableSubscribable<any, O>,
+    map: (fromVal: I, toVal: SubscribableType<typeof to>) => O,
+    onDestroy: (sub: SubscribablePipe<I, O, HandlerType>) => void
+  );
   // eslint-disable-next-line jsdoc/require-jsdoc
-  constructor(
+  public constructor(
     from: Subscribable<I>,
     to: MutableSubscribable<any, I> | MutableSubscribable<any, O>,
-    arg3: ((fromVal: I, toVal: O) => O) | ((sub: SubscribablePipe<I, O, HandlerType>) => void),
+    arg3: ((fromVal: I, toVal: SubscribableType<typeof to>) => O) | ((sub: SubscribablePipe<I, O, HandlerType>) => void),
     arg4?: (sub: SubscribablePipe<I, O, HandlerType>) => void
   ) {
     let handler: (fromVal: I) => void;
     let onDestroy: (sub: SubscribablePipe<I, O, HandlerType>) => void;
     if (typeof arg4 === 'function') {
       handler = (fromVal: I): void => {
-        (to as MutableSubscribable<any, O>).set((arg3 as (fromVal: I, toVal: O) => O)(fromVal, to.get()));
+        (to as MutableSubscribable<any, O>).set((arg3 as (fromVal: I, toVal: SubscribableType<typeof to>) => O)(fromVal, to.get()));
       };
       onDestroy = arg4;
     } else {

@@ -231,7 +231,7 @@ export class AdahrsSystemSelector {
     } else if (this.manualSelection && (newManualIndex !== undefined || this.selectedIndex.get() >= 0)) {
       const currentIndex = newManualIndex ?? this.selectedIndex.get();
       // fall back to the onside (first entry) if the selection is invalid
-      bestIndex = this.adahrsEntries.get(currentIndex) ? currentIndex : this.adahrsEntries.entries().next().value[0];
+      bestIndex = this.adahrsEntries.get(currentIndex) ? currentIndex : this.adahrsEntries.entries().next().value![0];
       bestState = this.adahrsEntries.get(bestIndex)?.state.get();
     } else {
       // Sort the systems in order of decreasing priority.

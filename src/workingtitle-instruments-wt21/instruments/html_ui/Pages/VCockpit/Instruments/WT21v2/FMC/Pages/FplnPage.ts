@@ -1,11 +1,13 @@
 import {
-  DataInterface, DisplayField, FmcPagingEvents, FmcRenderTemplate, ICAO, LineSelectKeyEvent, MappedSubject, PageLinkField, TextInputField
+  DataInterface, DisplayField, FmcPagingEvents, FmcRenderTemplate, FmcRenderTemplateColumn, ICAO, LineSelectKeyEvent,
+  MappedSubject, PageLinkField, TextInputField
 } from '@microsoft/msfs-sdk';
 
 import { PageNumberDisplay, RawFormatter, StringInputFormat } from '../Framework/FmcFormats';
 import { WT21FmcPage } from '../WT21FmcPage';
 import { FplnPageController } from './FplnPageController';
 import { FplnPageStore } from './FplnPageStore';
+import { WaypointAlreadyExistsPrompt } from './Common/WaypointAlreadyExistsPrompt';
 
 /**
  * FPLN page
@@ -15,7 +17,10 @@ export class FplnPage extends WT21FmcPage {
   public readonly perfInitLink = PageLinkField.createLink(this, 'PERF INIT>', '/perf-init');
 
   private store = new FplnPageStore(this.bus);
-  private controller = new FplnPageController(this.bus, this.fms, this.store, this);
+
+  private readonly wptAlreadyExistsPrompt = new WaypointAlreadyExistsPrompt();
+
+  private controller = new FplnPageController(this.bus, this.fms, this.store, this, this.wptAlreadyExistsPrompt);
 
   // private readonly renderList = new FmcListUtility(this, this.store.legs, this.renderListRow, 5);
 
@@ -83,6 +88,9 @@ export class FplnPage extends WT21FmcPage {
     // FMS Event
     this.addBinding(this.fms.planInMod.sub((value) => this.handleHeaderChange(value)));
 
+    // WPT ALREADY EXISTS prompt
+    this.addBinding(this.wptAlreadyExistsPrompt.shown.sub(() => this.invalidate()));
+
     this.cancelModDisplay.takeValue(this.fms.planInMod.get() ? '<CANCEL MOD' : '<SEC FPLN');
     this.pageHeaderDisplay.takeValue(this.fms.planInMod.get() ? FplnPageController.modHeaderString : FplnPageController.activeHeaderString);
   }
@@ -90,6 +98,8 @@ export class FplnPage extends WT21FmcPage {
   /** @inheritDoc */
   protected onPause(): void {
     this.controller.destroy();
+
+    this.wptAlreadyExistsPrompt.closePrompt();
   }
 
   /** @inheritDoc */
@@ -122,6 +132,11 @@ export class FplnPage extends WT21FmcPage {
     formatter: this.PagingFormat,
   });
 
+
+  private readonly WaypointAlreadyExistsReplaceField = this.wptAlreadyExistsPrompt.createReplaceComponent(this);
+
+  private readonly WaypointAlreadyExistsCancelField = this.wptAlreadyExistsPrompt.createCancelComponent(this);
+
   /**
    * Renders the Main Page
    * @returns the Render Template
@@ -141,6 +156,16 @@ export class FplnPage extends WT21FmcPage {
 
     const firstLegTitle = (firstLeg !== undefined && firstLeg.globalIndex > -1) ? `${firstLeg.title}${firstLeg.isActive ? '[magenta]' : ''}` : FplnPageController.emptyAirwayString;
 
+    let L6: FmcRenderTemplateColumn = this.cancelModDisplay;
+    let R6: FmcRenderTemplateColumn = this.perfInitLink;
+    let footer = '';
+
+    if (this.wptAlreadyExistsPrompt.shown.get()) {
+      L6 = this.WaypointAlreadyExistsReplaceField;
+      R6 = this.WaypointAlreadyExistsCancelField;
+      footer = WaypointAlreadyExistsPrompt.CduFooter;
+    }
+
     return [
       [this.pageHeaderDisplay, this.FplnPagingIndicator],
       [' ORIGIN[blue]', 'DEST[blue] ', 'DIST[blue]'],
@@ -153,8 +178,8 @@ export class FplnPage extends WT21FmcPage {
       [firstLegTitle, firstLegName],
       ['----------------[blue]', 'FLT NO[blue] '],
       [!this.fms.planInMod.get() && hasActiveFlightPlan ? '<COPY ACTIVE[disabled]' : '', this.fltNoField],
-      ['', ''],
-      [this.cancelModDisplay, this.perfInitLink],
+      [footer],
+      [L6, R6],
     ];
   }
 
@@ -163,7 +188,14 @@ export class FplnPage extends WT21FmcPage {
    * @returns the Render Template
    */
   renderRoutePage(): FmcRenderTemplate {
-    return this.controller.renderPage();
+    const template =  this.controller.renderPage();
+
+    if (this.wptAlreadyExistsPrompt.shown.get()) {
+      template[11] = [WaypointAlreadyExistsPrompt.CduFooter];
+      template[12] = [this.WaypointAlreadyExistsReplaceField, this.WaypointAlreadyExistsCancelField];
+    }
+
+    return template;
   }
 
   /**

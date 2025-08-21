@@ -1,9 +1,6 @@
-import { MappedSubject, MappedSubscribable, MutableSubscribableMap, Subscribable, Subscription } from '@microsoft/msfs-sdk';
+import { MappedSubject, MappedSubscribable, MutableSubscribableMap, ReadonlyLifecycle, Subscribable, Subscription } from '@microsoft/msfs-sdk';
 
-import {
-  UiInnerKnobId, UiKnobGroup, UiKnobId, UiKnobIdGroupMap, UiKnobRequestedLabelState, UiOuterKnobId, UiPushKnobId,
-  UiTurnKnobId
-} from './UiKnobTypes';
+import { UiInnerKnobId, UiKnobGroup, UiKnobId, UiKnobIdGroupMap, UiKnobRequestedLabelState, UiOuterKnobId, UiPushKnobId, UiTurnKnobId } from './UiKnobTypes';
 
 /**
  * A utility class for working with G3X Touch bezel rotary knobs.
@@ -230,5 +227,11 @@ class ReconciledLabelStateSubscription implements Subscription {
 
     this._isAlive = false;
     this.subject.destroy();
+  }
+
+  /** @inheritdoc */
+  public withLifecycle(lifecycle: ReadonlyLifecycle): this {
+    lifecycle.register(this);
+    return this;
   }
 }

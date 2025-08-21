@@ -1,11 +1,12 @@
 import { EventBus, UserSettingSaveManager } from '@microsoft/msfs-sdk';
 
+import { DefaultsUserSettings } from '@microsoft/msfs-wtlinesdk';
+
 import { MapUserSettings } from '../Map/MapUserSettings';
 import { WT21NavigationUserSettings } from '../Navigation/WT21NavigationUserSettings';
 import { VSpeedType } from '../ReferenceSpeeds';
 import { TrafficUserSettings } from '../Traffic/TrafficUserSettings';
 import { WT21UserSettings } from './WT21UserSettings';
-import { DefaultsUserSettings } from './DefaultsUserSettings';
 import { FgpUserSettings } from './FgpUserSettings';
 import { RefsUserSettings } from './RefsUserSettings';
 import { VSpeedUserSettings } from './VSpeedUserSettings';

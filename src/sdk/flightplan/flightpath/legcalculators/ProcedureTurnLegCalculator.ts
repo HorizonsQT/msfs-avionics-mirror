@@ -12,6 +12,7 @@ import { FlightPathLegCalculationOptions } from '../FlightPathLegCalculator';
 import { FlightPathState } from '../FlightPathState';
 import { FlightPathUtils } from '../FlightPathUtils';
 import { FlightPathVectorFlags } from '../FlightPathVector';
+import { CircleVectorBuilder } from '../vectorbuilders/CircleVectorBuilder';
 import { DirectToJoinGreatCircleAtPointVectorBuilder } from '../vectorbuilders/DirectToJoinGreatCircleToPointVectorBuilder';
 import { ProcedureTurnVectorBuilder } from '../vectorbuilders/ProcedureTurnVectorBuilder';
 import { AbstractFlightPathLegCalculator } from './AbstractFlightPathLegCalculator';
@@ -23,6 +24,7 @@ export class ProcedureTurnLegCalculator extends AbstractFlightPathLegCalculator 
   private readonly geoPointCache = ArrayUtils.create(3, () => new GeoPoint(0, 0));
   private readonly geoCircleCache = ArrayUtils.create(2, () => new GeoCircle(Vec3Math.create(), 0));
 
+  private readonly circleVectorBuilder = new CircleVectorBuilder();
   private readonly procTurnVectorBuilder = new ProcedureTurnVectorBuilder();
   private readonly directToJoinGreatCircleToPointVectorBuilder = new DirectToJoinGreatCircleAtPointVectorBuilder();
 
@@ -96,8 +98,9 @@ export class ProcedureTurnLegCalculator extends AbstractFlightPathLegCalculator 
     const outboundPath = this.geoCircleCache[0].setAsGreatCircle(originPos, outboundCourse);
 
     if ((state.isDiscontinuity && !options.calculateDiscontinuityVectors) || !state.currentPosition.isValid()) {
-      // We are starting in a discontinuity or the current flight path position is not defined. We will set the
-      // current position to the origin fix and the current course to the outbound course.
+      // We are starting in a discontinuity and are not calculating discontinuity vectors, or the current flight path
+      // position is not defined. We will set the current position to the origin fix and the current course to the
+      // outbound course.
       state.currentPosition.set(originPos);
       state.currentCourse = outboundCourse;
     } else {
@@ -110,20 +113,35 @@ export class ProcedureTurnLegCalculator extends AbstractFlightPathLegCalculator 
       ) {
         if (needBuildInitialPath) {
           const flags = (state.isDiscontinuity ? FlightPathVectorFlags.Discontinuity : FlightPathVectorFlags.None)
-            | (state.isFallback && state.currentCourse !== undefined ? FlightPathVectorFlags.Fallback : FlightPathVectorFlags.None);
+            | (state.isFallback ? FlightPathVectorFlags.Fallback : FlightPathVectorFlags.None);
 
-          const startPath = state.currentCourse !== undefined
-            ? this.geoCircleCache[1].setAsGreatCircle(state.currentPosition, state.currentCourse)
-            : undefined;
+          if (state.isDiscontinuity && options.useGreatCirclePathForDiscontinuity) {
+            // We are starting in a discontinuity state and are forced to build great-circle paths through
+            // discontinuities.
 
-          vectorIndex += this.directToJoinGreatCircleToPointVectorBuilder.build(
-            vectors, vectorIndex,
-            state.currentPosition, startPath,
-            originPos, outboundPath,
-            state.getDesiredTurnRadius(calculateIndex),
-            undefined,
-            flags, true
-          );
+            vectorIndex += this.circleVectorBuilder.buildGreatCircle(
+              vectors, vectorIndex,
+              state.currentPosition, originPos,
+              state.currentCourse ?? -outboundCourse,
+              flags
+            );
+          } else {
+            // We are free to build non-great-circle paths. Therefore, attempt to build a path that ends at the leg
+            // origin in the same direction as the outbound course.
+
+            const startPath = state.currentCourse !== undefined
+              ? this.geoCircleCache[1].setAsGreatCircle(state.currentPosition, state.currentCourse)
+              : undefined;
+
+            vectorIndex += this.directToJoinGreatCircleToPointVectorBuilder.build(
+              vectors, vectorIndex,
+              state.currentPosition, startPath,
+              originPos, outboundPath,
+              state.getDesiredTurnRadius(calculateIndex),
+              undefined,
+              flags, true
+            );
+          }
         }
 
         state.currentPosition.set(originPos);

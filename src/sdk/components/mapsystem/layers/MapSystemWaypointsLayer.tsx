@@ -221,7 +221,7 @@ export class MapSystemWaypointsLayer extends MapLayer<MapSystemWaypointsLayerPro
         deregisterWaypoint={this.deregisterWaypoint.bind(this)}
         searchItemLimit={(type): number => this.searchItemLimits[type]}
         searchRadiusLimit={(type): number => this.searchRadiusLimits[type]}
-        getSearchCenter={this.props.useMapTargetAsSearchCenter === true ? (mapProjection): LatLonInterface => mapProjection.getTarget() : undefined}
+        getSearchCenter={this.props.useMapTargetAsSearchCenter === true ? (mapProjection): Readonly<LatLonInterface> => mapProjection.getTarget() : undefined}
         onSessionsStarted={this.onSessionsStarted.bind(this)}
         class={this.props.class ?? ''}
       />

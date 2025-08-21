@@ -1,4 +1,4 @@
-/// <reference types="@microsoft/msfs-types/js/avionics" />
+/// <reference types="@microsoft/msfs-types/js/avionics" preserve="true" />
 
 import {
   AhrsEvents, AuralAlertControlEvents, AuralAlertRegistrationManager, ConsumerValue, EventBus, MathUtils,

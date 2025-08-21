@@ -1,9 +1,9 @@
 import { ComponentProps, DisplayComponent, EventBus, FSComponent, Subject, VNode } from '@microsoft/msfs-sdk';
 
 import { WT21InstrumentType } from '../Config';
-import { MESSAGE_LEVEL } from './MessageDefinition';
-import { PfdMessagePacket } from './PfdMessagePacket';
 import { PfdMessageEvents } from './PfdMessageReceiver';
+import { PfdMessagePacket } from './PfdMessagePacket';
+import { MESSAGE_LEVEL } from './MessageDefinition';
 
 import './PfdMsgInfo.css';
 

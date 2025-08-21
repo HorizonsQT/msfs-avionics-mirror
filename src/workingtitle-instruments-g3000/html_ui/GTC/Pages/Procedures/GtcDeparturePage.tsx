@@ -294,7 +294,9 @@ export class GtcDeparturePage extends GtcProcedureSelectionPage {
     chartsSource: G3000ChartsSource,
     chartIndex: ChartIndex<string>
   ): Promise<G3000ChartsAirportSelectionData> {
-    const departurePages = await G3000ChartsUtils.getPageDataFromMetadata(chartsSource.getDepartureCharts(chartIndex))
+    const service = chartsSource.getChartService();
+
+    const departurePages = await G3000ChartsUtils.getPageDataFromMetadata(service, chartsSource.getDepartureCharts(chartIndex))
       .catch(() => []);
 
     return {
@@ -561,7 +563,7 @@ export class GtcDeparturePage extends GtcProcedureSelectionPage {
   /**
    * Responds to when this page's Load button is pressed.
    */
-  private onLoadButtonPressed(): void {
+  private async onLoadButtonPressed(): Promise<void> {
     const selectedFacility = this.selectedAirport.get();
     const selectedProc = this.selectedDeparture.get();
 
@@ -571,7 +573,7 @@ export class GtcDeparturePage extends GtcProcedureSelectionPage {
 
     const rwyTransIndex = this.selectedRunwayTransitionIndex.get();
 
-    this.fms.insertDeparture(
+    const success = await this.fms.loadDeparture(
       selectedFacility,
       this.selectedDepartureIndex.get(),
       rwyTransIndex,
@@ -579,14 +581,16 @@ export class GtcDeparturePage extends GtcProcedureSelectionPage {
       this.selectedRunway.get(),
     );
 
-    // Attempt to go back to the Flight Plan page. If the Flight Plan page is not open in a previous history state,
-    // then go back to the home page and open the Flight Plan page.
-    let activeViewEntry = this.gtcService.goBackToItem((steps, stackPeeker) => stackPeeker(0)?.viewEntry.key === GtcViewKeys.FlightPlan);
-    if (activeViewEntry.key !== GtcViewKeys.FlightPlan) {
-      this.gtcService.goBackToHomePage();
-      activeViewEntry = this.gtcService.changePageTo<GtcFlightPlanPage>(GtcViewKeys.FlightPlan);
+    if (success) {
+      // Attempt to go back to the Flight Plan page. If the Flight Plan page is not open in a previous history state,
+      // then go back to the home page and open the Flight Plan page.
+      let activeViewEntry = this.gtcService.goBackToItem((steps, stackPeeker) => stackPeeker(0)?.viewEntry.key === GtcViewKeys.FlightPlan);
+      if (activeViewEntry.key !== GtcViewKeys.FlightPlan) {
+        this.gtcService.goBackToHomePage();
+        activeViewEntry = this.gtcService.changePageTo<GtcFlightPlanPage>(GtcViewKeys.FlightPlan);
+      }
+      (activeViewEntry as GtcViewEntry<GtcFlightPlanPage>).ref.scrollTo(FlightPlanSegmentType.Departure);
     }
-    (activeViewEntry as GtcViewEntry<GtcFlightPlanPage>).ref.scrollTo(FlightPlanSegmentType.Departure);
   }
 
   /** @inheritDoc */

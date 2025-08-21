@@ -18,8 +18,15 @@ export type MapProjectionParameters = {
   targetProjectedOffset?: ReadonlyFloat64Array;
 
   /**
+   * The nominal scale factor of the projection. At a scale factor of 1, a distance of one great-arc radian will
+   * be projected to a distance of one pixel. If the scale factor parameter of a projection is `null`, then the range
+   * parameter will be used instead.
+   */
+  scaleFactor?: number | null;
+
+  /**
    * The range of the projection, in great-arc radians. The range is measured between the projection's two range
-   * endpoints.
+   * endpoints. The range parameter is used if and only if the scale factor parameter is `null`.
    */
   range?: number;
 
@@ -121,6 +128,7 @@ export class MapProjection {
   private readonly target = new GeoPoint(0, 0);
   private readonly targetProjectedOffset = new Float64Array(2);
   private readonly targetProjected = new Float64Array(2);
+  private scaleFactor: number | null = null;
   private range = 1; // great-arc radians
   private readonly rangeEndpoints = new Float64Array([0.5, 0, 0.5, 1]); // [relX1, relY1, relX2, relY2]
   private readonly projectedSize = new Float64Array(2);
@@ -141,10 +149,10 @@ export class MapProjection {
     scaleFactor: 1,
     rotation: 0,
     projectedSize: new Float64Array(2),
-    projectedResolution: 0
+    projectedResolution: 0,
   };
 
-  private readonly queuedParameters: MapProjectionParametersRecord = Object.assign({}, this.oldParameters);
+  private readonly queuedParameters: MapProjectionParameters = {};
   private updateQueued = false;
 
   private readonly changeListeners: MapProjectionChangeListener[] = [];
@@ -286,7 +294,7 @@ export class MapProjection {
   /**
    * Calculates the true range of this projection, in great-arc radians, given a hypothetical projected center point.
    * @param centerProjected The projected location of the hypothetical center point to use for the calculation.
-   * @returns The true range of this projection given the hypothetical projected center point.
+   * @returns The true range of this projection, in great-arc radians, given the hypothetical projected center point.
    */
   private calculateRangeAtCenter(centerProjected: ReadonlyFloat64Array): number {
     const endpoints = this.rangeEndpoints;
@@ -302,33 +310,67 @@ export class MapProjection {
     endpoint2[0] = centerProjected[0] + projectedWidth * (endpoints[2] - 0.5);
     endpoint2[1] = centerProjected[1] + projectedHeight * (endpoints[3] - 0.5);
 
-    const top = this.geoProjection.invert(endpoint1, MapProjection.tempGeoPoint_1);
-    const bottom = this.geoProjection.invert(endpoint2, MapProjection.tempGeoPoint_2);
+    const endpoint1Inverted = this.geoProjection.invert(endpoint1, MapProjection.tempGeoPoint_1);
+    const endpoint2Inverted = this.geoProjection.invert(endpoint2, MapProjection.tempGeoPoint_2);
 
-    return top.distance(bottom);
+    return endpoint1Inverted.distance(endpoint2Inverted);
   }
 
   /**
    * Recomputes this projection's computed parameters.
    */
   private recompute(): void {
+    let success: boolean;
+    if (this.scaleFactor === null) {
+      success = this.recomputeCenterAndScaleWithRange(this.range);
+    } else {
+      success = this.recomputeCenterAndRangeWithScaleFactor(this.scaleFactor);
+    }
+
+    if (!success) {
+      return;
+    }
+
+    // Set the projection's pre-rotation to avoid anti-meridian wrapping issues.
+    const preRotation = Vec3Math.set(-this.center.lon * Avionics.Utils.DEG2RAD, 0, 0, MapProjection.vec3Cache[0]);
+    this.geoProjection.setPreRotation(preRotation);
+
+    const width = this.projectedSize[0];
+    const height = this.projectedSize[1];
+
+    this.projectedRange = Math.hypot((this.rangeEndpoints[2] - this.rangeEndpoints[0]) * width, (this.rangeEndpoints[3] - this.rangeEndpoints[1]) * height);
+
+    const left = Vec2Math.set(0, height / 2, MapProjection.tempVec2_1);
+    const right = Vec2Math.set(width, height / 2, MapProjection.tempVec2_2);
+    this.widthRange = this.geoDistance(left, right);
+
+    const top = Vec2Math.set(width / 2, 0, MapProjection.tempVec2_1);
+    const bottom = Vec2Math.set(width / 2, height, MapProjection.tempVec2_2);
+    this.heightRange = this.geoDistance(top, bottom);
+  }
+
+  /**
+   * Recomputes this projection's center point and nominal scale factor using a pre-defined range.
+   * @param range The pre-defined range to use, in great-arc radians.
+   * @returns Whether the center point and nominal scale factor were successfully computed.
+   */
+  private recomputeCenterAndScaleWithRange(range: number): boolean {
     const currentTargetProjected = this.geoProjection.project(this.target, MapProjection.tempVec2_1);
 
-    if (!isFinite(currentTargetProjected[0] + currentTargetProjected[1])) {
-      // Check if we can potentially fix the geo projection by resetting its scale factor and center to defaults.
-      const translation = this.geoProjection.getTranslation();
+    if (!Vec2Math.isFinite(currentTargetProjected)) {
+      // Check if we can potentially fix the geo projection by resetting its scale factor, center, and pre-rotation to
+      // defaults.
       if (
-        isFinite(this.target.lat)
-        && isFinite(this.target.lon)
+        this.target.isValid()
         && isFinite(this.geoProjection.getPostRotation())
-        && isFinite(translation[0])
-        && isFinite(translation[1])
+        && Vec2Math.isFinite(this.geoProjection.getTranslation())
       ) {
         this.geoProjection.setScaleFactor(MapProjection.DEFAULT_SCALE_FACTOR);
         this.geoProjection.setCenter(MapProjection.tempGeoPoint_1.set(0, 0));
         this.geoProjection.setPreRotation(Vec3Math.set(0, 0, 0, MapProjection.vec3Cache[0]));
+        this.geoProjection.project(this.target, currentTargetProjected);
       } else {
-        return;
+        return false;
       }
     }
 
@@ -338,13 +380,13 @@ export class MapProjection {
     currentCenterProjected[1] -= this.targetProjectedOffset[1];
 
     let currentRange = this.calculateRangeAtCenter(currentCenterProjected);
-    let ratio = currentRange / this.range;
+    let ratio = currentRange / range;
 
     if (!isFinite(ratio) || ratio === 0) {
-      return;
+      return false;
     }
 
-    // iteratively find the appropriate scale factor (empiric testing shows this typically takes less than 4 iterations
+    // Iteratively find the appropriate scale factor (empiric testing shows this typically takes less than 4 iterations
     // to converge)
     let lastScaleFactor = this.geoProjection.getScaleFactor();
     let iterCount = 0;
@@ -363,7 +405,7 @@ export class MapProjection {
       currentCenterProjected[1] -= this.targetProjectedOffset[1];
 
       currentRange = this.calculateRangeAtCenter(currentCenterProjected);
-      const newRatio = currentRange / this.range;
+      const newRatio = currentRange / range;
       const ratioDelta = newRatio - ratio;
 
       // Check to see if the ratio between current range and target range is invalid, did not change, or changed in the
@@ -391,26 +433,53 @@ export class MapProjection {
       ratioError = newRatioError;
     }
 
-    // calculate the center point of the projection
+    // Invert the projected center coordinates to get the geographic coordinates of the desired center. Then change
+    // the projection so that the desired center becomes the actual center.
     this.invert(currentCenterProjected, this.center);
     this.geoProjection.setCenter(this.center);
 
-    // set the projection's pre-rotation to avoid anti-meridian wrapping issues
-    const preRotation = Vec3Math.set(-this.center.lon * Avionics.Utils.DEG2RAD, 0, 0, MapProjection.vec3Cache[0]);
-    this.geoProjection.setPreRotation(preRotation);
+    return true;
+  }
 
-    const width = this.projectedSize[0];
-    const height = this.projectedSize[1];
+  /**
+   * Recomputes this projection's center point and range using a pre-defined scale factor.
+   * @param scaleFactor The nominal scale factor to use.
+   * @returns Whether the center point and range were successfully computed.
+   */
+  private recomputeCenterAndRangeWithScaleFactor(scaleFactor: number): boolean {
+    this.geoProjection.setScaleFactor(scaleFactor);
 
-    this.projectedRange = Math.hypot((this.rangeEndpoints[2] - this.rangeEndpoints[0]) * width, (this.rangeEndpoints[3] - this.rangeEndpoints[1]) * height);
+    const currentTargetProjected = this.geoProjection.project(this.target, MapProjection.tempVec2_1);
 
-    const left = Vec2Math.set(0, height / 2, MapProjection.tempVec2_1);
-    const right = Vec2Math.set(width, height / 2, MapProjection.tempVec2_2);
-    this.widthRange = this.geoDistance(left, right);
+    if (!Vec2Math.isFinite(currentTargetProjected)) {
+      // Check if we can potentially fix the geo projection by resetting its center and pre-rotation to defaults.
+      if (
+        this.target.isValid()
+        && isFinite(this.geoProjection.getPostRotation())
+        && Vec2Math.isFinite(this.geoProjection.getTranslation())
+      ) {
+        this.geoProjection.setCenter(MapProjection.tempGeoPoint_1.set(0, 0));
+        this.geoProjection.setPreRotation(Vec3Math.set(0, 0, 0, MapProjection.vec3Cache[0]));
+        this.geoProjection.project(this.target, currentTargetProjected);
+      } else {
+        return false;
+      }
+    }
 
-    const top = Vec2Math.set(width / 2, 0, MapProjection.tempVec2_1);
-    const bottom = Vec2Math.set(width / 2, height, MapProjection.tempVec2_2);
-    this.heightRange = this.geoDistance(top, bottom);
+    // Calculate the projected coordinates of the desired center using the current projection.
+    const currentCenterProjected = MapProjection.tempVec2_2;
+    currentCenterProjected.set(currentTargetProjected);
+    currentCenterProjected[0] -= this.targetProjectedOffset[0];
+    currentCenterProjected[1] -= this.targetProjectedOffset[1];
+
+    this.range = this.calculateRangeAtCenter(currentCenterProjected);
+
+    // Invert the projected center coordinates to get the geographic coordinates of the desired center. Then change
+    // the projection so that the desired center becomes the actual center.
+    this.invert(currentCenterProjected, this.center);
+    this.geoProjection.setCenter(this.center);
+
+    return true;
   }
 
   /**
@@ -418,13 +487,14 @@ export class MapProjection {
    * unchanged.
    * @param parameters The new parameters.
    */
-  public set(parameters: MapProjectionParameters): void {
+  public set(parameters: Readonly<MapProjectionParameters>): void {
     // save old values
     this.storeParameters(this.oldParameters);
 
     parameters.projectedSize && this.setProjectedSize(parameters.projectedSize);
     parameters.target && this.target.set(parameters.target);
     parameters.targetProjectedOffset && this.setTargetProjectedOffset(parameters.targetProjectedOffset);
+    parameters.scaleFactor !== undefined && (this.scaleFactor = parameters.scaleFactor);
     parameters.range !== undefined && (this.range = parameters.range);
     parameters.rangeEndpoints && this.rangeEndpoints.set(parameters.rangeEndpoints);
     parameters.rotation !== undefined && this.geoProjection.setPostRotation(parameters.rotation);
@@ -446,7 +516,7 @@ export class MapProjection {
    * Sets the projection parameters to be applied when applyQueued() is called.
    * @param parameters The parameter changes to queue.
    */
-  public setQueued(parameters: MapProjectionParameters): void {
+  public setQueued(parameters: Readonly<MapProjectionParameters>): void {
     Object.assign(this.queuedParameters, parameters);
     this.updateQueued = true;
   }
@@ -509,7 +579,11 @@ export class MapProjection {
   private computeChangeFlags(oldParameters: MapProjectionParametersRecord): number {
     return (oldParameters.target.equals(this.target) ? 0 : MapProjectionChangeType.Target)
       | (Vec2Math.equals(oldParameters.targetProjected, this.targetProjected) ? 0 : MapProjectionChangeType.TargetProjected)
-      | (oldParameters.range === this.range ? 0 : MapProjectionChangeType.Range)
+      | (
+        this.scaleFactor === null
+          ? (oldParameters.range === this.range ? 0 : MapProjectionChangeType.Range)
+          : (oldParameters.scaleFactor === this.scaleFactor ? 0 : MapProjectionChangeType.ScaleFactor)
+      )
       | (VecNMath.equals(oldParameters.rangeEndpoints, this.rangeEndpoints) ? 0 : MapProjectionChangeType.RangeEndpoints)
       | (oldParameters.rotation === this.getRotation() ? 0 : MapProjectionChangeType.Rotation)
       | (Vec2Math.equals(oldParameters.projectedSize, this.projectedSize) ? 0 : MapProjectionChangeType.ProjectedSize);
@@ -522,7 +596,11 @@ export class MapProjection {
    */
   private computeDerivedChangeFlags(oldParameters: MapProjectionParametersRecord): number {
     return (oldParameters.center.equals(this.center) ? 0 : MapProjectionChangeType.Center)
-      | (oldParameters.scaleFactor === this.geoProjection.getScaleFactor() ? 0 : MapProjectionChangeType.ScaleFactor)
+      | (
+        this.scaleFactor === null
+          ? (oldParameters.scaleFactor === this.geoProjection.getScaleFactor() ? 0 : MapProjectionChangeType.ScaleFactor)
+          : (oldParameters.range === this.range ? 0 : MapProjectionChangeType.Range)
+      )
       | (oldParameters.projectedResolution === this.getProjectedResolution() ? 0 : MapProjectionChangeType.ProjectedResolution);
   }
 
@@ -532,7 +610,7 @@ export class MapProjection {
    * @param out The vector to which to write the result.
    * @returns The projected point, as a vector.
    */
-  public project(point: LatLonInterface, out: Float64Array): Float64Array {
+  public project(point: Readonly<LatLonInterface>, out: Float64Array): Float64Array {
     return this.geoProjection.project(point, out);
   }
 
@@ -556,7 +634,7 @@ export class MapProjection {
    * bounds of the projected window.
    * @returns Whether the point falls within the projected bounds.
    */
-  public isInProjectedBounds(point: LatLonInterface | ReadonlyFloat64Array, bounds?: ReadonlyFloat64Array): boolean {
+  public isInProjectedBounds(point: Readonly<LatLonInterface> | ReadonlyFloat64Array, bounds?: ReadonlyFloat64Array): boolean {
     let left;
     let top;
     let right;
@@ -574,7 +652,7 @@ export class MapProjection {
     }
 
     if (!(point instanceof Float64Array)) {
-      point = this.project(point as LatLonInterface, MapProjection.tempVec2_2);
+      point = this.project(point as Readonly<LatLonInterface>, MapProjection.tempVec2_2);
     }
 
     const x = point[0];

@@ -1,4 +1,4 @@
-import { DisplayComponent, FSComponent, UserSettingRecord, VNode } from '@microsoft/msfs-sdk';
+import { DisplayComponent, FSComponent, PropertyTypeOf, ToNonNullable, UserSettingRecord, VNode } from '@microsoft/msfs-sdk';
 
 import { ArrowToggle } from '../UIControls/ArrowToggle';
 import { UserSettingControlProps } from './UserSettingControl';
@@ -9,7 +9,7 @@ import { UserSettingToggleController } from './UserSettingToggleController';
  */
 export interface UserSettingToggleEnumControlProps<T extends UserSettingRecord, K extends keyof T & string> extends UserSettingControlProps<T, K> {
   /** The possible values of the controlled setting. */
-  values: NonNullable<T[K]>[];
+  values: ToNonNullable<PropertyTypeOf<T, K>>[];
 
   /**
    * The text representations of the possible setting values. Each value provided by the `values` prop will be mapped

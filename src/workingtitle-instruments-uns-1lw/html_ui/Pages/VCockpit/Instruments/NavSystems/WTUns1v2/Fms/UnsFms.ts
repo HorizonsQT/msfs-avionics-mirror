@@ -18,14 +18,14 @@ import { UnsFlightAreas } from './UnsFlightAreas';
 import { UnsFlightPlanPredictor } from './UnsFlightPlanPredictor';
 import { UnsFmsEvents } from './UnsFmsEvents';
 import {
-  AirwayLegType, ApproachDetails, ApproachProcedureDescription, DirectToState, FacilityInfo, InsertProcedureObject, PVorDescription, StoredHold,
+  AirwayLegType, ApproachDetails, ApproachProcedureDescription, DirectToState, FacilityInfo, InsertProcedureObject, InsertProcedureObjectLeg, PVorDescription, StoredHold,
   UnsApproachState, UnsExtraLegDefinitionFlags, UnsFlightPlans, UnsFmsDirectToOptions, UnsUserDataKeys
 } from './UnsFmsTypes';
 import { UnsFmsUtils } from './UnsFmsUtils';
 
 /** A UNS-1 FMS. */
 export class UnsFms {
-  public static version = 'WT2.0.11';
+  public static version = 'WT2.1.3';
 
   /** Set to true by FMC pages when the plan on this FMS instance is in modification and awaiting a cancel or exec. */
   public readonly planInMod = Subject.create<boolean>(false);
@@ -1383,23 +1383,36 @@ export class UnsFms {
     }
   }
 
+  private insertDepartureOpId = 0;
+
   /**
-   * Method to add or replace a departure procedure in the flight plan.
-   * @param facility is the facility that contains the procedure to add.
-   * @param departureIndex is the index of the departure
-   * @param departureRunwayIndex is the index of the runway transition
-   * @param enrouteTransitionIndex is the index of the enroute transition
-   * @param oneWayRunway is the one way runway to set as the origin leg.
+   * Inserts a departure procedure into the primary flight plan.
+   * @param facility The procedure's parent airport facility.
+   * @param departureIndex The index of the procedure in the parent airport facility's departure array.
+   * @param runwayTransitionIndex The index of the procedure's runway transition, or `-1` if the procedure does not
+   * include a runway transition.
+   * @param enrouteTransitionIndex The index of the procedure's enroute transition, or `-1` if the procedure does not
+   * include an enroute transition.
+   * @param oneWayRunway The runway associated with the procedure, or `undefined` if there is no associated runway.
+   * @returns A Promise which fulfills with whether the specified departure procedure was successfully loaded.
    */
-  public insertDeparture(
+  public async insertDeparture(
     facility: AirportFacility,
     departureIndex: number,
-    departureRunwayIndex: number,
+    runwayTransitionIndex: number,
     enrouteTransitionIndex: number,
     oneWayRunway?: OneWayRunway | undefined
-  ): void {
+  ): Promise<boolean> {
+    const opId = ++this.insertDepartureOpId;
+
+    const insertProcedureObject = await this.buildDepartureLegs(facility, departureIndex, enrouteTransitionIndex, runwayTransitionIndex, oneWayRunway);
+
+    if (opId !== this.insertDepartureOpId) {
+      return false;
+    }
+
     const plan = this.getPrimaryFlightPlan();
-    plan.setDeparture(facility.icao, departureIndex, enrouteTransitionIndex, departureRunwayIndex);
+    plan.setDeparture(facility.icaoStruct, departureIndex, enrouteTransitionIndex, runwayTransitionIndex);
     const segmentIndex = this.ensureOnlyOneSegmentOfType(FlightPlanSegmentType.Departure);
 
     // Grabbing the active legs (if there are any) in the existing departure semgent,
@@ -1408,10 +1421,8 @@ export class UnsFms {
 
     this.planClearSegment(segmentIndex, FlightPlanSegmentType.Departure);
 
-    const insertProcedureObject: InsertProcedureObject = this.buildDepartureLegs(facility, departureIndex, enrouteTransitionIndex, departureRunwayIndex, oneWayRunway);
-
-    if (plan.originAirport !== facility.icao) {
-      plan.setOriginAirport(facility.icao);
+    if (!plan.originAirportIcao || !ICAO.valueEquals(plan.originAirportIcao, facility.icaoStruct)) {
+      plan.setOriginAirport(facility.icaoStruct);
     }
     plan.setOriginRunway(oneWayRunway);
 
@@ -1431,23 +1442,29 @@ export class UnsFms {
       this.displaceActiveLegsIntoSegment(plan, segmentIndex, activeLegArray, false);
     }
 
-    plan.calculate(0);
+    await plan.calculate(0);
+
+    return true;
   }
 
   /**
-   * Method to insert the arrival legs.
-   * @param facility is the facility to build legs from.
-   * @param procedureIndex is the procedure index to build legs from.
-   * @param enrouteTransitionIndex is the enroute transition index to build legs from.
-   * @param runwayTransitionIndex is the runway transition index to build legs from.
-   * @param oneWayRunway is the one way runway, if one is specified in the procedure.
-   * @returns InsertProcedureObject to insert into the flight plan.
+   * Builds a sequence of flight plan legs for a departure procedure.
+   * @param facility The procedure's parent airport facility.
+   * @param procedureIndex The index of the procedure in the parent airport facility's departure array.
+   * @param enrouteTransitionIndex The index of the procedure's enroute transition, or `-1` if the procedure does not
+   * include an enroute transition.
+   * @param runwayTransitionIndex The index of the procedure's runway transition, or `-1` if the procedure does not
+   * include a runway transition.
+   * @param departureRunway The runway associated with the procedure, or `undefined` if there is no associated runway.
+   * @returns A Promise which will fulfill with a sequence of flight plan legs for the specified departure procedure.
    */
-  private buildDepartureLegs(facility: AirportFacility,
+  private async buildDepartureLegs(
+    facility: AirportFacility,
     procedureIndex: number,
     enrouteTransitionIndex: number,
     runwayTransitionIndex: number,
-    oneWayRunway?: OneWayRunway): InsertProcedureObject {
+    departureRunway?: OneWayRunway
+  ): Promise<InsertProcedureObject> {
 
     const departure = facility.departures[procedureIndex];
     const enRouteTransition = departure.enRouteTransitions[enrouteTransitionIndex];
@@ -1462,8 +1479,8 @@ export class UnsFms {
 
     // If the procedure did not start with a runway leg, we must insert an origin leg at the start of the procedure legs.
     if (insertProcedureObject.procedureLegs[0]?.fixIcaoStruct.type !== IcaoType.Runway) {
-      if (oneWayRunway) {
-        insertProcedureObject.procedureLegs.unshift(UnsFmsUtils.buildRunwayLeg(facility, oneWayRunway, true));
+      if (departureRunway) {
+        insertProcedureObject.procedureLegs.unshift(UnsFmsUtils.buildRunwayLeg(facility, departureRunway, true));
       } else {
         insertProcedureObject.procedureLegs.unshift(FlightPlan.createLeg({
           lat: facility.lat,
@@ -1500,25 +1517,32 @@ export class UnsFms {
       }
     }
 
-    return insertProcedureObject;
+    return this.remapProcedureLegs(insertProcedureObject);
   }
 
   /**
-   * Method to add or replace an arrival procedure in the flight plan.
-   * @param facility is the facility that contains the procedure to add.
-   * @param arrivalIndex is the index of the arrival procedure.
-   * @param arrivalRunwayTransitionIndex is the index of the arrival runway transition.
-   * @param enrouteTransitionIndex is the index of the enroute transition.
-   * @param oneWayRunway is the one way runway to set as the destination leg.
+   * Inserts an arrival procedure into the primary flight plan.
+   * @param facility The procedure's parent airport facility.
+   * @param arrivalIndex The index of the procedure in the parent airport facility's departure array.
+   * @param runwayTransitionIndex The index of the procedure's runway transition, or `-1` if the procedure does not
+   * include a runway transition.
+   * @param enrouteTransitionIndex The index of the procedure's enroute transition, or `-1` if the procedure does not
+   * include an enroute transition.
+   * @param oneWayRunway The runway associated with the procedure, or `undefined` if there is no associated runway.
+   * @returns A Promise which fulfills with whether the specified departure procedure was successfully loaded.
    */
-  public insertArrival(
+  public async insertArrival(
     facility: AirportFacility,
     arrivalIndex: number,
-    arrivalRunwayTransitionIndex: number,
+    runwayTransitionIndex: number,
     enrouteTransitionIndex: number,
     oneWayRunway?: OneWayRunway | undefined
-  ): void {
+  ): Promise<boolean> {
     const plan = this.getPrimaryFlightPlan();
+
+    if (plan.getBatchStack()?.find(batch => batch.name === 'uns1.fms.insertArrival')) {
+      return false;
+    }
 
     const batch = plan.openBatch('uns1.fms.insertArrival');
 
@@ -1526,8 +1550,8 @@ export class UnsFms {
       const activeSegment = UnsFmsUtils.getActiveSegment(plan);
 
       if (plan.procedureDetails.approachIndex < 0) {
-        if (plan.destinationAirport !== facility.icao) {
-          plan.setDestinationAirport(facility.icao);
+        if (!plan.destinationAirportIcao || !ICAO.valueEquals(plan.destinationAirportIcao, facility.icaoStruct)) {
+          plan.setDestinationAirport(facility.icaoStruct);
         }
         plan.setDestinationRunway(oneWayRunway);
       }
@@ -1542,13 +1566,13 @@ export class UnsFms {
         arrivalActiveLegIcao = plan.tryGetLeg(plan.activeLateralLeg)?.leg?.fixIcao;
       }
 
-      plan.setArrival(facility.icao, arrivalIndex, enrouteTransitionIndex, arrivalRunwayTransitionIndex);
+      plan.setArrival(facility.icaoStruct, arrivalIndex, enrouteTransitionIndex, runwayTransitionIndex);
 
       if (plan.getSegment(segmentIndex).legs.length > 0) {
         this.planClearSegment(segmentIndex, FlightPlanSegmentType.Arrival);
       }
 
-      const insertProcedureObject: InsertProcedureObject = this.buildArrivalLegs(facility, arrivalIndex, enrouteTransitionIndex, arrivalRunwayTransitionIndex, oneWayRunway);
+      const insertProcedureObject = await this.buildArrivalLegs(facility, arrivalIndex, enrouteTransitionIndex, runwayTransitionIndex);
 
       let directTargetLeg: FlightPlanLeg | undefined;
       let handleDirectToDestination = false;
@@ -1556,8 +1580,12 @@ export class UnsFms {
 
       if (directToState === DirectToState.TOEXISTING) {
         directTargetLeg = this.getDirectToLeg();
-        if (directTargetLeg?.fixIcao === plan.destinationAirport &&
-          directTargetLeg?.fixIcao === insertProcedureObject.procedureLegs[insertProcedureObject.procedureLegs.length - 1].fixIcao) {
+        if (
+          directTargetLeg
+          && plan.destinationAirportIcao
+          && ICAO.valueEquals(directTargetLeg.fixIcaoStruct, plan.destinationAirportIcao)
+          && ICAO.valueEquals(directTargetLeg.fixIcaoStruct, insertProcedureObject.procedureLegs[insertProcedureObject.procedureLegs.length - 1].fixIcaoStruct)
+        ) {
           handleDirectToDestination = true;
         }
       }
@@ -1608,27 +1636,30 @@ export class UnsFms {
 
       this.tryConnectProcedures(plan);
 
-      plan.calculate(0);
+      await plan.calculate(0);
+
+      return true;
     } finally {
       plan.closeBatch(batch);
     }
   }
 
   /**
-   * Method to insert the arrival legs.
-   * @param facility is the facility to build legs from.
-   * @param procedureIndex is the procedure index to build legs from.
-   * @param enrouteTransitionIndex is the enroute transition index to build legs from.
-   * @param runwayTransitionIndex is the runway transition index to build legs from.
-   * @param oneWayRunway is the one way runway, if one is specified in the procedure.
-   * @returns InsertProcedureObject to insert into the flight plan.
+   * Builds a sequence of flight plan legs for an arrival procedure.
+   * @param facility The procedure's parent airport facility.
+   * @param procedureIndex The index of the procedure in the parent airport facility's arrival array.
+   * @param enrouteTransitionIndex The index of the procedure's enroute transition, or `-1` if the procedure does not
+   * include an enroute transition.
+   * @param runwayTransitionIndex The index of the procedure's runway transition, or `-1` if the procedure does not
+   * include a runway transition.
+   * @returns A Promise which will fulfill with a sequence of flight plan legs for the specified arrival procedure.
    */
-  private buildArrivalLegs(facility: AirportFacility,
+  private async buildArrivalLegs(
+    facility: AirportFacility,
     procedureIndex: number,
     enrouteTransitionIndex: number,
     runwayTransitionIndex: number,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    oneWayRunway?: OneWayRunway): InsertProcedureObject {
+  ): Promise<InsertProcedureObject> {
 
     const arrival = facility.arrivals[procedureIndex];
     const enRouteTransition = arrival.enRouteTransitions[enrouteTransitionIndex];
@@ -1669,7 +1700,7 @@ export class UnsFms {
 
     this.tryInsertIFLeg(insertProcedureObject);
 
-    return insertProcedureObject;
+    return this.remapProcedureLegs(insertProcedureObject);
   }
 
   /**
@@ -1712,8 +1743,6 @@ export class UnsFms {
     return false;
   }
 
-  private insertApproachOpId = 0;
-
   /**
    * Method to add or replace an approach procedure in the flight plan.
    * @param description the approach procedure description
@@ -1722,215 +1751,193 @@ export class UnsFms {
   public async insertApproach(description: ApproachProcedureDescription): Promise<boolean> {
     const plan = this.getPrimaryFlightPlan();
 
-    const approachBatch = plan.openBatch('uns1.fms.insertApproach');
-
-    if (description.approachIndex === -1) {
-      await this.removeApproach();
-      plan.setApproach(description.facility.icao, description.approachIndex, description.approachTransitionIndex);
-      plan.closeBatch(approachBatch);
-      return true;
-    }
-
-    if (plan.length > 0 && plan.procedureDetails.approachIndex < 0) {
-      const lastLeg = plan.tryGetLeg(plan.length - 1);
-
-      if (lastLeg?.leg.fixIcao === plan.destinationAirport) {
-        plan.removeLeg(plan.getSegmentIndex(plan.length - 1));
-      }
-    }
-
-    let visualRunway: OneWayRunway | undefined;
-
-    if (description.visualRunwayNumber !== undefined && description.visualRunwayDesignator !== undefined) {
-      visualRunway = RunwayUtils.matchOneWayRunway(description.facility, description.visualRunwayNumber, description.visualRunwayDesignator);
-
-      if (!visualRunway) {
-        return false;
-      }
-    }
-
-    let approach: ApproachProcedure;
-    if (visualRunway) {
-      approach = UnsFmsUtils.buildVisualApproach(
-        this.facRepo,
-        description.facility,
-        visualRunway,
-        description.visualRunwayOffset ?? 5,
-        description.vfrVerticalPathAngle,
-      );
-    } else {
-      approach = description.facility.approaches[description.approachIndex];
-    }
-
-    const opId = ++this.insertApproachOpId;
-    const insertProcedureObject = await this.buildApproachLegs(description, approach, visualRunway);
-
-    if (visualRunway) {
-      this.setFlightPlanVisualApproach(plan.planIndex, visualRunway.designation);
-      this.setFlightPlanVisualApproachVfrVpa(plan.planIndex, description.vfrVerticalPathAngle);
-    } else if (this.getFlightPlanVisualApproach(plan.planIndex) !== undefined) {
-      this.setFlightPlanVisualApproach(plan.planIndex, undefined);
-      this.setFlightPlanVisualApproachVfrVpa(plan.planIndex, undefined);
-    }
-
-    plan.setApproach(description.facility.icao, description.approachIndex, description.approachTransitionIndex);
-
-    const directToState = this.getDirectToState(UnsFlightPlans.Pending);
-
-    let skipDestinationLegCheck = false;
-    if (directToState === DirectToState.TOEXISTING) {
-      if (this.getDirectToLeg()?.fixIcao === plan.destinationAirport) {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        skipDestinationLegCheck = true;
-      }
-    }
-
-    if (directToState === DirectToState.TOEXISTING && plan.procedureDetails.arrivalIndex < 0 && !skipDestinationLegCheck) {
-      this.moveDirectToDestinationLeg(plan, FlightPlanSegmentType.Enroute);
-    }
-
-    if (plan.destinationAirport !== description.facility.icao) {
-      plan.setDestinationAirport(description.facility.icao);
-    }
-
-    const segmentIndex = this.ensureOnlyOneSegmentOfType(FlightPlanSegmentType.Approach);
-
-    const activeLegArray = this.getSegmentActiveLegsToDisplace(plan, segmentIndex);
-
-    let apprSegment = plan.getSegment(segmentIndex);
-
-    if (apprSegment.legs.length > 0) {
-      this.planClearSegment(segmentIndex, FlightPlanSegmentType.Approach);
-
-      const newSegmentIndex = this.ensureOnlyOneSegmentOfType(FlightPlanSegmentType.Approach);
-
-      apprSegment = plan.getSegment(newSegmentIndex);
-    }
-
-    if (opId !== this.insertApproachOpId) {
-      plan.closeBatch(approachBatch);
+    if (plan.getBatchStack()?.find(batch => batch.name === 'uns1.fms.insertApproach')) {
       return false;
     }
 
-    if (insertProcedureObject.runway) {
-      plan.setDestinationRunway(insertProcedureObject.runway);
-    } else {
-      plan.setDestinationRunway(undefined);
-    }
+    const approachBatch = plan.openBatch('uns1.fms.insertApproach');
 
-    let haveAddedMap = false;
-    insertProcedureObject.procedureLegs.forEach((l) => {
-      let isMissedLeg = false;
-      if (visualRunway !== undefined) {
-        this.addVisualFacilityFromLeg(l, visualRunway.designation);
-        if (haveAddedMap) {
-          isMissedLeg = true;
-        }
-        if (l.fixTypeFlags & FixTypeFlags.MAP) {
-          haveAddedMap = true;
+    try {
+      if (description.approachIndex === -1) {
+        await this.removeApproach();
+        plan.setApproach(description.facility.icaoStruct, description.approachIndex, description.approachTransitionIndex);
+        return true;
+      }
+
+      if (plan.length > 0 && plan.procedureDetails.approachIndex < 0) {
+        const lastLeg = plan.tryGetLeg(plan.length - 1);
+
+        if (
+          lastLeg
+          && plan.destinationAirportIcao
+          && ICAO.valueEquals(lastLeg.leg.fixIcaoStruct, plan.destinationAirportIcao)
+        ) {
+          plan.removeLeg(plan.getSegmentIndex(plan.length - 1));
         }
       }
 
-      let flags = l.flags ?? LegDefinitionFlags.None;
-      flags |= UnsExtraLegDefinitionFlags.ProcedureLeg;
-      if (isMissedLeg) {
-        flags |= LegDefinitionFlags.MissedApproach;
+      let visualRunway: OneWayRunway | undefined;
+
+      if (description.visualRunwayNumber !== undefined && description.visualRunwayDesignator !== undefined) {
+        visualRunway = RunwayUtils.matchOneWayRunway(description.facility, description.visualRunwayNumber, description.visualRunwayDesignator);
+
+        if (!visualRunway) {
+          return false;
+        }
       }
 
-      this.planAddLeg(segmentIndex, l, undefined, flags);
-    });
+      let approach: ApproachProcedure;
+      if (visualRunway) {
+        approach = UnsFmsUtils.buildVisualApproach(
+          this.facRepo,
+          description.facility,
+          visualRunway,
+          description.visualRunwayOffset ?? 5,
+          description.vfrVerticalPathAngle,
+        );
+      } else {
+        approach = description.facility.approaches[description.approachIndex];
+      }
 
-    const prevLeg = plan.getPrevLeg(segmentIndex, 0);
-    const firstAppLeg = apprSegment.legs[0];
+      const insertProcedureObject = await this.buildApproachLegs(description, approach, visualRunway);
 
-    let deduplicatedArrivalLeg: LegDefinition | null = null;
+      if (visualRunway) {
+        this.setFlightPlanVisualApproach(plan.planIndex, visualRunway.designation);
+        this.setFlightPlanVisualApproachVfrVpa(plan.planIndex, description.vfrVerticalPathAngle);
+      } else if (this.getFlightPlanVisualApproach(plan.planIndex) !== undefined) {
+        this.setFlightPlanVisualApproach(plan.planIndex, undefined);
+        this.setFlightPlanVisualApproachVfrVpa(plan.planIndex, undefined);
+      }
 
-    if (prevLeg && firstAppLeg && this.isDuplicateLeg(prevLeg.leg, firstAppLeg.leg)) {
-      deduplicatedArrivalLeg = this.planRemoveDuplicateLeg(prevLeg, firstAppLeg);
-    }
+      plan.setApproach(description.facility.icaoStruct, description.approachIndex, description.approachTransitionIndex);
 
-    // Adds missed approach legs
-    if (!visualRunway && insertProcedureObject.procedureLegs.length > 0) {
-      const missedLegs = description.facility.approaches[description.approachIndex].missedLegs ?? [];
+      const directToState = this.getDirectToState(UnsFlightPlans.Pending);
 
-      if (missedLegs.length > 0) {
-        let maphIndex = -1;
-        for (let m = missedLegs.length - 1; m >= 0; m--) {
-          switch (missedLegs[m].type) {
-            case LegType.HA:
-            case LegType.HF:
-            case LegType.HM:
-              maphIndex = m - 1;
-              break;
+      let skipDestinationLegCheck = false;
+      if (directToState === DirectToState.TOEXISTING) {
+        const dtoLeg = this.getDirectToLeg();
+        if (
+          dtoLeg
+          && plan.destinationAirportIcao
+          && ICAO.valueEquals(dtoLeg.fixIcaoStruct, plan.destinationAirportIcao)
+        ) {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          skipDestinationLegCheck = true;
+        }
+      }
+
+      if (directToState === DirectToState.TOEXISTING && plan.procedureDetails.arrivalIndex < 0 && !skipDestinationLegCheck) {
+        this.moveDirectToDestinationLeg(plan, FlightPlanSegmentType.Enroute);
+      }
+
+      if (!plan.destinationAirportIcao || !ICAO.valueEquals(plan.destinationAirportIcao, description.facility.icaoStruct)) {
+        plan.setDestinationAirport(description.facility.icaoStruct);
+      }
+
+      const segmentIndex = this.ensureOnlyOneSegmentOfType(FlightPlanSegmentType.Approach);
+
+      const activeLegArray = this.getSegmentActiveLegsToDisplace(plan, segmentIndex);
+
+      let apprSegment = plan.getSegment(segmentIndex);
+
+      if (apprSegment.legs.length > 0) {
+        this.planClearSegment(segmentIndex, FlightPlanSegmentType.Approach);
+
+        const newSegmentIndex = this.ensureOnlyOneSegmentOfType(FlightPlanSegmentType.Approach);
+
+        apprSegment = plan.getSegment(newSegmentIndex);
+      }
+
+      if (insertProcedureObject.runway) {
+        plan.setDestinationRunway(insertProcedureObject.runway);
+      } else {
+        plan.setDestinationRunway(undefined);
+      }
+
+      let haveAddedMap = false;
+      insertProcedureObject.procedureLegs.forEach((l) => {
+        let isMissedLeg = false;
+        if (visualRunway !== undefined) {
+          this.addVisualFacilityFromLeg(l, visualRunway.designation);
+          if (haveAddedMap) {
+            isMissedLeg = true;
+          }
+          if (l.fixTypeFlags & FixTypeFlags.MAP) {
+            haveAddedMap = true;
           }
         }
 
-        let flags = LegDefinitionFlags.MissedApproach;
+        let flags = l.flags ?? LegDefinitionFlags.None;
         flags |= UnsExtraLegDefinitionFlags.ProcedureLeg;
-
-        for (let n = 0; n < missedLegs.length; n++) {
-          const newLeg = FlightPlanUtils.convertLegRunwayIcaosToSdkFormat(FlightPlan.createLeg(missedLegs[n]));
-          if (maphIndex >= 0 && n === maphIndex) {
-            newLeg.fixTypeFlags |= FixTypeFlags.MAHP;
-            this.planAddLeg(segmentIndex, newLeg, undefined, flags);
-          } else {
-            this.planAddLeg(segmentIndex, newLeg, undefined, flags);
-          }
+        if (isMissedLeg) {
+          flags |= LegDefinitionFlags.MissedApproach;
         }
+
+        this.planAddLeg(segmentIndex, l, undefined, flags);
+      });
+
+      const prevLeg = plan.getPrevLeg(segmentIndex, 0);
+      const firstAppLeg = apprSegment.legs[0];
+
+      let deduplicatedArrivalLeg: LegDefinition | null = null;
+
+      if (prevLeg && firstAppLeg && this.isDuplicateLeg(prevLeg.leg, firstAppLeg.leg)) {
+        deduplicatedArrivalLeg = this.planRemoveDuplicateLeg(prevLeg, firstAppLeg);
       }
+
+      const rnavTypeFlag = UnsFmsUtils.getBestRnavType(approach.rnavTypeFlags);
+      const approachIsCircling = !visualRunway && !approach?.runway;
+      const approachName = UnsFmsUtils.getApproachNameAsEfisString(approach);
+
+      const approachRunway = RunwayUtils.getRunwayNameString(approach.runwayNumber, approach.runwayDesignator, true, 'RW');
+
+      const mapIndex = VNavUtils.getMissedApproachLegIndex(plan);
+      const mapLeg = mapIndex >= 0 ? plan.tryGetLeg(mapIndex) : null;
+      const missedApproachFacility = mapLeg && ICAO.isValueFacility(mapLeg.leg.fixIcaoStruct)
+        ? await this.facLoader.getFacility(ICAO.getFacilityTypeFromValue(mapLeg.leg.fixIcaoStruct), mapLeg.leg.fixIcaoStruct)
+        : null;
+
+      let referenceFacility = null;
+      if (approach && UnsFmsUtils.approachHasNavFrequency(approach)) {
+        referenceFacility = (await ApproachUtils.getReferenceFacility(approach, this.facLoader) as VorFacility | undefined) ?? null;
+      }
+
+      const finalApproachCourse = await this.getFinalApproachCourse(description.facility, approach);
+
+      this.setApproachDetails(
+        true,
+        approach.approachType,
+        rnavTypeFlag,
+        false,
+        approachIsCircling,
+        approachName,
+        approachRunway,
+        missedApproachFacility,
+        referenceFacility,
+        finalApproachCourse,
+      );
+
+      // If we didn't remove a duplicate, insert a discontinuity at the start of the approach
+      if (!deduplicatedArrivalLeg && (!prevLeg || !FlightPlanUtils.isManualDiscontinuityLeg(prevLeg.leg.type))) {
+        this.tryInsertDiscontinuity(plan, segmentIndex);
+      }
+
+      this.generateSegmentVerticalData(plan, segmentIndex);
+
+      if (activeLegArray) {
+        this.displaceActiveLegsIntoSegment(plan, segmentIndex, activeLegArray, false);
+      }
+
+      this.cleanupLegsAfterApproach(plan);
+
+      this.tryConnectProcedures(plan);
+
+      await plan.calculate(0);
+
+      return true;
+    } finally {
+      plan.closeBatch(approachBatch);
     }
-
-    const rnavTypeFlag = UnsFmsUtils.getBestRnavType(approach.rnavTypeFlags);
-    const approachIsCircling = !visualRunway && !approach?.runway;
-    const approachName = UnsFmsUtils.getApproachNameAsEfisString(approach);
-
-    const approachRunway = RunwayUtils.getRunwayNameString(approach.runwayNumber, approach.runwayDesignator, true, 'RW');
-
-    const mapIndex = VNavUtils.getMissedApproachLegIndex(plan);
-    const mapLeg = mapIndex >= 0 ? plan.tryGetLeg(mapIndex) : null;
-    const missedApproachFacility = mapLeg && mapLeg.leg.fixIcao && mapLeg.leg.fixIcao !== ICAO.emptyIcao
-      ? await this.facLoader.getFacility(ICAO.getFacilityType(mapLeg.leg.fixIcao), mapLeg.leg.fixIcao)
-      : null;
-
-    let referenceFacility = null;
-    if (approach && UnsFmsUtils.approachHasNavFrequency(approach)) {
-      referenceFacility = (await ApproachUtils.getReferenceFacility(approach, this.facLoader) as VorFacility | undefined) ?? null;
-    }
-
-    const finalApproachCourse = await this.getFinalApproachCourse(description.facility, approach);
-
-    this.setApproachDetails(
-      true,
-      approach.approachType,
-      rnavTypeFlag,
-      false,
-      approachIsCircling,
-      approachName,
-      approachRunway,
-      missedApproachFacility,
-      referenceFacility,
-      finalApproachCourse,
-    );
-
-    // If we didn't remove a duplicate, insert a discontinuity at the start of the approach
-    if (!deduplicatedArrivalLeg && (!prevLeg || !FlightPlanUtils.isManualDiscontinuityLeg(prevLeg.leg.type))) {
-      this.tryInsertDiscontinuity(plan, segmentIndex);
-    }
-
-    this.generateSegmentVerticalData(plan, segmentIndex);
-
-    if (activeLegArray) {
-      this.displaceActiveLegsIntoSegment(plan, segmentIndex, activeLegArray, false);
-    }
-
-    this.cleanupLegsAfterApproach(plan);
-
-    this.tryConnectProcedures(plan);
-
-    plan.calculate(0);
-
-    plan.closeBatch(approachBatch);
-    return true;
   }
 
   /**
@@ -2023,7 +2030,105 @@ export class UnsFms {
         insertProcedureObject.runway = RunwayUtils.matchOneWayRunway(description.facility, resolvedApproach.runwayNumber, resolvedApproach.runwayDesignator);
       }
 
-      return insertProcedureObject;
+      // Adds missed approach legs
+      if (insertProcedureObject.procedureLegs.length > 0) {
+        const missedLegs = resolvedApproach.missedLegs ?? [];
+
+        if (missedLegs.length > 0) {
+          let maphIndex = -1;
+          for (let m = missedLegs.length - 1; m >= 0; m--) {
+            switch (missedLegs[m].type) {
+              case LegType.HA:
+              case LegType.HF:
+              case LegType.HM:
+                maphIndex = m - 1;
+                break;
+            }
+          }
+
+          for (let n = 0; n < missedLegs.length; n++) {
+            const newLeg = FlightPlanUtils.convertLegRunwayIcaosToSdkFormat(FlightPlan.createLeg(missedLegs[n])) as InsertProcedureObjectLeg;
+            if (maphIndex >= 0 && n === maphIndex) {
+              newLeg.fixTypeFlags |= FixTypeFlags.MAHP;
+            }
+
+            newLeg.flags = LegDefinitionFlags.MissedApproach | UnsExtraLegDefinitionFlags.ProcedureLeg;
+
+            insertProcedureObject.procedureLegs.push(newLeg);
+          }
+        }
+      }
+    }
+
+    return this.remapProcedureLegs(insertProcedureObject);
+  }
+
+  /**
+   * Remaps unsupported leg patterns in a sequence of procedure flight plan legs into the closest equivalent supported
+   * leg patterns.
+   * @param insertProcedureObject The object containing the flight plan leg sequence to remap.
+   * @returns A Promise which is fulfilled with the object containing the flight plan leg sequence to remap, after the
+   * operation has been completed.
+   */
+  private async remapProcedureLegs(insertProcedureObject: InsertProcedureObject): Promise<InsertProcedureObject> {
+    for (let i = 0; i < insertProcedureObject.procedureLegs.length; i++) {
+      const leg = insertProcedureObject.procedureLegs[i];
+
+      // Find sequences of CI/VI -> IF -> TF legs and remap them to CI/VI -> CF legs.
+      if (
+        (leg.type === LegType.CI || leg.type === LegType.VI)
+        && insertProcedureObject.procedureLegs[i + 1]?.type === LegType.IF
+        && insertProcedureObject.procedureLegs[i + 2]?.type === LegType.TF
+      ) {
+        const ifLeg = insertProcedureObject.procedureLegs[i + 1];
+        const tfLeg = insertProcedureObject.procedureLegs[i + 2];
+        if (ICAO.isValueFacility(ifLeg.fixIcaoStruct) && ICAO.isValueFacility(tfLeg.fixIcaoStruct)) {
+          const [origin, terminator] = await this.facLoader.getFacilities([ifLeg.fixIcaoStruct, tfLeg.fixIcaoStruct], 0);
+          if (origin && terminator) {
+            const trueCourse = GeoPoint.finalBearing(origin.lat, origin.lon, terminator.lat, terminator.lon);
+            if (isFinite(trueCourse)) {
+              // Get the magnetic variation to use for the TF leg (to be converted to a CF leg). If the leg's reference
+              // facility is a VOR, then use the reference facility's magvar. Otherwise, get the magvar from the
+              // terminator facility.
+              let magVar: number;
+              if (ICAO.isValueFacility(tfLeg.originIcaoStruct, FacilityType.VOR)) {
+                const referenceFacility = await this.facLoader.tryGetFacility(FacilityType.VOR, tfLeg.originIcaoStruct);
+                if (referenceFacility) {
+                  magVar = FacilityUtils.getMagVar(referenceFacility);
+                }
+              }
+              magVar ??= FacilityUtils.getMagVar(terminator);
+
+              const magCourse = MagVar.trueToMagnetic(trueCourse, magVar);
+
+              // Remove IF leg.
+              insertProcedureObject.procedureLegs.splice(i + 1, 1);
+
+              // Convert TF leg to CF leg.
+              tfLeg.type = LegType.CF;
+              tfLeg.course = magCourse === 0 ? 360 : magCourse;
+              tfLeg.trueDegrees = false;
+              tfLeg.distance = UnitType.GA_RADIAN.convertTo(GeoPoint.distance(origin.lat, origin.lon, terminator.lat, terminator.lon), UnitType.METER);
+              tfLeg.distanceMinutes = false;
+
+              // Increment the index so that when we continue the iteration, we skip the converted CF (formerly TF) leg.
+              ++i;
+
+              continue;
+            }
+          } else {
+            console.warn(`UnsFms::remapProcedureLegs(): could not remap xI -> IF -> TF leg sequence because one or both of the origin (${ICAO.tryValueToStringV2(ifLeg.fixIcaoStruct)}) and terminator (${ICAO.tryValueToStringV2(tfLeg.fixIcaoStruct)}) facilities could not be found`);
+          }
+        } else {
+          console.warn('UnsFms::remapProcedureLegs(): could not remap xI -> IF -> TF leg sequence because one or both of the origin and terminator facilities were not defined');
+        }
+
+        // If we are here, then it means we could not remap the CI/VI -> IF -> TF leg sequence for some reason.
+        // Increment the index so that when we continue the iteration, we skip over all the legs in the sequence.
+        i += 2;
+
+        continue;
+      }
     }
 
     return insertProcedureObject;

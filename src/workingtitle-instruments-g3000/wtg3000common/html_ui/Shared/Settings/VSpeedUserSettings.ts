@@ -1,6 +1,7 @@
 import {
-  Consumer, DefaultUserSettingManager, EventBus, UserSetting, UserSettingDefinition, UserSettingManager,
-  UserSettingMap, UserSettingRecord, UserSettingValue
+  DefaultUserSettingManager, EventBus, OptionalUserSettingFromManager, UserSetting, UserSettingConsumerFromManager,
+  UserSettingDefinition, UserSettingFromManager, UserSettingManager, UserSettingMap, UserSettingRecord,
+  UserSettingValue
 } from '@microsoft/msfs-sdk';
 
 import { VSpeedUserSettingTypes } from '@microsoft/msfs-garminsdk';
@@ -80,17 +81,17 @@ export class VSpeedUserSettingManager implements UserSettingManager<VSpeedUserSe
   }
 
   /** @inheritdoc */
-  public tryGetSetting<K extends string>(name: K): K extends keyof VSpeedUserSettingTypes ? UserSetting<VSpeedUserSettingTypes[K]> : undefined {
-    return this.manager.tryGetSetting(name) as any;
+  public tryGetSetting<K extends string>(name: K): OptionalUserSettingFromManager<VSpeedUserSettingTypes, K> {
+    return this.manager.tryGetSetting(name);
   }
 
   /** @inheritdoc */
-  public getSetting<K extends keyof VSpeedUserSettingTypes & string>(name: K): UserSetting<NonNullable<VSpeedUserSettingTypes[K]>> {
+  public getSetting<K extends keyof VSpeedUserSettingTypes & string>(name: K): UserSettingFromManager<VSpeedUserSettingTypes, K> {
     return this.manager.getSetting(name);
   }
 
   /** @inheritdoc */
-  public whenSettingChanged<K extends keyof VSpeedUserSettingTypes & string>(name: K): Consumer<NonNullable<VSpeedUserSettingTypes[K]>> {
+  public whenSettingChanged<K extends keyof VSpeedUserSettingTypes & string>(name: K): UserSettingConsumerFromManager<VSpeedUserSettingTypes, K> {
     return this.manager.whenSettingChanged(name);
   }
 

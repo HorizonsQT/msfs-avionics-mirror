@@ -1,5 +1,5 @@
 import {
-  APEvents, ComponentProps, DefaultUserSettingManager, DisplayComponent, EventBus, FSComponent, Subject, Subscription, VNode
+  APEvents, ComponentProps, UserSettingManager, DisplayComponent, EventBus, FSComponent, Subject, Subscription, VNode
 } from '@microsoft/msfs-sdk';
 
 import { PFDSettings, PFDUserSettings } from '@microsoft/msfs-wt21-shared';
@@ -30,7 +30,7 @@ export class AltPreselectBox extends DisplayComponent<AltPreselectBoxProps> {
   private selectedAltitudeTensRef = FSComponent.createRef<HTMLSpanElement>();
   private selectedAltitudeHundredsSubject = Subject.create('');
   private selectedAltitudeHundredsRef = FSComponent.createRef<HTMLSpanElement>();
-  private pfdSettingsManager!: DefaultUserSettingManager<PFDSettings>;
+  private pfdSettingsManager!: UserSettingManager<PFDSettings>;
   private currentAlt = 0;
   private readonly alertStateSub = this.props.bus.getSubscriber<AltitudeAlertStateEvents>();
   private apSelectedSub?: Subscription;

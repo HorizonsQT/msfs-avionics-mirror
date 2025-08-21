@@ -1,4 +1,4 @@
-import { NodeReference, SubscribableArray, UserSettingManager, UserSettingRecord } from '@microsoft/msfs-sdk';
+import { NodeReference, PropertyTypeOf, SubscribableArray, ToNonNullable, UserSettingManager, UserSettingRecord } from '@microsoft/msfs-sdk';
 
 import { SelectControl } from '../UIControls/SelectControl';
 import { UserSettingController } from './UserSettingController';
@@ -46,7 +46,7 @@ export class UserSettingSelectController<T extends UserSettingRecord, K extends 
    * @param item The selected item.
    * @param isRefresh Whether the selection was made due to a refresh.
    */
-  private onItemSelected(index: number, item: NonNullable<T[K]> | undefined, isRefresh: boolean): void {
+  private onItemSelected(index: number, item: ToNonNullable<PropertyTypeOf<T, K>> | undefined, isRefresh: boolean): void {
     if (item === undefined) {
       return;
     }
@@ -83,7 +83,7 @@ export class UserSettingTransformedSelectController<T extends UserSettingRecord,
   constructor(
     public readonly settingManager: UserSettingManager<T>,
     public readonly settingName: K,
-    public readonly values: SubscribableArray<NonNullable<T[K]>>,
+    public readonly values: SubscribableArray<ToNonNullable<PropertyTypeOf<T, K>>>,
     public readonly transformedValues: SubscribableArray<V>,
     private readonly selectControlRef: NodeReference<SelectControl<V>>
   ) {
@@ -91,7 +91,7 @@ export class UserSettingTransformedSelectController<T extends UserSettingRecord,
   }
 
   // eslint-disable-next-line jsdoc/require-jsdoc
-  protected onSettingChanged(value: NonNullable<T[K]>): void {
+  protected onSettingChanged(value: ToNonNullable<PropertyTypeOf<T, K>>): void {
     this.selectControlRef.getOrDefault()?.SelectedValue.set(this.values.getArray().indexOf(value));
   }
 

@@ -469,10 +469,12 @@ export class ProcArrivalPage extends WaypointPage<ProcArrivalPageProps> {
     const airport = this.props.selectedAirport.get();
 
     if (airport !== undefined && this.selectedArrival !== undefined) {
-      this.props.fms.insertArrival(airport, this.selectedArrival, this.selectedRunway ?? -1, this.selectedTransition ?? -1);
+      const success = await this.props.fms.loadArrival(airport, this.selectedArrival, this.selectedRunway ?? -1, this.selectedTransition ?? -1);
 
-      ViewService.back();
-      ViewService.open('FPL', false, 0);
+      if (success) {
+        ViewService.back();
+        ViewService.open('FPL', false, 0);
+      }
     }
   }
 

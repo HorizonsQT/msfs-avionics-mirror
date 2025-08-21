@@ -61,6 +61,7 @@ class CoherentAirspace implements Airspace {
 
 /**
  * A searcher for airspaces.
+ * @deprecated Please use the nearest boundary search function available from `FacilityLoader` instead.
  */
 export class AirspaceSearcher {
   /** The amount of time to wait for a search to finish before it times out, in milliseconds. */
@@ -194,7 +195,7 @@ export class AirspaceSearcher {
   private cacheAirspace(airspace: CoherentAirspace): void {
     this.cache.set(airspace.uid, airspace);
     if (this.cache.size > this.cacheSize) {
-      this.cache.delete(this.cache.keys().next().value);
+      this.cache.delete(this.cache.keys().next().value!);
     }
   }
 

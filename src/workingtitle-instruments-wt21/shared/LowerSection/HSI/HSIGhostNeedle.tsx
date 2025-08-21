@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { ComponentProps, DisplayComponent, EventBus, FSComponent, VNode } from '@microsoft/msfs-sdk';
 
+import { WTLineGhostNeedleNavIndicator, WTLineNavIndicators } from '@microsoft/msfs-wtlinesdk';
+
 import { NavIndicatorContext } from '../../Navigation/NavIndicators/NavIndicatorContext';
-import { WT21GhostNeedleNavIndicator, WT21NavIndicators } from '../../Navigation/WT21NavIndicators';
 import { NavIndicatorAnimator } from './NavIndicatorAnimator';
 
 import './HSIGhostNeedle.css';
@@ -20,14 +21,14 @@ interface HSIGhostNeedleProps extends ComponentProps {
 }
 
 /** The HSI ghost needle. */
-export class HSIGhostNeedle extends DisplayComponent<HSIGhostNeedleProps, [WT21NavIndicators]> {
+export class HSIGhostNeedle extends DisplayComponent<HSIGhostNeedleProps, [WTLineNavIndicators]> {
   public readonly contextType = [NavIndicatorContext] as const;
   private readonly ghostNeedleRef = FSComponent.createRef<HTMLDivElement>();
   private readonly courseDeviationRef = FSComponent.createRef<HTMLDivElement>();
   private readonly half: number;
   private readonly ghostNeedleRotationAnimator = new NavIndicatorAnimator();
   private readonly ghostDeviationAnimator = new NavIndicatorAnimator();
-  private ghostNeedleIndicator!: WT21GhostNeedleNavIndicator;
+  private ghostNeedleIndicator!: WTLineGhostNeedleNavIndicator;
 
   /** @inheritdoc */
   constructor(props: HSIGhostNeedleProps) {
@@ -37,7 +38,7 @@ export class HSIGhostNeedle extends DisplayComponent<HSIGhostNeedleProps, [WT21N
 
   /** @inheritdoc */
   public onAfterRender(): void {
-    this.ghostNeedleIndicator = this.getContext(NavIndicatorContext).get().get('ghostNeedle') as WT21GhostNeedleNavIndicator;
+    this.ghostNeedleIndicator = this.getContext(NavIndicatorContext).get().get('ghostNeedle') as WTLineGhostNeedleNavIndicator;
     this.ghostNeedleIndicator.course.sub(x => this.ghostNeedleRotationAnimator.setTargetValue(x === null ? 0 : x), true);
     this.ghostNeedleIndicator.lateralDeviation.sub(x => this.ghostDeviationAnimator.setTargetValue(x === null ? 0 : x), true);
     this.ghostNeedleIndicator.isVisible.sub(this.setVisibility, true);

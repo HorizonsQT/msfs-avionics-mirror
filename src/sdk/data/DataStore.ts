@@ -1,4 +1,4 @@
-/// <reference types="@microsoft/msfs-types/js/dataStorage" />
+/// <reference types="@microsoft/msfs-types/js/datastorage" preserve="true" />
 
 /* eslint-disable no-inner-declarations */
 // eslint-disable-next-line @typescript-eslint/no-namespace

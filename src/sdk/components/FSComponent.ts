@@ -28,7 +28,7 @@ export interface VNode {
 }
 
 /** A union of possible types of a VNode instance. */
-export type NodeInstance = HTMLElement | SVGElement | DisplayComponent<any> | string | number | null | Subscribable<any>;
+export type NodeInstance = HTMLElement | SVGElement | DisplayComponent<any, any> | string | number | null | Subscribable<any>;
 
 /** A union of possible child element types. */
 type DisplayChildren = VNode | string | number | Subscribable<any> | (VNode | string | number | Subscribable<any>)[] | null;
@@ -138,7 +138,7 @@ export type FragmentFactory = (props: ComponentProps) => DisplayChildren[] | und
 /**
  * A reference to a component or element node.
  */
-export class NodeReference<T extends (DisplayComponent<any> | HTMLElement | SVGElement)> {
+export class NodeReference<T extends (DisplayComponent<any, any> | HTMLElement | SVGElement)> {
 
   /** The internal reference instance. */
   private _instance: T | null = null;

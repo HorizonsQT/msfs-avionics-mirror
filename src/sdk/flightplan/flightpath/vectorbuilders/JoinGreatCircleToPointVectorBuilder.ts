@@ -1,4 +1,4 @@
-import { GeoCircle } from '../../../geo/GeoCircle';
+import { ReadonlyGeoCircle } from '../../../geo/GeoCircle';
 import { LatLonInterface } from '../../../geo/GeoInterfaces';
 import { GeoMath } from '../../../geo/GeoMath';
 import { GeoPoint } from '../../../geo/GeoPoint';
@@ -9,7 +9,7 @@ import { ArrayUtils } from '../../../utils/datastructures/ArrayUtils';
 import { FlightPathVector, FlightPathVectorFlags, VectorTurnDirection } from '../FlightPathVector';
 import { CircleVectorBuilder } from './CircleVectorBuilder';
 import { DirectToPointVectorBuilder } from './DirectToPointVectorBuilder';
-import { InterceptGreatCircleToPointVectorBuilder } from './InterceptGreatCircleToPointVectorBuilder';
+import { InterceptCircleToPointVectorBuilder } from './InterceptCircleToPointVectorBuilder';
 import { TurnToJoinGreatCircleVectorBuilder } from './TurnToJoinGreatCircleVectorBuilder';
 
 /**
@@ -17,6 +17,8 @@ import { TurnToJoinGreatCircleVectorBuilder } from './TurnToJoinGreatCircleVecto
  * defined end points.
  */
 export class JoinGreatCircleToPointVectorBuilder {
+  private static readonly HALF_EARTH_CIRCUMFERENCE = UnitType.GA_RADIAN.convertTo(Math.PI, UnitType.METER);
+
   private static readonly INTERCEPT_ANGLE = 45; // degrees
 
   private static readonly vec3Cache = ArrayUtils.create(6, () => Vec3Math.create());
@@ -24,7 +26,7 @@ export class JoinGreatCircleToPointVectorBuilder {
 
   private readonly circleVectorBuilder = new CircleVectorBuilder();
   private readonly turnToJoinGreatCircleVectorBuilder = new TurnToJoinGreatCircleVectorBuilder();
-  private readonly interceptGreatCircleToPointVectorBuilder = new InterceptGreatCircleToPointVectorBuilder();
+  private readonly interceptCircleToPointVectorBuilder = new InterceptCircleToPointVectorBuilder();
   private readonly directToPointVectorBuilder = new DirectToPointVectorBuilder();
 
   /**
@@ -75,9 +77,9 @@ export class JoinGreatCircleToPointVectorBuilder {
     vectors: FlightPathVector[],
     index: number,
     start: ReadonlyFloat64Array | LatLonInterface,
-    startPath: GeoCircle,
+    startPath: ReadonlyGeoCircle,
     end: ReadonlyFloat64Array | LatLonInterface,
-    endPath: GeoCircle,
+    endPath: ReadonlyGeoCircle,
     desiredTurnDirection?: VectorTurnDirection,
     minTurnRadius?: number,
     preferSingleTurn = false,
@@ -257,11 +259,13 @@ export class JoinGreatCircleToPointVectorBuilder {
       // Attempt to make a turn to intercept the end path at 45 degrees. At this point we are in fallback territory
       // so we won't honor the desired starting turn direction.
 
-      const numInterceptVectors = this.interceptGreatCircleToPointVectorBuilder.build(
+      const numInterceptVectors = this.interceptCircleToPointVectorBuilder.build(
         vectors, vectorIndex,
         start, startPath, minTurnRadius, undefined,
         JoinGreatCircleToPointVectorBuilder.INTERCEPT_ANGLE,
-        end, endPath, minTurnRadius,
+        endPath,
+        end, JoinGreatCircleToPointVectorBuilder.HALF_EARTH_CIRCUMFERENCE,
+        minTurnRadius,
         turnFlags | interceptFlag, flags | interceptFlag, turnFlags | interceptFlag,
         heading, isHeadingTrue
       );
@@ -302,7 +306,7 @@ export class JoinGreatCircleToPointVectorBuilder {
 
         const turnRadius = UnitType.GA_RADIAN.convertTo(Math.atan(tanHalfTheta * Math.sin(turnStartOffset)), UnitType.METER);
 
-        const turnStart = startPath.offsetDistanceAlong(intersection, turnStartOffset, JoinGreatCircleToPointVectorBuilder.vec3Cache[3]);
+        const turnStart = startPath.offsetDistanceAlong(intersection, turnStartOffset, JoinGreatCircleToPointVectorBuilder.vec3Cache[3], Math.PI);
         if (turnStartOffset - intersectionStartOffset > GeoMath.ANGULAR_TOLERANCE) {
           vectorIndex += this.circleVectorBuilder.build(
             vectors, vectorIndex,
@@ -323,7 +327,7 @@ export class JoinGreatCircleToPointVectorBuilder {
         );
 
         if (intersectionEndOffset + turnStartOffset > GeoMath.ANGULAR_TOLERANCE) {
-          const turnEnd = endPath.offsetDistanceAlong(intersection, -turnStartOffset, JoinGreatCircleToPointVectorBuilder.vec3Cache[4]);
+          const turnEnd = endPath.offsetDistanceAlong(intersection, -turnStartOffset, JoinGreatCircleToPointVectorBuilder.vec3Cache[4], Math.PI);
           vectorIndex += this.circleVectorBuilder.build(
             vectors, vectorIndex,
             endPath,

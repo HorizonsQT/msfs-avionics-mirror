@@ -1,3 +1,4 @@
+import { ReadonlyLifecycle } from '../sub/Lifecycle';
 import { Subscription } from '../sub/Subscription';
 import { Consumer } from './Consumer';
 import { Handler } from './EventBus';
@@ -222,5 +223,11 @@ class ConsumerSubscription implements Subscription {
   /** @inheritdoc */
   public destroy(): void {
     this.sub.destroy();
+  }
+
+  /** @inheritdoc */
+  public withLifecycle(lifecycle: ReadonlyLifecycle): this {
+    lifecycle.register(this);
+    return this;
   }
 }

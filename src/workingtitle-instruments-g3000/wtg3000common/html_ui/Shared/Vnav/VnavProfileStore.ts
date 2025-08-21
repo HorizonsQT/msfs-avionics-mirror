@@ -1,7 +1,7 @@
 import {
-  AdcEvents, AltitudeRestrictionType, APEvents, ClockEvents, ConsumerSubject, ConsumerValue, EventBus, GNSSEvents, LegDefinition,
-  MappedSubject, NumberUnitInterface, NumberUnitSubject, Subject, Subscribable, SubscribableUtils, Subscription, ToSubscribable,
-  UnitFamily, UnitType, VerticalFlightPhase
+  AdcEvents, AltitudeRestrictionType, APEvents, ClockEvents, ConsumerSubject, ConsumerValue, EventBus, GNSSEvents,
+  LegDefinition, MappedSubject, NumberUnitInterface, NumberUnitSubject, Subject, Subscribable, SubscribableUtils,
+  Subscription, UnitFamily, UnitType, VerticalFlightPhase
 } from '@microsoft/msfs-sdk';
 
 import { GarminVNavEvents, GarminVNavTrackingPhase, VNavDataProvider } from '@microsoft/msfs-garminsdk';
@@ -50,16 +50,16 @@ export class VnavProfileStore {
   private readonly updateSub = this.bus.getSubscriber<ClockEvents>().on('realTime').whenChangedBy(1000).handle(this.update.bind(this), true);
 
   /** Whether VNAV is enabled. */
-  public readonly vnavEnabled = this._vnavEnabled as ToSubscribable<typeof this._vnavEnabled>;
+  public readonly vnavEnabled = this._vnavEnabled as Subscribable<boolean>;
 
   /** Whether the button(s) to edit the active descent path should be enabled. */
-  public readonly isPathEditButtonEnabled = this._isPathEditButtonEnabled as ToSubscribable<typeof this._isPathEditButtonEnabled>;
+  public readonly isPathEditButtonEnabled = this._isPathEditButtonEnabled as Subscribable<boolean>;
 
   /** The active VNAV waypoint. */
-  public readonly activeVnavWaypoint = this._activeVnavWaypoint as ToSubscribable<typeof this._activeVnavWaypoint>;
+  public readonly activeVnavWaypoint = this._activeVnavWaypoint as Subscribable<LegDefinition | undefined>;
 
   /** Whether to show the VNAV cruise altitude in place of the active VNAV waypoint. */
-  public readonly showCruiseAltitude = this._showCruiseAltitude as ToSubscribable<typeof this._showCruiseAltitude>;
+  public readonly showCruiseAltitude = this._showCruiseAltitude as Subscribable<boolean>;
 
   /** The current VNAV cruise altitude. */
   public readonly cruiseAltitude = this._cruiseAltitude as Subscribable<NumberUnitInterface<UnitFamily.Distance>>;
@@ -71,10 +71,10 @@ export class VnavProfileStore {
    * The flight path angle for the active descent path, or `NaN` if there is no active descent path. Positive values
    * indicate a descending path.
    */
-  public readonly fpa = this._fpa as ToSubscribable<typeof this._fpa>;
+  public readonly fpa = this._fpa as Subscribable<number>;
 
   /** Whether the active VNAV waypoint defines a CLIMB constraint. */
-  public readonly fpaShowClimb = this._fpaShowClimb as ToSubscribable<typeof this._fpaShowClimb>;
+  public readonly fpaShowClimb = this._fpaShowClimb as Subscribable<boolean>;
 
   /** The vertical speed required to meet the active VNAV restriction, or `NaN` if there is no such speed. */
   public readonly verticalSpeedRequired = this._verticalSpeedRequired as Subscribable<NumberUnitInterface<UnitFamily.Speed>>;
@@ -86,21 +86,21 @@ export class VnavProfileStore {
   public readonly verticalDeviation = this._verticalDeviation as Subscribable<NumberUnitInterface<UnitFamily.Distance>>;
 
   /** The time remaining to TOD/BOD/TOC/BOC, or `NaN` if no such value exists. */
-  public readonly timeToValue = this._timeToValue as ToSubscribable<typeof this._timeToValue>;
+  public readonly timeToValue = this._timeToValue as Subscribable<NumberUnitInterface<UnitFamily.Duration>>;
 
   /** The label for the time remaining field. */
-  public readonly timeToLabel = this._timeToLabel as ToSubscribable<typeof this._timeToLabel>;
+  public readonly timeToLabel = this._timeToLabel as Subscribable<string>;
 
   /** The label for the time remaining field prefixed by `'Time to '`. */
-  public readonly timeToLabelExtended = this._timeToLabelExtended as ToSubscribable<typeof this._timeToLabelExtended>;
+  public readonly timeToLabelExtended = this._timeToLabelExtended as Subscribable<string>;
 
-  public readonly altDesc = this._altDesc as ToSubscribable<typeof this._altDesc>;
-  public readonly altitude1 = this._altitude1 as ToSubscribable<typeof this._altitude1>;
-  public readonly altitude2 = this._altitude2 as ToSubscribable<typeof this._altitude2>;
-  public readonly displayAltitude1AsFlightLevel = this._displayAltitude1AsFlightLevel as ToSubscribable<typeof this._displayAltitude1AsFlightLevel>;
-  public readonly displayAltitude2AsFlightLevel = this._displayAltitude2AsFlightLevel as ToSubscribable<typeof this._displayAltitude2AsFlightLevel>;
-  public readonly isAltitudeEdited = this._isAltitudeEdited as ToSubscribable<typeof this._isAltitudeEdited>;
-  public readonly isVnavDirectToButtonEnabled = this._isVnavDirectToButtonEnabled as ToSubscribable<typeof this._isVnavDirectToButtonEnabled>;
+  public readonly altDesc = this._altDesc as Subscribable<AltitudeRestrictionType>;
+  public readonly altitude1 = this._altitude1 as Subscribable<NumberUnitInterface<UnitFamily.Distance>>;
+  public readonly altitude2 = this._altitude2 as Subscribable<NumberUnitInterface<UnitFamily.Distance>>;
+  public readonly displayAltitude1AsFlightLevel = this._displayAltitude1AsFlightLevel as Subscribable<boolean>;
+  public readonly displayAltitude2AsFlightLevel = this._displayAltitude2AsFlightLevel as Subscribable<boolean>;
+  public readonly isAltitudeEdited = this._isAltitudeEdited as Subscribable<boolean>;
+  public readonly isVnavDirectToButtonEnabled = this._isVnavDirectToButtonEnabled as Subscribable<boolean>;
 
   private isPaused = true;
 

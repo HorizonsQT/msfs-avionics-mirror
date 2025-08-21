@@ -33,7 +33,7 @@ export class SelectArrivalController<S extends SelectDepArrStore<ArrivalProcedur
     if (selectedFacility && selectedProc) {
       const rwyTransIndex = this.store.selectedRwyTransIndex.get();
 
-      this.fms.insertArrival(
+      this.fms.loadArrival(
         selectedFacility,
         this.store.selectedProcIndex.get(),
         rwyTransIndex,

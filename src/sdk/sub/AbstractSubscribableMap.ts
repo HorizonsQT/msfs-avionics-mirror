@@ -236,8 +236,10 @@ export abstract class AbstractSubscribableMap<K, V> implements SubscribableMap<K
    * @param map The function to use to transform inputs.
    * @param paused Whether the new subscription should be initialized as paused. Defaults to `false`.
    * @returns The new subscription.
+   * @template OI The input type of the mutable subscribable to which to pipe.
+   * @template OV The value type of the mutable subscribable to which to pipe.
    */
-  public pipe<M>(to: MutableSubscribable<any, M>, map: (fromVal: ReadonlyMap<K, V>, toVal: M) => M, paused?: boolean): Subscription;
+  public pipe<OI, OV = unknown>(to: MutableSubscribable<any, OI>, map: (fromVal: ReadonlyMap<K, OV>, toVal: OV) => OI, paused?: boolean): Subscription;
   /**
    * Subscribes to and pipes this map's state to a mutable subscribable map. Whenever a key-value pair added, changed,
    * or removed event is received through the subscription, the same key-value pair will be added to, changed, or
@@ -248,15 +250,15 @@ export abstract class AbstractSubscribableMap<K, V> implements SubscribableMap<K
    */
   public pipe(to: MutableSubscribableMap<K, V>, paused?: boolean): Subscription;
   // eslint-disable-next-line jsdoc/require-jsdoc
-  public pipe<M>(
-    to: MutableSubscribable<any, ReadonlyMap<K, V>> | MutableSubscribable<any, M> | MutableSubscribableMap<K, V>,
-    arg2?: ((fromVal: ReadonlyMap<K, V>, toVal: M) => M) | boolean,
+  public pipe<OI, OV>(
+    to: MutableSubscribable<any, ReadonlyMap<K, V>> | MutableSubscribable<OV, OI> | MutableSubscribableMap<K, V>,
+    arg2?: ((fromVal: ReadonlyMap<K, V>, toVal: OV) => OI) | boolean,
     arg3?: boolean
   ): Subscription {
     let sub;
     let paused;
     if (typeof arg2 === 'function') {
-      sub = new SubscribablePipe(this, to as MutableSubscribable<any, M>, arg2 as (fromVal: ReadonlyMap<K, V>, toVal: M) => M, this.onSubDestroyedFunc);
+      sub = new SubscribablePipe(this, to as MutableSubscribable<OV, OI>, arg2 as (fromVal: ReadonlyMap<K, V>, toVal: OV) => OI, this.onSubDestroyedFunc);
       paused = arg3 ?? false;
     } else {
       if ('isSubscribableMap' in to) {

@@ -1,17 +1,12 @@
-import { EventSubscriber } from '../../../data/EventSubscriber';
-import { AdcEvents } from '../../../instruments/Adc';
-import { AhrsEvents } from '../../../instruments/Ahrs';
-import { GNSSEvents } from '../../../instruments/GNSS';
 import { UnitType } from '../../../math/NumberUnit';
 import { Subscribable } from '../../../sub/Subscribable';
-import { Subscription } from '../../../sub/Subscription';
 import { MapOwnAirplanePropsModule } from '../../map/modules/MapOwnAirplanePropsModule';
 import { MapSystemContext } from '../MapSystemContext';
-import { MapSystemController } from '../MapSystemController';
 import { MapSystemKeys } from '../MapSystemKeys';
+import { MapModulePropsController, MapModulePropsControllerBinding, MapModulePropsControllerPropKey } from './MapModulePropsController';
 
 /**
- * Modules required for MapOwnAirplanePropsController.
+ * Modules required for {@link MapOwnAirplanePropsController}.
  */
 export interface MapOwnAirplanePropsControllerModules {
   /** Own airplane properties. */
@@ -19,93 +14,113 @@ export interface MapOwnAirplanePropsControllerModules {
 }
 
 /**
- * A key for a property in {@link MapOwnAirplanePropsModule}.
+ * A key for a property in {@link MapOwnAirplanePropsModule} that can be bound by
+ * {@link MapOwnAirplanePropsController}.
  */
-export type MapOwnAirplanePropsKey = Extract<keyof MapOwnAirplanePropsModule, string>;
+export type MapOwnAirplanePropsKey = MapModulePropsControllerPropKey<MapOwnAirplanePropsModule>;
 
 /**
- * A partial set of subscriptions for module property bindings.
+ * A definition of a binding between a property in {@link MapOwnAirplanePropsModule} and an external data source.
  */
-type MapOwnAirplanePropsSub = Partial<Record<MapOwnAirplanePropsKey, Subscription>>;
+export type MapOwnAirplanePropsControllerBinding = MapModulePropsControllerBinding<MapOwnAirplanePropsModule>;
 
 /**
  * Updates the properties in a {@link MapOwnAirplanePropsModule}.
  */
-export class MapOwnAirplanePropsController extends MapSystemController<MapOwnAirplanePropsControllerModules> {
-  private readonly module = this.context.model.getModule(MapSystemKeys.OwnAirplaneProps);
-
-  private readonly subs: MapOwnAirplanePropsSub = {};
-
-  private updateFreqSub?: Subscription;
-
+export class MapOwnAirplanePropsController extends MapModulePropsController<typeof MapSystemKeys.OwnAirplaneProps, MapOwnAirplanePropsModule> {
   /**
-   * Constructor.
+   * Creates a new instance of MapOwnAirplanePropsController.
    * @param context This controller's map context.
-   * @param properties The properties to update on the module.
-   * @param updateFreq A subscribable which provides the update frequency, in hertz.
+   * @param bindings An iterable containing definitions of the bindings to create between module properties and
+   * external data sources.
+   * @param updateFreq The default frequency, in hertz, at which to update the module props from their bound data
+   * sources. This frequency, if defined, is applied to all bindings that do not explicitly define their own update
+   * frequencies. If the frequency is `null`, then updates will not be throttled by frequency - each property will be
+   * updated as soon as the value of its data source changes. If the frequency is not `null`, then each property will
+   * only be updated when the controller's `onBeforeUpdated()` method is called, and the frequency of updates will not
+   * exceed `updateFreq`.
    */
-  constructor(
+  public constructor(
     context: MapSystemContext<MapOwnAirplanePropsControllerModules>,
-    private readonly properties: Iterable<MapOwnAirplanePropsKey>,
-    private readonly updateFreq: Subscribable<number>
+    bindings: Iterable<MapOwnAirplanePropsKey | MapOwnAirplanePropsControllerBinding>,
+    updateFreq?: number | null | Subscribable<number | null>
   ) {
-    super(context);
-  }
+    super(
+      context,
+      MapSystemKeys.OwnAirplaneProps,
+      Array.from(bindings).map(binding => {
+        const mappedBinding = typeof binding === 'string'
+          ? MapOwnAirplanePropsController.getDefaultBinding(binding)
+          : binding;
 
-  /** @inheritdoc */
-  public onAfterMapRender(): void {
-    const sub = this.context.bus.getSubscriber<AdcEvents & AhrsEvents & GNSSEvents>();
-
-    this.updateFreqSub = this.updateFreq.sub(freq => {
-      for (const property of this.properties) {
-        this.subs[property]?.destroy();
-        this.subs[property] = this.bindProperty(sub, property, freq);
-      }
-    }, true);
+        if (mappedBinding.updateFreq === undefined && updateFreq !== undefined) {
+          return { ...mappedBinding, updateFreq };
+        } else {
+          return mappedBinding;
+        }
+      })
+    );
   }
 
   /**
-   * Binds a module property to data received through the event bus.
-   * @param sub The event bus subscriber.
-   * @param property The property to bind.
-   * @param updateFreq The data update frequency.
-   * @returns The subscription created by the binding.
+   * Gets the default binding for a property key.
+   * @param key The property key for which to get a default binding.
+   * @returns The default binding for the specified property key.
+   * @throws Error if the specified property key is invalid.
    */
-  private bindProperty(sub: EventSubscriber<AdcEvents & AhrsEvents & GNSSEvents>, property: MapOwnAirplanePropsKey, updateFreq: number): Subscription {
-    switch (property) {
+  private static getDefaultBinding(key: MapOwnAirplanePropsKey): MapOwnAirplanePropsControllerBinding {
+    switch (key) {
       case 'position':
-        return sub.on('gps-position').atFrequency(updateFreq).handle(lla => { this.module.position.set(lla.lat, lla.long); });
+        return {
+          key,
+          topic: 'gps-position',
+          handler: (prop: MapOwnAirplanePropsModule['position'], lla: LatLongAlt) => { prop.set(lla.lat, lla.long); },
+        };
       case 'altitude':
-        return sub.on('indicated_alt').atFrequency(updateFreq).handle(alt => { this.module.altitude.set(alt, UnitType.FOOT); });
+        return {
+          key,
+          topic: 'indicated_alt',
+          handler: (prop: MapOwnAirplanePropsModule['altitude'], alt: number) => { prop.set(alt, UnitType.FOOT); },
+        };
       case 'groundSpeed':
-        return sub.on('ground_speed').atFrequency(updateFreq).handle(gs => { this.module.groundSpeed.set(gs, UnitType.KNOT); });
+        return {
+          key,
+          topic: 'ground_speed',
+          handler: (prop: MapOwnAirplanePropsModule['groundSpeed'], gs: number) => { prop.set(gs, UnitType.KNOT); },
+        };
       case 'hdgTrue':
-        return sub.on('hdg_deg_true').atFrequency(updateFreq).handle(hdg => { this.module.hdgTrue.set(hdg); });
+        return {
+          key,
+          topic: 'hdg_deg_true',
+        };
       case 'trackTrue':
-        return sub.on('track_deg_true').atFrequency(updateFreq).handle(track => { this.module.trackTrue.set(track); });
+        return {
+          key,
+          topic: 'track_deg_true',
+        };
       case 'verticalSpeed':
-        return sub.on('vertical_speed').atFrequency(updateFreq).handle(vs => { this.module.verticalSpeed.set(vs, UnitType.FPM); });
+        return {
+          key,
+          topic: 'vertical_speed',
+          handler: (prop: MapOwnAirplanePropsModule['verticalSpeed'], vs: number) => { prop.set(vs, UnitType.FPM); },
+        };
       case 'turnRate':
-        return sub.on('delta_heading_rate').atFrequency(updateFreq).handle(turnRate => { this.module.turnRate.set(turnRate); });
+        return {
+          key,
+          topic: 'delta_heading_rate',
+        };
       case 'isOnGround':
-        return sub.on('on_ground').atFrequency(updateFreq).handle(isOnGround => { this.module.isOnGround.set(isOnGround); });
+        return {
+          key,
+          topic: 'on_ground',
+        };
       case 'magVar':
-        return sub.on('magvar').atFrequency(updateFreq).handle(magVar => { this.module.magVar.set(magVar); });
-    }
-  }
-
-  /** @inheritdoc */
-  public onMapDestroyed(): void {
-    this.destroy();
-  }
-
-  /** @inheritdoc */
-  public destroy(): void {
-    super.destroy();
-
-    this.updateFreqSub?.destroy();
-    for (const property of this.properties) {
-      this.subs[property]?.destroy();
+        return {
+          key,
+          topic: 'magvar',
+        };
+      default:
+        throw new Error(`MapOwnAirplanePropsController: invalid property key: ${key}`);
     }
   }
 }

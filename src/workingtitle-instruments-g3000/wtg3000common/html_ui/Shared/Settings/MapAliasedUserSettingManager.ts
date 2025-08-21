@@ -1,4 +1,7 @@
-import { AliasedUserSettingManager, Consumer, EventBus, UserSetting, UserSettingManager, UserSettingMap, UserSettingRecord, UserSettingValue } from '@microsoft/msfs-sdk';
+import {
+  AliasedUserSettingManager, EventBus, OptionalUserSettingFromManager, UserSetting, UserSettingConsumerFromManager,
+  UserSettingFromManager, UserSettingManager, UserSettingMap, UserSettingRecord, UserSettingValue
+} from '@microsoft/msfs-sdk';
 
 import { PfdIndex } from '../CommonTypes';
 import { ControllableDisplayPaneIndex, DisplayPaneIndex } from '../Components/DisplayPanes/DisplayPaneTypes';
@@ -55,17 +58,17 @@ export class MapAliasedUserSettingManager implements UserSettingManager<G3000Map
   }
 
   /** @inheritdoc */
-  public tryGetSetting<K extends string>(name: K): K extends keyof G3000MapUserSettingTypes ? UserSetting<G3000MapUserSettingTypes[K]> : undefined {
-    return this.aliasedManager.tryGetSetting(name) as any;
+  public tryGetSetting<K extends string>(name: K): OptionalUserSettingFromManager<G3000MapUserSettingTypes, K> {
+    return this.aliasedManager.tryGetSetting(name);
   }
 
   /** @inheritdoc */
-  public getSetting<K extends keyof G3000MapUserSettingTypes & string>(name: K): UserSetting<NonNullable<G3000MapUserSettingTypes[K]>> {
+  public getSetting<K extends keyof G3000MapUserSettingTypes & string>(name: K): UserSettingFromManager<G3000MapUserSettingTypes, K> {
     return this.aliasedManager.getSetting(name);
   }
 
   /** @inheritdoc */
-  public whenSettingChanged<K extends keyof G3000MapUserSettingTypes & string>(name: K): Consumer<NonNullable<G3000MapUserSettingTypes[K]>> {
+  public whenSettingChanged<K extends keyof G3000MapUserSettingTypes & string>(name: K): UserSettingConsumerFromManager<G3000MapUserSettingTypes, K> {
     return this.aliasedManager.whenSettingChanged(name);
   }
 

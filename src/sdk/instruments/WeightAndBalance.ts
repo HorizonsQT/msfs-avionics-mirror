@@ -1,4 +1,4 @@
-/// <reference types="@microsoft/msfs-types/js/simvar" />
+/// <reference types="@microsoft/msfs-types/js/simvar" preserve="true" />
 
 import { EventBus, IndexedEventType } from '../data/EventBus';
 import { PublishPacer } from '../data/EventBusPacer';
@@ -46,7 +46,7 @@ export class WeightBalanceSimvarPublisher extends SimVarPublisher<WeightBalanceE
   public constructor(bus: EventBus, pacer?: PublishPacer<WeightBalanceEvents>) {
 
     const simvars = new Map<keyof WeightBalanceEvents, SimVarPublisherEntry<any>>([
-      ['cg_percent', {name: 'CG PERCENT', type: SimVarValueType.Percent }],
+      ['cg_percent', { name: 'CG PERCENT', type: SimVarValueType.Percent }],
       ['total_weight', { name: 'TOTAL WEIGHT', type: SimVarValueType.Pounds }],
       ['payload_station_weight', { name: 'PAYLOAD STATION WEIGHT:#index#', type: SimVarValueType.Pounds, indexed: true }],
     ]);

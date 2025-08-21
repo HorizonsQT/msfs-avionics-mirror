@@ -1,5 +1,7 @@
 import {
-  Consumer, DefaultUserSettingManager, EventBus, UserSetting, UserSettingDefinition, UserSettingManager, UserSettingMap, UserSettingRecord, UserSettingValue,
+  DefaultUserSettingManager, EventBus, OptionalUserSettingFromManager, UserSetting, UserSettingConsumerFromManager,
+  UserSettingDefinition, UserSettingFromManager, UserSettingManager, UserSettingMap, UserSettingRecord,
+  UserSettingValue
 } from '@microsoft/msfs-sdk';
 
 /** The user settings for the COM frequencies. */
@@ -53,17 +55,17 @@ export class SavedFrequenciesUserSettingsManager implements UserSettingManager<S
   }
 
   /** @inheritDoc */
-  public tryGetSetting<K extends string>(name: K): K extends keyof SavedFrequencyAllUserSettingTypes ? UserSetting<SavedFrequencyAllUserSettingTypes[K]> : undefined {
-    return this.manager.tryGetSetting(name) as any;
+  public tryGetSetting<K extends string>(name: K): OptionalUserSettingFromManager<SavedFrequencyAllUserSettingTypes, K> {
+    return this.manager.tryGetSetting(name);
   }
 
   /** @inheritDoc */
-  public getSetting<K extends keyof SavedFrequencyAllUserSettingTypes & string>(name: K): UserSetting<NonNullable<SavedFrequencyAllUserSettingTypes[K]>> {
+  public getSetting<K extends keyof SavedFrequencyAllUserSettingTypes & string>(name: K): UserSettingFromManager<SavedFrequencyAllUserSettingTypes, K> {
     return this.manager.getSetting(name);
   }
 
   /** @inheritDoc */
-  public whenSettingChanged<K extends keyof SavedFrequencyAllUserSettingTypes & string>(name: K): Consumer<NonNullable<SavedFrequencyAllUserSettingTypes[K]>> {
+  public whenSettingChanged<K extends keyof SavedFrequencyAllUserSettingTypes & string>(name: K): UserSettingConsumerFromManager<SavedFrequencyAllUserSettingTypes, K> {
     return this.manager.whenSettingChanged(name);
   }
 

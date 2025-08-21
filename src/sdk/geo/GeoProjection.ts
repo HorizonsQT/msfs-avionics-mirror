@@ -62,7 +62,7 @@ export interface GeoProjection {
    * @param out The vector to which to write the result.
    * @returns The projected point, as a vector.
    */
-  project(point: LatLonInterface | ReadonlyFloat64Array, out: Float64Array): Float64Array;
+  project(point: Readonly<LatLonInterface> | ReadonlyFloat64Array, out: Float64Array): Float64Array;
 
   /**
    * Inverts a set of projected coordinates. This method will determine the geographic point whose projected location
@@ -84,7 +84,7 @@ export interface MutableGeoProjection extends GeoProjection {
    * @param point The new center point.
    * @returns This projection, after it has been changed.
    */
-  setCenter(point: LatLonInterface): this;
+  setCenter(point: Readonly<LatLonInterface>): this;
 
   /**
    * Sets the nominal scale factor of this projection. At a scale factor of 1, a distance of one great-arc radian will
@@ -199,7 +199,7 @@ abstract class AbstractGeoProjection implements MutableGeoProjection {
   }
 
   /** @inheritdoc */
-  public setCenter(point: LatLonInterface): this {
+  public setCenter(point: Readonly<LatLonInterface>): this {
     this.center.set(point);
     this.updateCenterTranslation();
     return this;
@@ -361,12 +361,12 @@ abstract class AbstractGeoProjection implements MutableGeoProjection {
   }
 
   /** @inheritdoc */
-  public project(point: LatLonInterface | ReadonlyFloat64Array, out: Float64Array): Float64Array {
+  public project(point: Readonly<LatLonInterface> | ReadonlyFloat64Array, out: Float64Array): Float64Array {
     if (point instanceof Float64Array) {
       out.set(point);
     } else {
-      out[0] = (point as LatLonInterface).lon;
-      out[1] = (point as LatLonInterface).lat;
+      out[0] = (point as Readonly<LatLonInterface>).lon;
+      out[1] = (point as Readonly<LatLonInterface>).lat;
     }
 
     this.preRotateForward(out, out);

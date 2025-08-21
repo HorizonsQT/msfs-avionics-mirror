@@ -21,7 +21,7 @@ export class StatusPage extends WT21FmcPage {
   private static readonly CLOCK_UPDATE_FREQUENCY = 1 / 2;
   private readonly databaseDatesFormatter = AiracCycleFormatter.create('{eff({dd}{MON}{YY})} {expMinus({dd}{MON}{YY})}');
 
-  private readonly indexPageLink = PageLinkField.createLink(this, '<INDEX', '/');
+  private readonly indexPageLink = PageLinkField.createLink(this, '<INDEX', '/index');
   private readonly posInitLink = PageLinkField.createLink(this, 'POS INIT>', '/pos-init');
 
   private readonly isNavDbValid = Subject.create<boolean>(true);

@@ -236,7 +236,9 @@ export class FmsUtils {
     });
 
     const runwayLeg = FmsUtils.buildRunwayLeg(airport, runway, false);
-    runwayLeg.altitude1 += 15; //Runway leg altitude should be 50 feet above threshold
+    runwayLeg.altDesc = AltitudeRestrictionType.AtOrAbove;
+    runwayLeg.altitude1 += UnitType.FOOT.convertTo(50, UnitType.METER); // Encode altitude as runway altitude + glidepath TCH (50 ft).
+    runwayLeg.verticalAngle = 357; // Encode glidepath angle (3 degrees).
     runwayLeg.fixTypeFlags = FixTypeFlags.MAP;
 
     const finalLegs: FlightPlanLeg[] = [];

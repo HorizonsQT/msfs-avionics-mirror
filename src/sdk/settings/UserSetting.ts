@@ -3,12 +3,14 @@ import { EventBus, Handler } from '../data/EventBus';
 import { AbstractSubscribable } from '../sub/AbstractSubscribable';
 import { MutableSubscribable } from '../sub/Subscribable';
 import { Subscription } from '../sub/Subscription';
+import { PropertyTypeOf, ToNonNullable } from '../utils/types/UtilityTypes';
 
 /** The supported data types for a user setting. */
 export type UserSettingValue = boolean | number | string;
 
 /**
  * A definition for a user setting.
+ * @template T The type of the setting's value.
  */
 export interface UserSettingDefinition<T extends UserSettingValue> {
   /** The name of this setting. */
@@ -20,6 +22,7 @@ export interface UserSettingDefinition<T extends UserSettingValue> {
 
 /**
  * A user setting.
+ * @template T The type of the setting's value.
  */
 export interface UserSetting<T extends UserSettingValue> extends MutableSubscribable<T> {
   /** This setting's definition. */
@@ -39,39 +42,67 @@ export type UserSettingRecord = Record<any, UserSettingValue>;
 
 /**
  * Filters a record of user settings to just those settings whose values extend a certain type.
+ * @template R The record to filter.
+ * @template V The value type for which to filter.
  */
-export type UserSettingValueFilter<T extends UserSettingRecord, V> = {
-  [Property in keyof T as (T[Property] extends V ? Property : never)]: T[Property]
-}
+export type UserSettingValueFilter<R extends UserSettingRecord, V> = {
+  [Property in keyof R as (R[Property] extends V ? Property : never)]: R[Property]
+};
 
 /**
- * A user setting type derived from a user setting record. If the provided key does not exist in the record, a type of
- * `undefined` is returned. If the provided key is optional in the record, a union type of `UserSetting<T> | undefined`
- * is returned, where `T` is the value type mapped to the key in the record.
+ * Retrieves a user setting from a user setting record by its name. If the provided name does not exist in the record,
+ * then a type of `undefined` is returned. If the provided name is optional in the record, then a union type of
+ * `UserSetting<T> | undefined` is returned, where `T` is the value type mapped to the name in the record.
+ * @template R The user setting record from which to retrieve the setting.
+ * @template K The name of the setting to retrieve.
  */
 export type UserSettingFromRecord<R extends UserSettingRecord, K extends string>
   = K extends keyof R
-  ? R[K] extends NonNullable<R[K]> ? UserSetting<R[K]> : UserSetting<NonNullable<R[K]>> | undefined
+  ? UserSetting<ToNonNullable<PropertyTypeOf<R, K>>> | (undefined extends R[K] ? undefined : never)
   : undefined;
 
 /**
- * An entry that maps one set of setting definitions to another.
+ * A record that maps a set of aliased setting names to a set of original setting names.
+ * @template Aliased A user setting record containing the aliased setting names.
+ * @template Original A user setting record containing the original setting names.
  */
 export type UserSettingMap<Aliased, Original> = {
   [Property in keyof Aliased]?: keyof Original;
-}
+};
+
+/**
+ * Retrieves a user setting from a user setting manager.
+ * @template R A record describing the settings provided by the manager.
+ * @template K The name of the retrieved setting.
+ */
+export type UserSettingFromManager<R extends UserSettingRecord, K extends string> = ToNonNullable<OptionalUserSettingFromManager<R, K>>;
+
+/**
+ * Retrieves an optional user setting from a user setting manager.
+ * @template R A record describing the settings provided by the manager.
+ * @template K The name of the retrieved setting.
+ */
+export type OptionalUserSettingFromManager<R extends UserSettingRecord, K extends string> = UserSetting<ToNonNullable<PropertyTypeOf<R, K>>> | undefined;
+
+/**
+ * Retrieves a user setting consumer from a user setting manager.
+ * @template R A record describing the settings provided by the manager.
+ * @template K The name of the retrieved consumer's associated setting.
+ */
+export type UserSettingConsumerFromManager<R extends UserSettingRecord, K extends string> = Consumer<ToNonNullable<PropertyTypeOf<R, K>>>;
 
 /**
  * A manager for user settings. Provides settings using their names as keys, publishes value change events on the
  * event bus, and keeps setting values up to date when receiving change events across the bus.
+ * @template T The record describing the settings provided by the manager.
  */
-export interface UserSettingManager<T extends UserSettingRecord> {
+export interface UserSettingManager<out T extends UserSettingRecord> {
   /**
    * Attempts to get a setting from this manager.
    * @param name The name of the setting to get.
    * @returns The requested setting, or `undefined` if no such setting exists.
    */
-  tryGetSetting<K extends string>(name: K): UserSetting<NonNullable<T[K]>> | undefined;
+  tryGetSetting<K extends string>(name: K): OptionalUserSettingFromManager<T, K>;
 
   /**
    * Gets a setting from this manager.
@@ -79,7 +110,7 @@ export interface UserSettingManager<T extends UserSettingRecord> {
    * @returns The requested setting.
    * @throws Error if no setting with the specified name exists.
    */
-  getSetting<K extends keyof T & string>(name: K): UserSetting<NonNullable<T[K]>>;
+  getSetting<K extends keyof T & string>(name: K): UserSettingFromManager<T, K>;
 
   /**
    * Gets a consumer which notifies handlers when the value of a setting changes.
@@ -88,7 +119,7 @@ export interface UserSettingManager<T extends UserSettingRecord> {
    * @throws Error if no setting with the specified name exists.
    * @deprecated Please use `getSetting(name).sub()` instead.
    */
-  whenSettingChanged<K extends keyof T & string>(name: K): Consumer<NonNullable<T[K]>>;
+  whenSettingChanged<K extends keyof T & string>(name: K): UserSettingConsumerFromManager<T, K>;
 
   /**
    * Gets an array of all settings of this manager.
@@ -107,7 +138,8 @@ export interface UserSettingManager<T extends UserSettingRecord> {
 }
 
 /**
- * An entry for a user setting in UserSettingManager.
+ * An entry for a user setting in a UserSettingManager.
+ * @template T The type of the setting's value.
  */
 export type UserSettingManagerEntry<T extends UserSettingValue> = {
   /** A user setting. */
@@ -131,6 +163,7 @@ export type UserSettingManagerEntry<T extends UserSettingValue> = {
 
 /**
  * Data provided for a setting sync event.
+ * @template T The type of the setting's value.
  */
 export type UserSettingManagerInitData<T extends UserSettingValue> = {
   /** The initialized value of the setting. */
@@ -145,6 +178,7 @@ export type UserSettingManagerInitData<T extends UserSettingValue> = {
 
 /**
  * Data provided for a setting sync event.
+ * @template T The type of the setting's value.
  */
 export type UserSettingManagerSyncData<T extends UserSettingValue> = {
   /** The synced value of the setting. */
@@ -180,6 +214,7 @@ export interface UserSettingManagerSyncEvents {
 /**
  * A manager for user settings. Provides settings using their names as keys, publishes value change events on the
  * event bus, and keeps setting values up to date when receiving change events across the bus.
+ * @template T The record describing the settings provided by the manager.
  */
 export class DefaultUserSettingManager<T extends UserSettingRecord> implements UserSettingManager<T> {
   protected readonly settings: Map<string, UserSettingManagerEntry<T[keyof T]>>;
@@ -277,18 +312,18 @@ export class DefaultUserSettingManager<T extends UserSettingRecord> implements U
   }
 
   /** @inheritdoc */
-  public tryGetSetting<K extends string>(name: K): UserSetting<NonNullable<T[K]>> | undefined {
-    return this.settings.get(name)?.setting as UserSetting<NonNullable<T[K]>> | undefined;
+  public tryGetSetting<K extends string>(name: K): OptionalUserSettingFromManager<T, K> {
+    return this.settings.get(name)?.setting as OptionalUserSettingFromManager<T, K>;
   }
 
   /** @inheritdoc */
-  public getSetting<K extends keyof T & string>(name: K): UserSetting<NonNullable<T[K]>> {
+  public getSetting<K extends keyof T & string>(name: K): UserSettingFromManager<T, K> {
     const setting = this.tryGetSetting(name);
     if (setting === undefined) {
       throw new Error(`DefaultUserSettingManager: Could not find setting with name ${name}`);
     }
 
-    return setting as UserSetting<NonNullable<T[K]>>;
+    return setting as UserSettingFromManager<T, K>;
   }
 
   /** @inheritdoc */
@@ -297,17 +332,17 @@ export class DefaultUserSettingManager<T extends UserSettingRecord> implements U
   }
 
   /** @inheritdoc */
-  public whenSettingChanged<K extends keyof T & string>(name: K): Consumer<NonNullable<T[K]>> {
+  public whenSettingChanged<K extends keyof T & string>(name: K): UserSettingConsumerFromManager<T, K> {
     const setting = this.settings.get(name);
     if (!setting) {
       throw new Error(`DefaultUserSettingManager: Could not find setting with name ${name}`);
     }
 
-    return this.subscriber.on(name).whenChanged() as Consumer<NonNullable<T[K]>>;
+    return this.subscriber.on(name).whenChanged() as UserSettingConsumerFromManager<T, K>;
   }
 
   /** @inheritdoc */
-  public mapTo<M extends UserSettingRecord>(map: UserSettingMap<M, T>): MappedUserSettingManager<M, T> {
+  public mapTo<M extends UserSettingRecord>(map: UserSettingMap<M, T>): UserSettingManager<M & T> {
     return new MappedUserSettingManager(this, map);
   }
 
@@ -373,21 +408,21 @@ export class MappedUserSettingManager<T extends UserSettingRecord, O extends Use
   constructor(private readonly parent: UserSettingManager<O>, private readonly map: UserSettingMap<T, O>) { }
 
   /** @inheritdoc */
-  public tryGetSetting<K extends string>(name: K): UserSetting<NonNullable<(T & O)[K]>> | undefined {
+  public tryGetSetting<K extends string>(name: K): OptionalUserSettingFromManager<T & O, K> {
     const mappedName = (this.map[name] ?? name) as keyof O & string;
-    return this.parent.tryGetSetting(mappedName) as unknown as UserSetting<NonNullable<(T & O)[K]>> | undefined;
+    return this.parent.tryGetSetting(mappedName) as OptionalUserSettingFromManager<T & O, K>;
   }
 
   /** @inheritdoc */
-  public getSetting<K extends keyof T & string>(name: K): UserSetting<NonNullable<(T & O)[K]>> {
+  public getSetting<K extends keyof (T & O) & string>(name: K): UserSettingFromManager<T & O, K> {
     const mappedName = (this.map[name] ?? name) as keyof O & string;
-    return this.parent.getSetting(mappedName) as unknown as UserSetting<NonNullable<(T & O)[K]>>;
+    return this.parent.getSetting(mappedName) as unknown as UserSettingFromManager<T & O, K>;
   }
 
   /** @inheritdoc */
-  public whenSettingChanged<K extends keyof T & string>(name: K): Consumer<NonNullable<(T & O)[K]>> {
+  public whenSettingChanged<K extends keyof (T & O) & string>(name: K): UserSettingConsumerFromManager<T & O, K> {
     const mappedName = (this.map[name] ?? name) as keyof O & string;
-    return this.parent.whenSettingChanged(mappedName) as unknown as Consumer<NonNullable<(T & O)[K]>>;
+    return this.parent.whenSettingChanged(mappedName) as unknown as UserSettingConsumerFromManager<T & O, K>;
   }
 
   /** @inheritdoc */

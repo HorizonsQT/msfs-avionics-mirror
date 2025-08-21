@@ -4,6 +4,7 @@ export * from './controllers/MapBindingsController';
 export * from './controllers/MapClockUpdateController';
 export * from './controllers/MapFlightPlanController';
 export * from './controllers/MapFollowAirplaneController';
+export * from './controllers/MapModulePropsController';
 export * from './controllers/MapOwnAirplaneIconOrientationController';
 export * from './controllers/MapOwnAirplanePropsController';
 export * from './controllers/MapRotationController';

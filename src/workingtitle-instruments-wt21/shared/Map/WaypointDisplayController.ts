@@ -3,8 +3,8 @@ import {
   MapWaypointDisplayModule, NearestAirportSearchSession, UnitType, UserSettingManager, Waypoint
 } from '@microsoft/msfs-sdk';
 
-import { WT21FixInfoManager } from '../Systems/FixInfo/WT21FixInfoManager';
-import { WT21FmsUtils } from '../Systems/FMS/WT21FmsUtils';
+import { WTLineFixInfoManager, WTLineFmsUtils } from '@microsoft/msfs-wtlinesdk';
+
 import { MapFacilitySelectModule } from './MapFacilitySelectModule';
 import { MapSettingsMfdAliased, MapSettingsPfdAliased, MapWaypointsDisplay } from './MapUserSettings';
 import { WT21MapKeys } from './WT21MapKeys';
@@ -46,7 +46,7 @@ export class WaypointDisplayController extends MapSystemController<WaypointDispl
   constructor(
     context: MapSystemContext<WaypointDisplayControllerModules>,
     private readonly settings: UserSettingManager<MapSettingsPfdAliased | MapSettingsMfdAliased>,
-    private readonly fixInfo?: WT21FixInfoManager,
+    private readonly fixInfo?: WTLineFixInfoManager,
   ) {
     super(context);
 
@@ -91,7 +91,7 @@ export class WaypointDisplayController extends MapSystemController<WaypointDispl
     return (w) => {
       if (FacilityWaypointUtils.isFacilityWaypoint(w)) {
         // Don't show waypoint if it's in the active plan
-        const plan = this.flightPlanModule.getPlanSubjects(WT21FmsUtils.PRIMARY_ACT_PLAN_INDEX).flightPlan.get();
+        const plan = this.flightPlanModule.getPlanSubjects(WTLineFmsUtils.PRIMARY_ACT_PLAN_INDEX).flightPlan.get();
         if (plan) {
           for (const leg of plan.legs()) {
             if (leg.leg.fixIcao === w.facility.get().icao) {

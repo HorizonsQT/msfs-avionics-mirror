@@ -1,6 +1,8 @@
+// Re-export some symbols (now in WTLineSDK) that originally used to be here
+export { WT21Fms, BasePerformanceDataManager } from '@microsoft/msfs-wt21-shared';
+
 export * from './FmcEvent';
 export * from './FmcHEvents';
-export * from './FmsPos';
 export * from './WT21CduDisplay';
 export * from './WT21FmcAvionicsPlugin';
 export * from './WT21FmcEvents';
@@ -12,9 +14,6 @@ export * from './WT21_FMC_Instrument';
 export * from './Autopilot';
 export * from './Data';
 export * from './Datalink';
-export * from './FlightPlan';
 export * from './Framework';
-export * from './Navigation';
 export * from './Pages';
-export * from './PerformanceCalculators';
 export * from './Systems';

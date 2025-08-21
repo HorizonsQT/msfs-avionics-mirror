@@ -3,9 +3,8 @@ import {
   RunwayUtils, Subject, SubscribableArray, Subscription
 } from '@microsoft/msfs-sdk';
 
-import { TransitionListItem } from '@microsoft/msfs-wt21-shared';
+import { WT21Fms, TransitionListItem } from '@microsoft/msfs-wt21-shared';
 
-import { WT21Fms } from '../FlightPlan/WT21Fms';
 import { DepArrView } from './DepArrPageController';
 
 /**

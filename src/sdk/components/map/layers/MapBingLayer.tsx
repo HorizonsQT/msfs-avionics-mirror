@@ -1,6 +1,6 @@
-/// <reference types="@microsoft/msfs-types/js/common" />
-/// <reference types="@microsoft/msfs-types/js/types" />
-/// <reference types="@microsoft/msfs-types/js/netbingmap" />
+/// <reference types="@microsoft/msfs-types/js/common" preserve="true" />
+/// <reference types="@microsoft/msfs-types/js/types" preserve="true" />
+/// <reference types="@microsoft/msfs-types/js/netbingmap" preserve="true" />
 
 import { CssTransformBuilder } from '../../../graphics/css/CssTransform';
 import { BitFlags, ReadonlyFloat64Array, UnitType, Vec2Math, Vec2Subject } from '../../../math';

@@ -97,7 +97,7 @@ export class GpsReceiverSelector {
     }
 
     if (this.gpsStates.size === 1) {
-      this._selectedIndex.set(this.gpsStates.keys().next().value);
+      this._selectedIndex.set(this.gpsStates.keys().next().value!);
       return;
     }
 

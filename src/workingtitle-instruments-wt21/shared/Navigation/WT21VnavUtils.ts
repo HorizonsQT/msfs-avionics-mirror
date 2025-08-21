@@ -3,7 +3,7 @@
  */
 import { FlightPlan, ObjectSubject, UnitType, VNavUtils } from '@microsoft/msfs-sdk';
 
-import { WT21FmsUtils } from '../Systems/FMS/WT21FmsUtils';
+import { WTLineFmsUtils } from '@microsoft/msfs-wtlinesdk';
 
 /**
  * Contains information related to the location of a DES advisory point
@@ -65,7 +65,7 @@ export class WT21VnavUtils {
     lnavLegDistanceRemaining: number,
     desAdvisoryDistanceFromEnd: number
   ): void {
-    let legIndex = WT21FmsUtils.getLastNonMissedApproachLeg(lateralPlan);
+    let legIndex = WTLineFmsUtils.getLastNonMissedApproachLeg(lateralPlan);
 
     if (legIndex !== -1) {
       let legDistance = 0;
@@ -74,12 +74,12 @@ export class WT21VnavUtils {
       while (accumulator < desAdvisoryDistanceFromEnd) {
         const leg = lateralPlan.getLeg(legIndex);
 
-        if (WT21FmsUtils.isDiscontinuityLeg(leg.leg.type)) {
+        if (WTLineFmsUtils.isDiscontinuityLeg(leg.leg.type)) {
           const prevLeg = lateralPlan.tryGetLeg(legIndex - 1);
           const nextLeg = lateralPlan.tryGetLeg(legIndex + 1);
 
           if (prevLeg && nextLeg) {
-            legDistance = WT21FmsUtils.distanceBetweenDiscontinuedLegs(prevLeg, nextLeg);
+            legDistance = WTLineFmsUtils.distanceBetweenDiscontinuedLegs(prevLeg, nextLeg);
           } else {
             legDistance = 0;
           }
@@ -104,7 +104,7 @@ export class WT21VnavUtils {
 
       const finalLeg = lateralPlan.tryGetLeg(legIndex);
 
-      if (finalLeg === null || WT21FmsUtils.isDiscontinuityLeg(finalLeg.leg.type)) {
+      if (finalLeg === null || WTLineFmsUtils.isDiscontinuityLeg(finalLeg.leg.type)) {
         // The DES advisory ends up in a discontinuity - discard it
         details.set('desAdvisoryLegIndex', -1);
         details.set('distanceFromDesAdvisory', -1);
@@ -132,12 +132,12 @@ export class WT21VnavUtils {
           for (let i = lnavTrackingLegIndex + 1; i <= legIndex; i++) {
             const leg = lateralPlan.getLeg(i);
 
-            if (WT21FmsUtils.isDiscontinuityLeg(leg.leg.type)) {
+            if (WTLineFmsUtils.isDiscontinuityLeg(leg.leg.type)) {
               const prevLeg = lateralPlan.tryGetLeg(legIndex - 1);
               const nextLeg = lateralPlan.tryGetLeg(legIndex + 1);
 
               if (prevLeg && nextLeg) {
-                legDistance = WT21FmsUtils.distanceBetweenDiscontinuedLegs(prevLeg, nextLeg);
+                legDistance = WTLineFmsUtils.distanceBetweenDiscontinuedLegs(prevLeg, nextLeg);
               } else {
                 legDistance = 0;
               }

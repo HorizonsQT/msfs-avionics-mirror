@@ -1,4 +1,4 @@
-import { FmcRenderTemplate, ICAO, LineSelectKeyEvent, PageLinkField, UserFacility } from '@microsoft/msfs-sdk';
+import { FmcRenderTemplate, LineSelectKeyEvent, PageLinkField } from '@microsoft/msfs-sdk';
 
 import { WT21FmcPage } from '../WT21FmcPage';
 
@@ -9,13 +9,11 @@ export class PilotWptListPage extends WT21FmcPage {
   private readonly DataBaseLink = PageLinkField.createLink(this, '<DATA BASE', '/database');
   private readonly ReturnLink = PageLinkField.createLink(this, 'RETURN>', '/database');
 
-  private shownFacilities: UserFacility[] = [];
+  private shownFacilities = this.fms.getPilotDefinedWaypoints();
 
   /** @inheritDoc */
   public render(): FmcRenderTemplate[] {
-    const userFacilities = this.fms.getUserFacilities();
-
-    this.shownFacilities = userFacilities;
+    const userFacilities = this.shownFacilities.getArray();
 
     const numPages = Math.ceil(userFacilities.length / 4);
 
@@ -26,15 +24,15 @@ export class PilotWptListPage extends WT21FmcPage {
 
       pages.push(
         [
-          ['', this.PagingIndicator, 'PILOT WPT LISt[blue]'],
+          ['', this.PagingIndicator, 'PILOT WPT LIST[blue]'],
           [''],
-          [ICAO.getIdent(userFacilities[start + 0]?.icao ?? '')],
+          [userFacilities[start + 0]?.facility.get().icaoStruct.ident ?? ''],
           [''],
-          [ICAO.getIdent(userFacilities[start + 1]?.icao ?? '')],
+          [userFacilities[start + 1]?.facility.get().icaoStruct.ident ?? ''],
           [''],
-          [ICAO.getIdent(userFacilities[start + 2]?.icao ?? '')],
+          [userFacilities[start + 2]?.facility.get().icaoStruct.ident ?? ''],
           [''],
-          [ICAO.getIdent(userFacilities[start + 3]?.icao ?? '')],
+          [userFacilities[start + 3]?.facility.get().icaoStruct.ident ?? ''],
           ['', 'WPT TRANSFER[disabled] '],
           ['', 'FROM XSIDE>[disabled]'],
           ['', '', '------------------------[blue]'],
@@ -74,25 +72,25 @@ export class PilotWptListPage extends WT21FmcPage {
       return false;
     }
 
-    let icao;
+    let waypointIndex = -1;
     switch (event.row) {
       case (1 * 2):
-        icao = this.shownFacilities?.[start + 0]?.icao;
+        waypointIndex = start + 0;
         break;
       case (2 * 2):
-        icao = this.shownFacilities?.[start + 1]?.icao;
+        waypointIndex = start + 1;
         break;
       case (3 * 2):
-        icao = this.shownFacilities?.[start + 2]?.icao;
+        waypointIndex = start + 2;
         break;
       case (4 * 2): {
-        icao = this.shownFacilities?.[start + 3]?.icao;
+        waypointIndex = start + 3;
         break;
       }
     }
 
-    if (icao) {
-      return ICAO.getIdent(icao);
+    if (waypointIndex !== -1) {
+      return this.shownFacilities.get(waypointIndex).facility.get().icaoStruct.ident;
     }
 
     return false;

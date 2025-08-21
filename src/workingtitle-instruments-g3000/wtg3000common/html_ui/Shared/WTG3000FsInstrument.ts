@@ -1,4 +1,4 @@
-/// <reference types="@microsoft/msfs-types/js/avionics" />
+/// <reference types="@microsoft/msfs-types/js/avionics" preserve="true" />
 import {
   AdcPublisher, AhrsPublisher, AmbientPublisher, ArrayUtils, AutopilotInstrument, AvionicsSystem,
   BaseInstrumentPublisher, Clock, ConsumerSubject, ControlSurfacesPublisher, DebounceTimer,

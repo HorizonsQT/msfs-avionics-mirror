@@ -1,6 +1,6 @@
 import {
   ControlEvents, DataInterface, DisplayField, Facility, FmcPagingEvents, FmcRenderTemplate, GeoPoint, ICAO, LegType, MappedSubject, RawFormatter, RawValidator,
-  TextInputField
+  TextInputField,
 } from '@microsoft/msfs-sdk';
 
 import { WT21FmsUtils } from '@microsoft/msfs-wt21-shared';
@@ -9,13 +9,17 @@ import { PageNumberDisplay } from '../Framework/FmcFormats';
 import { WT21FmcPage } from '../WT21FmcPage';
 import { LegsPageController } from './LegsPageController';
 import { LegsPageStore } from './LegsPageStore';
+import { WaypointAlreadyExistsPrompt } from './Common/WaypointAlreadyExistsPrompt';
 
 /**
  * LEGS page
  */
 export class LegsPage extends WT21FmcPage {
   private readonly store = new LegsPageStore();
-  private readonly controller = new LegsPageController(this.bus, this.fms, this.store, this);
+
+  private readonly wptAlreadyExists = new WaypointAlreadyExistsPrompt();
+
+  private readonly controller = new LegsPageController(this.bus, this.fms, this.store, this, this.wptAlreadyExists);
 
   public readonly pageCountDisplay = new DisplayField(this, {
     formatter: PageNumberDisplay,
@@ -66,28 +70,25 @@ export class LegsPage extends WT21FmcPage {
     }
   });
 
-  /**
-   * Handler called when LSK6 is pressed.
-   * @returns Whether this button press was successfully handled.
-   */
-  private readonly lskL6Pressed = async (): Promise<boolean | string> => {
-    if (this.fms.planInMod.get()) {
-      //cancel the mod
-      this.fms.cancelMod();
-      return Promise.resolve(true);
-    } else {
-      //do the runway update
-      return Promise.resolve(true);
-    }
-  };
-
   // TODO RWY UPDATE Should only be visible when on ground and a departure runway in in the plan and not in MOD
   private readonly L6Text = this.fms.planInMod.map((is) => is ? '<CANCEL MOD' : '<RWY UPDATE[disabled]');
 
   private readonly L6Field = new DisplayField(this, {
     formatter: RawFormatter,
-    onSelected: this.lskL6Pressed.bind(this),
+    onSelected: () => {
+      if (this.fms.planInMod.get()) {
+        //cancel the mod
+        this.fms.cancelMod();
+        return Promise.resolve(true);
+      } else {
+        //do the runway update
+        return Promise.resolve(true);
+      }
+    }
   });
+
+  private readonly WaypointAlreadyExistsReplaceField = this.wptAlreadyExists.createReplaceComponent(this);
+
 
   private readonly L6HoldLegField = new TextInputField<Facility | null, string>(this, {
     formatter: {
@@ -102,13 +103,27 @@ export class LegsPage extends WT21FmcPage {
     },
   });
 
+  private readonly HoldAtPposField = new DisplayField<string>(this, {
+    formatter: () => 'PPOS>',
+    onSelected: async (): Promise<boolean> => {
+      this.fms.insertPposHold();
+      this.screen.navigateTo('/fpln-hold', { atLeg: 1 });
+      return true;
+    },
+  });
+
+  private readonly WaypointAlreadyExistsCancelField = this.wptAlreadyExists.createCancelComponent(this);
+
   /** @inheritDoc */
   protected override onInit(): void {
     // Paging
     this.L6Field.bind(this.L6Text);
     this.L6HoldLegField.bindSource(this.HoldFacilityData);
     this.FplnPagingIndicator.bind(this.FplnPaging);
+
     this.addBinding(this.fms.planInMod.sub(this.handleHeaderChange));
+    this.addBinding(this.L6Text);
+    this.addBinding(this.wptAlreadyExists.shown.sub(() => this.invalidate()));
 
     this.pageHeaderDisplay.takeValue(this.fms.planInMod.get() ? LegsPageController.modHeaderString : LegsPageController.activeHeaderString);
   }
@@ -116,6 +131,9 @@ export class LegsPage extends WT21FmcPage {
   /** @inheritDoc */
   protected override onPause(): void {
     this.controller.destroy();
+
+    // Reject a pending WPT ALREADY EXISTS prompt
+    this.wptAlreadyExists.closePrompt();
   }
 
   /** @inheritDoc */
@@ -142,6 +160,8 @@ export class LegsPage extends WT21FmcPage {
       } else {
         L6 = this.L6HoldLegField;
       }
+    } else if (this.wptAlreadyExists.shown.get()) {
+      L6 = this.WaypointAlreadyExistsReplaceField;
     } else {
       const activeLeg = this.fms.getPlanForFmcRender().tryGetLeg(this.fms.getPlanForFmcRender().activeLateralLeg);
 
@@ -160,20 +180,15 @@ export class LegsPage extends WT21FmcPage {
       }
     }
 
-    let R6: string | DisplayField<string | null> = 'LEG WIND>[disabled]';
+    let R6: string | DisplayField<string> = 'LEG WIND>[disabled]';
     let footerHeader = '------------------------[blue]';
     if (this.controller.isForHoldSelection) {
-      R6 = new DisplayField(this, {
-        formatter: () => 'PPOS>',
-        onSelected: async (): Promise<boolean> => {
-          this.fms.insertPposHold();
-          this.screen.navigateTo('/fpln-hold', { atLeg: 1 });
-          return true;
-        },
-      });
+      R6 = this.HoldAtPposField;
       footerHeader = '---------HOLD AT--------[blue]';
+    } else if (this.wptAlreadyExists.shown.get()) {
+      R6 = this.WaypointAlreadyExistsCancelField;
+      footerHeader = WaypointAlreadyExistsPrompt.CduFooter;
     } else if (this.fms.planInMod.get() && this.controller.isFmcPageInDirectToExistingState()) {
-
       const modPlan = this.fms.getPlanForFmcRender();
       const activeDirectLeg = modPlan.tryGetLeg(modPlan.activeLateralLeg);
       const directCourse = activeDirectLeg !== null && WT21FmsUtils.getDirectToCourse(activeDirectLeg);

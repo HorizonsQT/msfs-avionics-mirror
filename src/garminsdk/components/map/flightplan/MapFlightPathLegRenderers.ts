@@ -160,6 +160,17 @@ export class FlightPathDefaultLegRenderer {
     }
 
     if (BitFlags.isAny(firstIngressVector.flags, FlightPathVectorFlags.LegToLegTurn)) {
+      // Leg-to-leg transitions that are not anticipated turns (flyover transitions and course reversals) are always
+      // rendered as roll-heading vectors.
+      if (!BitFlags.isAny(firstIngressVector.flags, FlightPathVectorFlags.AnticipatedTurn)) {
+        return true;
+      }
+
+      // Turn anticipation vectors are rendered as roll-heading if and only if the ingress joins a vector that is
+      // rendered as a roll-heading vector or the egress transition on the previous leg to which the ingress is
+      // connected is rendered as a roll-heading vector. The second condition ensures that a single anticipated turn
+      // (egress + ingress) is never rendered as half normal / half roll-heading.
+
       const ingressJoinVector = leg.calculated?.flightPath[leg.calculated.ingressJoinIndex];
 
       if (ingressJoinVector !== undefined && this.isRollHeadingVector(ingressJoinVector, leg)) {
@@ -191,6 +202,17 @@ export class FlightPathDefaultLegRenderer {
     }
 
     if (BitFlags.isAny(firstEgressVector.flags, FlightPathVectorFlags.LegToLegTurn)) {
+      // Leg-to-leg transitions that are not anticipated turns (flyover transitions and course reversals) are always
+      // rendered as roll-heading vectors.
+      if (!BitFlags.isAny(firstEgressVector.flags, FlightPathVectorFlags.AnticipatedTurn)) {
+        return true;
+      }
+
+      // Turn anticipation vectors are rendered as roll-heading if and only if the egress joins a vector that is
+      // rendered as a roll-heading vector or the ingress transition on the next leg to which the egress is connected
+      // is rendered as a roll-heading vector. The second condition ensures that a single anticipated turn
+      // (egress + ingress) is never rendered as half normal / half roll-heading.
+
       const egressJoinVector = leg.calculated?.flightPath[leg.calculated.egressJoinIndex];
 
       if (egressJoinVector !== undefined && this.isRollHeadingVector(egressJoinVector, leg)) {

@@ -239,6 +239,10 @@ export abstract class AbstractFlightPathLegCalculator implements FlightPathLegCa
       cumulativeDistance: 0,
       cumulativeDistanceWithTransitions: 0,
       flightPath: [],
+      ingressBase: [],
+      ingressBaseJoinIndex: -1,
+      egressBase: [],
+      egressBaseJoinIndex: -1,
       ingress: [],
       ingressJoinIndex: -1,
       ingressToEgress: [],
@@ -274,8 +278,12 @@ export abstract class AbstractFlightPathLegCalculator implements FlightPathLegCa
       }
 
       vectors.length = 0;
+      calcs.ingressBase.length = 0;
+      calcs.ingressBaseJoinIndex = -1;
+      calcs.egressBase.length = 0;
+      calcs.egressBaseJoinIndex = -1;
       calcs.ingress.length = 0;
-      calcs.ingressJoinIndex = 0;
+      calcs.ingressJoinIndex = -1;
       calcs.egress.length = 0;
       calcs.egressJoinIndex = -1;
       calcs.ingressToEgress.length = 0;

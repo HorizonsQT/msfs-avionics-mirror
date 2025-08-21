@@ -3,8 +3,9 @@ import {
   ComponentProps, ComputedSubject, DisplayComponent, EventBus, FlightPlanPredictorUtils, FSComponent, GNSSEvents, NavSourceType, Subject, VNode
 } from '@microsoft/msfs-sdk';
 
+import { WTLineNavIndicator, WTLineNavIndicators, WTLineNavSource } from '@microsoft/msfs-wtlinesdk';
+
 import { NavIndicatorContext } from '../../Navigation/NavIndicators/NavIndicatorContext';
-import { WT21NavIndicator, WT21NavIndicators, WT21NavSource } from '../../Navigation/WT21NavIndicators';
 import { WaypointAlerter } from '../WaypointAlerter';
 
 import './NavSourceDataField.css';
@@ -19,7 +20,7 @@ interface NavSourceDataFieldProps extends ComponentProps {
 }
 
 /** @inheritdoc */
-export class NavSourceDataField extends DisplayComponent<NavSourceDataFieldProps, [WT21NavIndicators]> {
+export class NavSourceDataField extends DisplayComponent<NavSourceDataFieldProps, [WTLineNavIndicators]> {
   public readonly contextType = [NavIndicatorContext] as const;
   private readonly navSourceDataFieldRef = FSComponent.createRef<HTMLDivElement>();
   private readonly navFlashGroupRef = FSComponent.createRef<HTMLDivElement>();
@@ -44,7 +45,7 @@ export class NavSourceDataField extends DisplayComponent<NavSourceDataFieldProps
     null, x => (x === null || x < 0) ? '----' : x.toFixed(x >= 100 ? 0 : 1));
   private readonly groundSpeedSubject = Subject.create(0);
 
-  private courseNeedleIndicator!: WT21NavIndicator;
+  private courseNeedleIndicator!: WTLineNavIndicator;
 
   /** @inheritdoc */
   public onAfterRender(): void {
@@ -87,7 +88,7 @@ export class NavSourceDataField extends DisplayComponent<NavSourceDataFieldProps
     }
   }
 
-  private readonly handleNewSource = (source: WT21NavSource | null): void => {
+  private readonly handleNewSource = (source: WTLineNavSource | null): void => {
     if (!source) {
       throw new Error('This should not happen');
     }

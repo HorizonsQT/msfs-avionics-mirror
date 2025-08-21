@@ -19,7 +19,7 @@ export class SubscribableMapFunctions {
    * Generates a function which maps an input boolean to its negation.
    * @returns A function which maps an input boolean to its negation.
    */
-  public static not<T extends boolean>(): (input: T, currentVal?: T) => boolean {
+  public static not<T extends boolean>(): (input: T) => boolean {
     return (input: T): boolean => !input;
   }
 
@@ -29,7 +29,7 @@ export class SubscribableMapFunctions {
    * @returns A function which maps an input boolean tuple to `true` if at least one tuple member is `true` and to
    * `false` otherwise.
    */
-  public static or(): (input: readonly boolean[], currentVal?: boolean) => boolean {
+  public static or(): (input: readonly boolean[]) => boolean {
     return (input: readonly boolean[]): boolean => input.length > 0 && input.includes(true);
   }
 
@@ -39,7 +39,7 @@ export class SubscribableMapFunctions {
    * @returns A function which maps an input boolean tuple to `true` if no tuple member is `true` or there are no
    * tuple members, and to `false` otherwise.
    */
-  public static nor(): (input: readonly boolean[], currentVal?: boolean) => boolean {
+  public static nor(): (input: readonly boolean[]) => boolean {
     return (input: readonly boolean[]): boolean => !input.includes(true);
   }
 
@@ -49,7 +49,7 @@ export class SubscribableMapFunctions {
    * @returns A function which maps an input boolean tuple to `true` if all tuple members are `true` and to `false`
    * otherwise.
    */
-  public static and(): (input: readonly boolean[], currentVal?: boolean) => boolean {
+  public static and(): (input: readonly boolean[]) => boolean {
     return (input: readonly boolean[]): boolean => input.length > 0 && !input.includes(false);
   }
 
@@ -59,7 +59,7 @@ export class SubscribableMapFunctions {
    * @returns A function which maps an input boolean tuple to `true` if all tuple members are `true` and to `false`
    * otherwise.
    */
-  public static nand(): (input: readonly boolean[], currentVal?: boolean) => boolean {
+  public static nand(): (input: readonly boolean[]) => boolean {
     return (input: readonly boolean[]): boolean => input.length < 1 || input.includes(false);
   }
 
@@ -67,7 +67,7 @@ export class SubscribableMapFunctions {
    * Generates a function which maps an input number to its negation.
    * @returns A function which maps an input number to its negation.
    */
-  public static negate<T extends number>(): (input: T, currentVal?: T) => number {
+  public static negate<T extends number>(): (input: T) => number {
     return (input: T): number => -input;
   }
 
@@ -75,7 +75,7 @@ export class SubscribableMapFunctions {
    * Generates a function which maps an input number to its absolute value.
    * @returns A function which maps an input number to its absolute value.
    */
-  public static abs<T extends number>(): (input: T, currentVal?: T) => number {
+  public static abs<T extends number>(): (input: T) => number {
     return Math.abs;
   }
 
@@ -84,7 +84,7 @@ export class SubscribableMapFunctions {
    * A zero-length tuple is mapped to Infinity.
    * @returns A function which maps an input number tuple to the minimum numeric value contained in the tuple.
    */
-  public static min(): (input: readonly number[], currentVal?: number) => number {
+  public static min(): (input: readonly number[]) => number {
     return (input: readonly number[]): number => Math.min(...input);
   }
 
@@ -93,7 +93,7 @@ export class SubscribableMapFunctions {
    * A zero-length tuple is mapped to -Infinity.
    * @returns A function which maps an input number tuple to the maximum numeric value contained in the tuple.
    */
-  public static max(): (input: readonly number[], currentVal?: number) => number {
+  public static max(): (input: readonly number[]) => number {
     return (input: readonly number[]): number => Math.max(...input);
   }
 
@@ -104,7 +104,7 @@ export class SubscribableMapFunctions {
    * @returns A function which maps an input tuple to a count of the number of items in the tuple that satisfy the
    * condition specified by the predicate.
    */
-  public static count<T>(predicate: (value: T) => boolean): (input: readonly T[], currentVal?: number) => number {
+  public static count<T>(predicate: (value: T) => boolean): (input: readonly T[]) => number {
     const reduceFunc = (sum: number, curr: T): number => {
       if (predicate(curr)) {
         return sum + 1;
@@ -120,7 +120,7 @@ export class SubscribableMapFunctions {
    * Generates a function which maps an input tuple to the sum of the numeric items contained in the tuple.
    * @returns A function which maps an input tuple to the sum of the numeric items contained in the tuple.
    */
-  public static sum(): (input: readonly number[], currentVal?: number) => number {
+  public static sum(): (input: readonly number[]) => number {
     const reduceFunc = (sum: number, curr: number): number => sum + curr;
 
     return SubscribableMapFunctions.reduce(reduceFunc, 0);
@@ -131,7 +131,7 @@ export class SubscribableMapFunctions {
    * A zero-length tuple is mapped to NaN.
    * @returns A function which maps an input number tuple to the average numeric value contained in the tuple.
    */
-  public static average(): (inputs: readonly number[], currentVal?: number) => number {
+  public static average(): (inputs: readonly number[]) => number {
     return (inputs: readonly number[]): number => {
       const inputLength = inputs.length;
       let sum = 0;
@@ -156,7 +156,7 @@ export class SubscribableMapFunctions {
   public static reduce<T>(
     callbackFn: (previousValue: T, currentInput: T, currentIndex: number, inputs: readonly T[]) => T,
     initialValue?: T
-  ): (input: readonly T[], currentVal?: T) => T;
+  ): (input: readonly T[]) => T;
   /**
    * Generates a function which maps an input tuple to an arbitrary accumulated value by calling a specified function
    * for each input in the tuple in order. The return value of the callback function is the accumulated value and is
@@ -191,7 +191,7 @@ export class SubscribableMapFunctions {
   public static withPrecision<T extends number>(
     precision: number | Accessible<number>,
     round = Rounding.Nearest
-  ): (input: T, currentVal?: T) => number {
+  ): (input: T) => number {
     const roundFunc = round > 0 ? MathUtils.ceil : round < 0 ? MathUtils.floor : MathUtils.round;
 
     return typeof precision === 'object'

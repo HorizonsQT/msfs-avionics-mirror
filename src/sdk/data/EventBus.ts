@@ -1,4 +1,4 @@
-/// <reference types="@microsoft/msfs-types/js/common" />
+/// <reference types="@microsoft/msfs-types/js/common" preserve="true" />
 import { HandlerSubscription } from '../sub/HandlerSubscription';
 import { Subscription } from '../sub/Subscription';
 import { EventSubscriber } from './EventSubscriber';
@@ -57,12 +57,37 @@ export interface Publisher<E> {
    * Publishes an event with data to a topic.
    * @param topic The topic to publish to.
    * @param data The data to publish.
-   * @param sync Whether or not to sync the data on the bus.
-   * @param isCached Whether or not this event should be cached for retrieval.
+   * @param sync Whether or the event should be synced to other event bus instances. Defaults to `false`.
+   * @param isCached Whether the event data should be cached. Cached data that are published to a topic can be
+   * retrieved by subscribers after the data was initially published. Defaults to `true`.
    */
   pub<K extends keyof E>(topic: K, data: E[K], sync?: boolean, isCached?: boolean): void;
 }
 
+/**
+ * A handler for syncing events published to an event bus to other event bus instances.
+ */
+export interface EventBusSyncHandler {
+  /**
+   * Sends an event to be synced to other event bus instances.
+   * @param topic The event topic.
+   * @param data The event data.
+   * @param isCached Whether the event data should be cached.
+   */
+  sendSyncedEvent(topic: string, data: unknown, isCached: boolean): void;
+}
+
+/**
+ * A function that creates an object that handles syncing events published to an {@link EventBus} to other event bus
+ * instances.
+ * @param busId The unique ID assigned to the event bus.
+ * @param onSyncedEventReceived A function to call when a synced event from another event bus instance is received.
+ * @returns An object that handles syncing events published to the specified event bus to other event bus instances.
+ */
+export type EventBusSyncHandlerFactory = (
+  busId: number,
+  onSyncedEventReceived: (topic: string, data: unknown, isCached: boolean) => void
+) => EventBusSyncHandler;
 
 /**
  * A structure that holds both the subscriptions for a given topic, and its notify recursion depth
@@ -85,23 +110,50 @@ export class EventBus {
 
   private _eventCache = new Map<string, CachedEvent>();
 
-  private _busSync: EventBusSyncBase;
-  private _busId: number;
+  private readonly _busId: number;
+
+  private readonly _busSync: EventBusSyncHandler;
 
   protected readonly onWildcardSubDestroyedFunc = this.onWildcardSubDestroyed.bind(this);
 
   /**
    * Creates an instance of an EventBus.
-   * @param useAlternativeEventSync Whether or not to use generic listener event sync (default false).
-   * If true, FlowEventSync will only work for gauges.
-   * @param shouldResync Whether the eventbus should ask for a resync of all previously cached events (default true)
+   * @param useAlternativeEventSync Whether to sync events to other event bus instances using the Coherent flow event
+   * API (`true`) instead of the generic data listener (`false`). Flow event sync sends events to event bus instances
+   * on other Coherent views that are considered gauges. The generic data listener sync sends events to event bus
+   * instances on all other Coherent views. Defaults to `false`.
+   * @param shouldResync Whether the the newly created bus should ask for a resync of all previously cached events
+   * after it is created. Defaults to `true`.
    */
-  constructor(useAlternativeEventSync = false, shouldResync = true) {
-    this._busId = Math.floor(Math.random() * 2_147_483_647);
-    // fallback to flowevent when genericdatalistener not avail (su9)
-    useAlternativeEventSync = (typeof RegisterGenericDataListener === 'undefined');
-    const syncFunc = useAlternativeEventSync ? EventBusFlowEventSync : EventBusListenerSync;
-    this._busSync = new syncFunc(this.pub.bind(this), this._busId);
+  public constructor(useAlternativeEventSync?: boolean, shouldResync?: boolean);
+  /**
+   * Creates an instance of an EventBus.
+   * @param syncHandlerFactory A function that creates an object that handles syncing events published to the new bus
+   * to other event bus instances. If not defined, then a built-in sync handler that sends events to all other Coherent
+   * views will be created and used.
+   * @param shouldResync Whether the the newly created bus should ask for a resync of all previously cached events
+   * after it is created. Defaults to `true`.
+   */
+  public constructor(syncHandlerFactory?: EventBusSyncHandlerFactory, shouldResync?: boolean);
+  // eslint-disable-next-line jsdoc/require-jsdoc
+  public constructor(
+    syncHandlerArg: boolean | EventBusSyncHandlerFactory = false,
+    shouldResync = true
+  ) {
+    this._busId = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
+
+    let syncHandlerFactory: EventBusSyncHandlerFactory;
+    if (typeof syncHandlerArg === 'function') {
+      syncHandlerFactory = syncHandlerArg;
+    } else {
+      if (syncHandlerArg) {
+        syncHandlerFactory = (busId, onSyncedEventReceived) => new EventBusFlowEventSync(busId, onSyncedEventReceived);
+      } else {
+        syncHandlerFactory = (busId, onSyncedEventReceived) => new EventBusListenerSync(busId, onSyncedEventReceived);
+      }
+    }
+    this._busSync = syncHandlerFactory(this._busId, this.onSyncedEventReceived.bind(this));
+
     if (shouldResync === true) {
       this.syncEvent('event_bus', 'resync_request', false);
       this.on('event_bus', (data) => {
@@ -168,9 +220,10 @@ export class EventBus {
   /**
    * Publishes an event to the topic on the bus.
    * @param topic The topic to publish to.
-   * @param data The data portion of the event.
-   * @param sync Whether or not this message needs to be synced on local stoage.
-   * @param isCached Whether or not this message will be resync'd across the bus on load.
+   * @param data The event data to publish.
+   * @param sync Whether or the event should be synced to other event bus instances. Defaults to `false`.
+   * @param isCached Whether the event data should be cached. Cached data that are published to a topic can be
+   * retrieved by subscribers after the data was initially published. Defaults to `true`.
    */
   public pub(topic: string, data: any, sync = false, isCached = true): void {
     if (isCached) {
@@ -265,13 +318,23 @@ export class EventBus {
   }
 
   /**
-   * Publish an event to the sync bus.
-   * @param topic The topic to publish to.
-   * @param data The data to publish.
-   * @param isCached Whether or not this message will be resync'd across the bus on load.
+   * Syncs an event to other event bus instances.
+   * @param topic The event topic.
+   * @param data The event data.
+   * @param isCached Whether the event data should be cached.
    */
-  private syncEvent(topic: string, data: any, isCached: boolean): void {
-    this._busSync.sendEvent(topic, data, isCached);
+  private syncEvent(topic: string, data: unknown, isCached: boolean): void {
+    this._busSync.sendSyncedEvent(topic, data, isCached);
+  }
+
+  /**
+   * Responds to when a synced event from another event bus instance is received.
+   * @param topic The event topic.
+   * @param data The event data.
+   * @param isCached Whether the event data should be cached.
+   */
+  private onSyncedEventReceived(topic: string, data: unknown, isCached: boolean): void {
+    this.pub(topic, data, false, isCached);
   }
 
   /**
@@ -323,30 +386,29 @@ interface TopicDataPackage {
   /** The bus topic. */
   topic: string;
   /** The data object */
-  data: any;
+  data: unknown;
   /** Indicating if this event should be cached on the bus */
-  isCached?: boolean | undefined;
+  isCached: boolean;
 }
 
 /**
- * An abstract class for bus sync implementations.
+ * An abstract class for built-in event bus sync handler implementations.
  */
-abstract class EventBusSyncBase {
+abstract class EventBusSyncBase implements EventBusSyncHandler {
   protected isPaused = false;
-  private recvEventCb: (topic: string, data: any, sync?: boolean, isCached?: boolean) => void;
-  private lastEventSynced = -1;
-  protected busId: number;
 
-  private dataPackageQueue: TopicDataPackage[] = [];
+  private readonly dataPackageQueue: TopicDataPackage[] = [];
+  private lastEventSynced = -1;
 
   /**
-   * Creates an instance of EventBusFlowEventSync.
-   * @param recvEventCb A callback to execute when an event is received on the bus.
-   * @param busId The ID of the bus.
+   * Creates an instance of EventBusSyncBase.
+   * @param busId The unique ID assigned to the event bus.
+   * @param onSyncedEventReceived A function to call when a synced event from another event bus instance is received.
    */
-  constructor(recvEventCb: (topic: string, data: any, sync?: boolean, isCached?: boolean) => void, busId: number) {
-    this.recvEventCb = recvEventCb;
-    this.busId = busId;
+  public constructor(
+    protected readonly busId: number,
+    protected readonly onSyncedEventReceived: (topic: string, data: any, isCached: boolean) => void
+  ) {
     this.hookReceiveEvent();
 
     /** Sends the queued up data packages */
@@ -394,7 +456,7 @@ abstract class EventBusSyncBase {
         this.lastEventSynced = syncData.packagedId;
         syncData.data.forEach((data: TopicDataPackage): void => {
           try {
-            this.recvEventCb(data.topic, data.data !== undefined ? data.data : undefined, false, data.isCached);
+            this.onSyncedEventReceived(data.topic, data.data, data.isCached);
           } catch (e) {
             console.error(e);
             if (e instanceof Error) {
@@ -408,13 +470,8 @@ abstract class EventBusSyncBase {
     }
   }
 
-  /**
-   * Sends an event via flow events.
-   * @param topic The topic to send data on.
-   * @param data The data to send.
-   * @param isCached Whether or not this event is cached.
-   */
-  public sendEvent(topic: string, data: any, isCached?: boolean): void {
+  /** @inheritDoc */
+  public sendSyncedEvent(topic: string, data: unknown, isCached: boolean): void {
     // stringify data
     const dataObj = data;
     // build a data package
@@ -429,43 +486,8 @@ abstract class EventBusSyncBase {
 }
 
 /**
- * A class that manages event bus synchronization via Flow Event Triggers.
- * DON'T USE this, it has bad performance implications.
- * @deprecated
- */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-class EventBusCoherentSync extends EventBusSyncBase {
-  private static readonly EB_KEY = 'eb.evt';
-  private static readonly EB_LISTENER_KEY = 'JS_LISTENER_SIMVARS';
-  private listener!: ViewListener.ViewListener;
-
-  /** @inheritdoc */
-  protected executeSync(syncDataPackage: SyncDataPackage): boolean {
-    // HINT: Stringifying the data again to circumvent the bad perf on Coherent interop
-    try {
-      this.listener.triggerToAllSubscribers(EventBusCoherentSync.EB_KEY, JSON.stringify(syncDataPackage));
-      return true;
-    } catch (error) {
-      return false;
-    }
-  }
-
-  /** @inheritdoc */
-  protected hookReceiveEvent(): void {
-    this.listener = RegisterViewListener(EventBusCoherentSync.EB_LISTENER_KEY, undefined, true);
-    this.listener.on(EventBusCoherentSync.EB_KEY, (e: string) => {
-      try {
-        const evt = JSON.parse(e) as SyncDataPackage;
-        this.processEventsReceived(evt);
-      } catch (error) {
-        console.error(error);
-      }
-    });
-  }
-}
-
-/**
- * A class that manages event bus synchronization via Flow Event Triggers.
+ * An event bus sync handler that sends events to event bus instances on other Coherent views using the Coherent Flow
+ * Event API.
  */
 class EventBusFlowEventSync extends EventBusSyncBase {
   private static readonly EB_LISTENER_KEY = 'EB_EVENTS';
@@ -505,11 +527,12 @@ declare function RegisterGenericDataListener(callback?: () => void): GenericData
 //// END GLOBALS DECLARATION
 
 /**
- * A class that manages event bus synchronization via the Generic Data Listener.
+ * An event bus sync handler that sends events to event bus instances on other Coherent views using the generic data
+ * listener.
  */
 class EventBusListenerSync extends EventBusSyncBase {
   private static readonly EB_KEY = 'wt.eb.evt';
-  private static readonly EB_LISTENER_KEY = 'JS_LISTENER_GENERICDATA';
+
   private listener!: GenericDataListener;
 
   /** @inheritdoc */

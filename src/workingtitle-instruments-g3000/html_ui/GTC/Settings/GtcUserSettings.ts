@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/ban-types */
 import { DefaultUserSettingManager, EventBus, UserSettingDefinition, UserSettingManager, UserSettingMap } from '@microsoft/msfs-sdk';
 
 import { ControllableDisplayPaneIndex, DisplayPaneIndex, GtcIndex } from '@microsoft/msfs-wtg3000-common';
@@ -182,7 +181,7 @@ export class GtcUserSettings {
     const map: UserSettingMap<GtcAliasedUserSettingTypes, GtcInstrumentIndexedUserSettingTypes<Index>> = {};
 
     for (const name of GtcUserSettings.INDEXED_SETTING_NAMES) {
-      map[name] = `${name}_${index}`;
+      map[name] = `${name}_${index}` as const;
     }
 
     return map;

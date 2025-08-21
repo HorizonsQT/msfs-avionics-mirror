@@ -1,4 +1,9 @@
-import { Consumer, DefaultUserSettingManager, EventBus, UserSetting, UserSettingDefinition, UserSettingManager, UserSettingMap, UserSettingRecord, UserSettingValue } from '@microsoft/msfs-sdk';
+import {
+  DefaultUserSettingManager, EventBus, OptionalUserSettingFromManager, UserSetting, UserSettingConsumerFromManager,
+  UserSettingDefinition, UserSettingFromManager, UserSettingManager, UserSettingMap, UserSettingRecord,
+  UserSettingValue
+} from '@microsoft/msfs-sdk';
+
 import { GduDefsConfig } from '../AvionicsConfig/GduDefsConfig';
 
 /**
@@ -67,17 +72,17 @@ export class GduUserSettingManager implements UserSettingManager<GduAllUserSetti
   }
 
   /** @inheritDoc */
-  public tryGetSetting<K extends string>(name: K): K extends keyof GduAllUserSettingTypes ? UserSetting<GduAllUserSettingTypes[K]> : undefined {
-    return this.manager.tryGetSetting(name) as any;
+  public tryGetSetting<K extends string>(name: K): OptionalUserSettingFromManager<GduAllUserSettingTypes, K> {
+    return this.manager.tryGetSetting(name);
   }
 
   /** @inheritDoc */
-  public getSetting<K extends keyof GduAllUserSettingTypes & string>(name: K): UserSetting<NonNullable<GduAllUserSettingTypes[K]>> {
+  public getSetting<K extends keyof GduAllUserSettingTypes & string>(name: K): UserSettingFromManager<GduAllUserSettingTypes, K> {
     return this.manager.getSetting(name);
   }
 
   /** @inheritDoc */
-  public whenSettingChanged<K extends keyof GduAllUserSettingTypes & string>(name: K): Consumer<NonNullable<GduAllUserSettingTypes[K]>> {
+  public whenSettingChanged<K extends keyof GduAllUserSettingTypes & string>(name: K): UserSettingConsumerFromManager<GduAllUserSettingTypes, K> {
     return this.manager.whenSettingChanged(name);
   }
 

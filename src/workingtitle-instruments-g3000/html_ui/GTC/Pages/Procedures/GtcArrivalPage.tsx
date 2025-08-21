@@ -6,6 +6,8 @@ import {
 
 import { FmsUtils, ProcedureType, TouchButton } from '@microsoft/msfs-garminsdk';
 
+import { G3000ChartsAirportSelectionData, G3000ChartsSource, G3000ChartsUtils } from '@microsoft/msfs-wtg3000-common';
+
 import { GtcList } from '../../Components/List/GtcList';
 import { GtcListSelectTouchButton } from '../../Components/TouchButton/GtcListSelectTouchButton';
 import { GtcDialogs } from '../../Dialog/GtcDialogs';
@@ -16,7 +18,6 @@ import { GtcFlightPlanPage } from '../FlightPlanPage/GtcFlightPlanPage';
 import { GtcProcedureSelectionPage } from './GtcProcedureSelectionPage';
 
 import './GtcProcedureSelectionPage.css';
-import { G3000ChartsAirportSelectionData, G3000ChartsSource, G3000ChartsUtils } from '@microsoft/msfs-wtg3000-common';
 
 /**
  * Allows user to configure and load an arrival into the flight plan.
@@ -298,7 +299,9 @@ export class GtcArrivalPage extends GtcProcedureSelectionPage {
     chartsSource: G3000ChartsSource,
     chartIndex: ChartIndex<string>
   ): Promise<G3000ChartsAirportSelectionData> {
-    const arrivalPages = await G3000ChartsUtils.getPageDataFromMetadata(chartsSource.getArrivalCharts(chartIndex))
+    const service = chartsSource.getChartService();
+
+    const arrivalPages = await G3000ChartsUtils.getPageDataFromMetadata(service, chartsSource.getArrivalCharts(chartIndex))
       .catch(() => []);
 
     return {
@@ -577,10 +580,8 @@ export class GtcArrivalPage extends GtcProcedureSelectionPage {
 
     const destinationFacility = this.store.destinationFacility.get();
 
-    if (destinationFacility && selectedFacility.icao !== destinationFacility.icao) {
-      const arrivalFacIdent = ICAO.getIdent(selectedFacility.icao);
-      const destinationFacIdent = ICAO.getIdent(destinationFacility.icao);
-      const message = `The selected arrival airport\n(${arrivalFacIdent}) is different from the\napproach airport (${destinationFacIdent}).\nLoad Arrival?`;
+    if (destinationFacility && ICAO.valueEquals(selectedFacility.icaoStruct, destinationFacility.icaoStruct)) {
+      const message = `The selected arrival airport\n(${selectedFacility.icaoStruct.ident}) is different from the\napproach airport (${destinationFacility.icaoStruct.ident}).\nLoad Arrival?`;
       const accepted = await GtcDialogs.openMessageDialog(this.gtcService, message);
       if (!accepted) {
         return;
@@ -590,7 +591,7 @@ export class GtcArrivalPage extends GtcProcedureSelectionPage {
     const rwyTransIndex = this.selectedRunwayTransitionIndex.get();
     const runway = this.selectedRunway.get();
 
-    this.fms.insertArrival(
+    const success = await this.fms.loadArrival(
       selectedFacility,
       this.selectedArrivalIndex.get(),
       rwyTransIndex,
@@ -598,14 +599,16 @@ export class GtcArrivalPage extends GtcProcedureSelectionPage {
       runway === -1 ? undefined : runway,
     );
 
-    // Attempt to go back to the Flight Plan page. If the Flight Plan page is not open in a previous history state,
-    // then go back to the home page and open the Flight Plan page.
-    let activeViewEntry = this.gtcService.goBackToItem((steps, stackPeeker) => stackPeeker(0)?.viewEntry.key === GtcViewKeys.FlightPlan);
-    if (activeViewEntry.key !== GtcViewKeys.FlightPlan) {
-      this.gtcService.goBackToHomePage();
-      activeViewEntry = this.gtcService.changePageTo<GtcFlightPlanPage>(GtcViewKeys.FlightPlan);
+    if (success) {
+      // Attempt to go back to the Flight Plan page. If the Flight Plan page is not open in a previous history state,
+      // then go back to the home page and open the Flight Plan page.
+      let activeViewEntry = this.gtcService.goBackToItem((steps, stackPeeker) => stackPeeker(0)?.viewEntry.key === GtcViewKeys.FlightPlan);
+      if (activeViewEntry.key !== GtcViewKeys.FlightPlan) {
+        this.gtcService.goBackToHomePage();
+        activeViewEntry = this.gtcService.changePageTo<GtcFlightPlanPage>(GtcViewKeys.FlightPlan);
+      }
+      (activeViewEntry as GtcViewEntry<GtcFlightPlanPage>).ref.scrollTo(FlightPlanSegmentType.Arrival);
     }
-    (activeViewEntry as GtcViewEntry<GtcFlightPlanPage>).ref.scrollTo(FlightPlanSegmentType.Arrival);
   }
 
   /** @inheritDoc */

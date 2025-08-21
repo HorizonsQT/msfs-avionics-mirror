@@ -1,8 +1,7 @@
 import css from 'rollup-plugin-import-css';
 import resolve from '@rollup/plugin-node-resolve';
 
-const inst_name = 'Epic2v2';
-const inst_path = `html_ui/Pages/VCockpit/Instruments/NavSystems/${inst_name}`;
+const inst_path = `workingtitle-instruments-epic2-v2/html_ui/Pages/VCockpit/Instruments/NavSystems/Epic2v2`;
 const build_path = `build/${inst_path}`;
 const dist_path = `dist/${inst_path}`;
 
@@ -63,4 +62,4 @@ export default [
       external: ['@microsoft/msfs-sdk', '@microsoft/msfs-epic2-shared'],
       plugins: [css({ output: 'Epic2Tsc.css' }), resolve()]
     }
-]
+];

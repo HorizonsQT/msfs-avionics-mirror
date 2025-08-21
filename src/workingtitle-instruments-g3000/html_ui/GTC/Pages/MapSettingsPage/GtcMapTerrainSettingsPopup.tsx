@@ -1,4 +1,4 @@
-import { DisplayComponent, FSComponent, UserSettingManager, VNode } from '@microsoft/msfs-sdk';
+import { DisplayComponent, FSComponent, PropertyTypeOf, ToNonNullable, UserSettingManager, VNode } from '@microsoft/msfs-sdk';
 
 import { TerrainSystemStateDataProvider, TerrainSystemType, UnitsUserSettings } from '@microsoft/msfs-garminsdk';
 
@@ -39,7 +39,13 @@ export interface GtcMapTerrainSettingsPopupProps extends GtcViewProps {
    * A function which writes selected setting values. If not defined, selected values will be written to settings
    * retrieved from `mapReadSettingManager`.
    */
-  writeToSetting?: <K extends keyof G3000MapUserSettingTypes & string>(settingName: K, value: NonNullable<G3000MapUserSettingTypes[K]>) => void;
+  writeToSetting?: <K extends keyof G3000MapUserSettingTypes & string>(
+    settingName: K,
+    value: ToNonNullable<PropertyTypeOf<G3000MapUserSettingTypes, K>>
+  ) => void;
+
+  /** Whether to disable the button to toggle the visibility of the map's absolute terrain scale. Defaults to `false`. */
+  disableAbsoluteTerrainScaleButton?: boolean;
 }
 
 /**
@@ -133,6 +139,7 @@ export class GtcMapTerrainSettingsPopup extends GtcView<GtcMapTerrainSettingsPop
           />
           <GtcToggleTouchButton
             ref={buttonRefs[1]}
+            isEnabled={!this.props.disableAbsoluteTerrainScaleButton}
             state={this.props.mapReadSettingManager.getSetting('mapTerrainScaleShow')}
             label={'Absolute Terrain\nScale'}
             onPressed={(button, state): void => {

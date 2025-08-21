@@ -13,6 +13,7 @@ export class GnsAhrsPublisher extends SimVarPublisher<AhrsEvents> {
   private static readonly SIMVARS: [keyof AhrsEvents, SimVarPublisherEntry<any>][] = [
     ['hdg_deg', { name: 'HEADING INDICATOR', type: SimVarValueType.Degree }],
     ['hdg_deg_true', { name: 'HEADING INDICATOR', type: SimVarValueType.Degree, map: (heading): number => MagVar.magneticToTrue(heading, this.magVar) }],
+    ['actual_hdg_deg_true', { name: 'PLANE HEADING DEGREES TRUE', type: SimVarValueType.Degree }],
     ['delta_heading_rate', { name: 'DELTA HEADING RATE', type: SimVarValueType.Degree }],
     ['pitch_deg', { name: 'PLANE PITCH DEGREES', type: SimVarValueType.Degree }],
     ['roll_deg', { name: 'PLANE BANK DEGREES', type: SimVarValueType.Degree }],

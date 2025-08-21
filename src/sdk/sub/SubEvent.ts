@@ -32,6 +32,16 @@ export interface SubEventInterface<SenderType, DataType> {
 }
 
 /**
+ * Utility type to retrieve the sender type of a {@link SubEventInterface}.
+ */
+export type SubEventInterfaceSenderType<S> = S extends SubEventInterface<infer SenderType, any> ? SenderType : never;
+
+/**
+ * Utility type to retrieve the data type of a {@link SubEventInterface}.
+ */
+export type SubEventInterfaceDataType<S> = S extends SubEventInterface<any, infer DataType> ? DataType : never;
+
+/**
  * An implementation of {@link SubEventInterface}.
  */
 export class SubEvent<SenderType, DataType> implements SubEventInterface<SenderType, DataType> {

@@ -50,16 +50,16 @@ export interface MapAbstractNearestWaypointsLayerProps<R extends MapWaypointRend
   initRenderer?: (waypointRenderer: R, canvasLayer: MapSyncedCanvasLayer) => void;
 
   /** A function which gets the search center. If not defined, the search center defaults to the center of the map. */
-  getSearchCenter?: (mapProjection: MapProjection) => LatLonInterface;
+  getSearchCenter?: (mapProjection: MapProjection) => Readonly<LatLonInterface>;
 
   /** A function which checks if a search should be refreshed. Defaults to `true` if not defined. */
-  shouldRefreshSearch?: (searchType: MapNearestWaypointsLayerSearchTypes, center: LatLonInterface, radius: number) => boolean;
+  shouldRefreshSearch?: (searchType: MapNearestWaypointsLayerSearchTypes, center: Readonly<LatLonInterface>, radius: number) => boolean;
 
   /** A function which gets the item limit for facility searches. */
-  searchItemLimit?: (searchType: MapNearestWaypointsLayerSearchTypes, center: LatLonInterface, radius: number) => number;
+  searchItemLimit?: (searchType: MapNearestWaypointsLayerSearchTypes, center: Readonly<LatLonInterface>, radius: number) => number;
 
   /** A function which gets the radius limit for facility searches, in great-arc radians. */
-  searchRadiusLimit?: (searchType: MapNearestWaypointsLayerSearchTypes, center: LatLonInterface, radius: number) => number;
+  searchRadiusLimit?: (searchType: MapNearestWaypointsLayerSearchTypes, center: Readonly<LatLonInterface>, radius: number) => number;
 
   /** The debounce delay for facility searches, in milliseconds. Defaults to 500 milliseconds. */
   searchDebounceDelay?: number;
@@ -229,7 +229,7 @@ export class MapNearestWaypointsLayer
    * Gets the search center for the waypoint searches on this layer.
    * @returns The waypoint search center geo point.
    */
-  private getSearchCenter(): LatLonInterface {
+  private getSearchCenter(): Readonly<LatLonInterface> {
     return this.props.getSearchCenter ? this.props.getSearchCenter(this.props.mapProjection) : this.props.mapProjection.getCenter();
   }
 
@@ -315,7 +315,7 @@ export class MapNearestWaypointsLayer
    * calculated search radius.
    * @param force Whether to force a refresh of all waypoints. Defaults to false.
    */
-  public tryRefreshAllSearches(center?: LatLonInterface, radius?: number, force?: boolean): void {
+  public tryRefreshAllSearches(center?: Readonly<LatLonInterface>, radius?: number, force?: boolean): void {
     center ??= this.getSearchCenter();
     radius ??= this.searchRadius;
 
@@ -332,7 +332,7 @@ export class MapNearestWaypointsLayer
    * calculated search radius.
    * @param force Whether to force a refresh of all waypoints. Defaults to false.
    */
-  public tryRefreshSearch(type: MapNearestWaypointsLayerSearchTypes, center?: LatLonInterface, radius?: number, force?: boolean): void {
+  public tryRefreshSearch(type: MapNearestWaypointsLayerSearchTypes, center?: Readonly<LatLonInterface>, radius?: number, force?: boolean): void {
     center ??= this.getSearchCenter();
     radius ??= this.searchRadius;
 
@@ -345,7 +345,7 @@ export class MapNearestWaypointsLayer
    * @param radius The radius of the search area, in great-arc radians.
    * @param force Whether to force a refresh of all waypoints. Defaults to false.
    */
-  private _tryRefreshAllSearches(center: LatLonInterface, radius: number, force?: boolean): void {
+  private _tryRefreshAllSearches(center: Readonly<LatLonInterface>, radius: number, force?: boolean): void {
     this._tryRefreshSearch(FacilitySearchType.Airport, center, radius, force);
     this._tryRefreshSearch(FacilitySearchType.Vor, center, radius, force);
     this._tryRefreshSearch(FacilitySearchType.Ndb, center, radius, force);
@@ -362,7 +362,7 @@ export class MapNearestWaypointsLayer
    * @param radius The radius of the search area, in great-arc radians.
    * @param force Whether to force a refresh of all waypoints. Defaults to false.
    */
-  private _tryRefreshSearch(type: MapNearestWaypointsLayerSearchTypes, center: LatLonInterface, radius: number, force?: boolean): void {
+  private _tryRefreshSearch(type: MapNearestWaypointsLayerSearchTypes, center: Readonly<LatLonInterface>, radius: number, force?: boolean): void {
     const search = this.facilitySearches && this.facilitySearches[type];
 
     if (!search || (!force && !this.shouldRefreshSearch(type, center, radius))) {
@@ -387,7 +387,7 @@ export class MapNearestWaypointsLayer
    * @param radius The radius of the search area, in great-arc radians.
    * @returns Whether the search should be refreshed.
    */
-  private shouldRefreshSearch(type: MapNearestWaypointsLayerSearchTypes, center: LatLonInterface, radius: number): boolean {
+  private shouldRefreshSearch(type: MapNearestWaypointsLayerSearchTypes, center: Readonly<LatLonInterface>, radius: number): boolean {
     return this.props.shouldRefreshSearch ? this.props.shouldRefreshSearch(type, center, radius) : true;
   }
 
@@ -401,7 +401,7 @@ export class MapNearestWaypointsLayer
   private scheduleSearchRefresh(
     type: MapNearestWaypointsLayerSearchTypes,
     search: MapNearestWaypointsLayerSearch,
-    center: LatLonInterface,
+    center: Readonly<LatLonInterface>,
     radius: number
   ): void {
     const itemLimit = this.props.searchItemLimit ? this.props.searchItemLimit(type, center, radius) : 100;
@@ -593,7 +593,7 @@ export class MapNearestWaypointsLayerSearch<
    * @param maxItemCount The maximum number of results returned by the refresh.
    * @param delay The delay, in milliseconds, before the refresh is executed.
    */
-  public scheduleRefresh(center: LatLonInterface, radius: number, maxItemCount: number, delay: number): void {
+  public scheduleRefresh(center: Readonly<LatLonInterface>, radius: number, maxItemCount: number, delay: number): void {
     this._lastCenter.set(center);
     this._lastRadius = radius;
     this.maxItemCount = maxItemCount;

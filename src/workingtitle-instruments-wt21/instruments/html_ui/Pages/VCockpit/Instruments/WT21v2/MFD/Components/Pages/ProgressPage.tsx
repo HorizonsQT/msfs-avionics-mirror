@@ -3,7 +3,9 @@ import {
   FacilityType, FlightPlanner, FlightPlanPredictor, FSComponent, MappedSubject, NumberFormatter, Subject, Subscribable, UnitType, VNavEvents, VNode
 } from '@microsoft/msfs-sdk';
 
-import { PerformancePlanData, WT21AlternatePredictor, WT21FmsUtils, WT21LNavDataEvents, WT21MfdTextPageEvents, WT21UnitsUtils } from '@microsoft/msfs-wt21-shared';
+import {
+  PerformancePlanData, WT21AlternatePredictor, WT21FmsUtils, WT21LNavDataEvents, WT21MfdTextPageEvents, WT21UnitsUtils
+} from '@microsoft/msfs-wt21-shared';
 
 import { MfdTextPageComponent, MfdTextPageProps } from './MfdTextPageComponent';
 

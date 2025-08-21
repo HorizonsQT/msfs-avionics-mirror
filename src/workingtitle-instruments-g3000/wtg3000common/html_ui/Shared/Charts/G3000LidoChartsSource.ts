@@ -1,6 +1,7 @@
 import {
-  ApproachIdentifier, ArrayUtils, BuiltInChartProvider, ChartArea, ChartIndex, ChartMetadata, ChartUrl,
-  GeoReferencedChartArea, LidoChartType, RunwayIdentifier, Subject, Subscribable
+  ApproachIdentifier, ArrayUtils, BuiltInChartProvider, ChartArea, ChartImageSupplier, ChartIndex, ChartMetadata,
+  ChartsClient, ChartService, ChartUrl, ChartView, GeoReferencedChartArea, LidoChartType, RunwayIdentifier,
+  SimChartService, Subject, Subscribable
 } from '@microsoft/msfs-sdk';
 
 import { GarminLidoChartsUtils } from '@microsoft/msfs-garminsdk';
@@ -48,6 +49,20 @@ export class G3000LidoChartsSource implements G3000ChartsSource {
       },
     },
   ];
+
+  private readonly chartService = new SimChartService();
+
+  /** @inheritDoc */
+  public getChartService(): ChartService {
+    return this.chartService;
+  }
+
+  /** @inheritDoc */
+  public createChartImageSupplier(): ChartImageSupplier {
+    const view = new ChartView();
+    ChartsClient.initializeChartView(view);
+    return view;
+  }
 
   /** @inheritDoc */
   public getInfoCharts(chartIndex: ChartIndex<string>): ChartMetadata[] {

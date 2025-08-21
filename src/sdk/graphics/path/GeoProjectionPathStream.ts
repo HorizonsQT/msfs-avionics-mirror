@@ -84,7 +84,7 @@ export class GeoProjectionPathStream extends AbstractTransformingPathStream {
       return;
     }
 
-    if (isNaN(this.firstPoint.lat)) {
+    if (!this.firstPoint.isValid()) {
       this.firstPoint.set(lat, lon);
     }
 
@@ -105,12 +105,12 @@ export class GeoProjectionPathStream extends AbstractTransformingPathStream {
       return;
     }
 
-    if (!isNaN(this.prevPoint.lat) && this.prevPoint.equals(lat, lon)) {
+    if (!this.prevPoint.isValid()) {
+      this.moveTo(lon, lat);
       return;
     }
 
-    if (isNaN(this.prevPoint.lat)) {
-      this.moveTo(lon, lat);
+    if (this.prevPoint.equals(lat, lon)) {
       return;
     }
 
@@ -118,7 +118,7 @@ export class GeoProjectionPathStream extends AbstractTransformingPathStream {
     const circle = GeoProjectionPathStream.geoCircleCache[0].setAsGreatCircle(this.prevPoint, point);
 
     if (!isFinite(circle.center[0])) {
-      throw new Error(`Cannot unambiguously path a great circle from ${this.prevPoint.lat} lat, ${this.prevPoint.lon} lon to ${lat} lat, ${lon} lon`);
+      throw new Error(`GeoProjectionPathStream::lineTo(): cannot unambiguously path a great circle from ${this.prevPoint.lat} lat, ${this.prevPoint.lon} lon to ${lat} lat, ${lon} lon`);
     }
 
     this.resampler.resample(this.projection, circle, this.prevPoint, point, this.resampleHandler);
@@ -131,7 +131,7 @@ export class GeoProjectionPathStream extends AbstractTransformingPathStream {
    * @throws Error when called.
    */
   public bezierCurveTo(): void {
-    throw new Error('GeodesicResamplerStream: bezierCurveTo() is not supported');
+    throw new Error('GeoProjectionPathStream: bezierCurveTo() is not supported');
   }
 
   /**
@@ -139,7 +139,7 @@ export class GeoProjectionPathStream extends AbstractTransformingPathStream {
    * @throws Error when called.
    */
   public quadraticCurveTo(): void {
-    throw new Error('GeodesicResamplerStream: quadraticCurveTo() is not supported');
+    throw new Error('GeoProjectionPathStream: quadraticCurveTo() is not supported');
   }
 
   /**
@@ -153,7 +153,8 @@ export class GeoProjectionPathStream extends AbstractTransformingPathStream {
    * @param endAngle If the center of the circle containing the arc is not one of the poles, the true bearing, in
    * degrees, from the center of the circle to the end of the arc; otherwise the longitude, in degrees, of the end of
    * the arc.
-   * @param counterClockwise Whether the arc should be drawn counterclockwise. False by default.
+   * @param counterClockwise Whether the arc should be drawn counterclockwise (when viewed from above the center of the
+   * circle containing the arc). Defaults to `false`.
    */
   public arc(lon: number, lat: number, radius: number, startAngle: number, endAngle: number, counterClockwise?: boolean): void {
     if (!(isFinite(lon) && isFinite(lat) && isFinite(radius) && isFinite(startAngle) && isFinite(endAngle))) {
@@ -189,11 +190,11 @@ export class GeoProjectionPathStream extends AbstractTransformingPathStream {
       center.offset(endAngle, radius, end);
     }
 
-    if (isNaN(start.lat) || isNaN(start.lon) || isNaN(end.lat) || isNaN(end.lon)) {
+    if (!start.isValid() || !end.isValid()) {
       return;
     }
 
-    if (isNaN(this.prevPoint.lat)) {
+    if (!this.prevPoint.isValid()) {
       this.moveTo(start.lon, start.lat);
     } else if (!start.equals(this.prevPoint)) {
       this.lineTo(start.lon, start.lat);
@@ -213,7 +214,7 @@ export class GeoProjectionPathStream extends AbstractTransformingPathStream {
    * Paths a great-circle arc from the current point to the first point defined by the current path.
    */
   public closePath(): void {
-    if (!isNaN(this.firstPoint.lat)) {
+    if (this.firstPoint.isValid()) {
       this.lineTo(this.firstPoint.lon, this.firstPoint.lat);
     }
   }

@@ -1,5 +1,5 @@
-/// <reference types="@microsoft/msfs-types/js/simvar" />
-/// <reference types="@microsoft/msfs-types/js/avionics" />
+/// <reference types="@microsoft/msfs-types/js/simvar" preserve="true" />
+/// <reference types="@microsoft/msfs-types/js/avionics" preserve="true" />
 import { EventBus } from '../data/EventBus';
 import { PublishPacer } from '../data/EventBusPacer';
 import { SimVarValueType } from '../data/SimVars';

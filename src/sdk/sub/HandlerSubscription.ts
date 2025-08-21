@@ -1,10 +1,11 @@
+import { ReadonlyLifecycle } from './Lifecycle';
 import { Subscription } from './Subscription';
 
 /**
  * A {@link Subscription} which executes a handler function every time it receives a notification.
  */
 export class HandlerSubscription<HandlerType extends (...args: any[]) => void> implements Subscription {
-  
+
   // Note: isAlive and isPaused used to be getters (to avoid mutation from consumers)
   //       but this has a non negligeable overhead in the publishers hotpath.
   //       So instead, the two properties are declared readonly, but will actually be mutated
@@ -18,7 +19,7 @@ export class HandlerSubscription<HandlerType extends (...args: any[]) => void> i
    * they are resumed.
    *
    * Note that `!isAlive` implies `isPaused` for `HandlerSubscription`
-   * @override 
+   * @override
    */
   public readonly isPaused = false;
 
@@ -94,5 +95,11 @@ export class HandlerSubscription<HandlerType extends (...args: any[]) => void> i
     (this.isPaused as boolean) = true; // See comment at definition for cast info
 
     this.onDestroy && this.onDestroy(this);
+  }
+
+  /** @inheritdoc */
+  public withLifecycle(lifecycle: ReadonlyLifecycle): this {
+    lifecycle.register(this);
+    return this;
   }
 }

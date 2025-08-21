@@ -1,4 +1,8 @@
-import { AliasedUserSettingManager, Consumer, EventBus, UserSetting, UserSettingManager, UserSettingMap, UserSettingRecord, UserSettingValue } from '@microsoft/msfs-sdk';
+import {
+  AliasedUserSettingManager, EventBus, OptionalUserSettingFromManager, UserSetting, UserSettingConsumerFromManager,
+  UserSettingFromManager, UserSettingManager, UserSettingMap, UserSettingRecord, UserSettingValue
+} from '@microsoft/msfs-sdk';
+
 import { DisplayPaneIndex } from '../Components/DisplayPanes/DisplayPaneTypes';
 import { DisplayPaneUtils } from '../Components/DisplayPanes/DisplayPaneUtils';
 import { DisplayPaneViewKeys } from '../Components/DisplayPanes/DisplayPaneViewKeys';
@@ -66,17 +70,17 @@ export class DisplayPanesAliasedUserSettingManager implements UserSettingManager
   }
 
   /** @inheritdoc */
-  public tryGetSetting<K extends string>(name: K): K extends keyof DisplayPaneSettings ? UserSetting<DisplayPaneSettings[K]> : undefined {
-    return this.aliasedManager.tryGetSetting(name) as any;
+  public tryGetSetting<K extends string>(name: K): OptionalUserSettingFromManager<DisplayPaneSettings, K> {
+    return this.aliasedManager.tryGetSetting(name);
   }
 
   /** @inheritdoc */
-  public getSetting<K extends keyof DisplayPaneSettings & string>(name: K): UserSetting<NonNullable<DisplayPaneSettings[K]>> {
+  public getSetting<K extends keyof DisplayPaneSettings & string>(name: K): UserSettingFromManager<DisplayPaneSettings, K> {
     return this.aliasedManager.getSetting(name);
   }
 
   /** @inheritdoc */
-  public whenSettingChanged<K extends keyof DisplayPaneSettings & string>(name: K): Consumer<NonNullable<DisplayPaneSettings[K]>> {
+  public whenSettingChanged<K extends keyof DisplayPaneSettings & string>(name: K): UserSettingConsumerFromManager<DisplayPaneSettings, K> {
     return this.aliasedManager.whenSettingChanged(name);
   }
 

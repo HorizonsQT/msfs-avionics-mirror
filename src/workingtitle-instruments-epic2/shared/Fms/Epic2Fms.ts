@@ -1440,6 +1440,7 @@ export class Epic2Fms {
    * @param departureRunwayIndex is the index of the runway transition
    * @param enrouteTransitionIndex is the index of the enroute transition
    * @param oneWayRunway is the one way runway to set as the origin leg.
+   * @deprecated Please use `loadDeparture()` instead.
    */
   public insertDeparture(
     facility: AirportFacility,
@@ -1458,7 +1459,7 @@ export class Epic2Fms {
 
     this.planClearSegment(segmentIndex, FlightPlanSegmentType.Departure);
 
-    const insertProcedureObject: InsertProcedureObject = this.buildDepartureLegs(facility, departureIndex, enrouteTransitionIndex, departureRunwayIndex, oneWayRunway);
+    const insertProcedureObject = this.buildDepartureLegs(facility, departureIndex, enrouteTransitionIndex, departureRunwayIndex, oneWayRunway, false);
 
     if (plan.originAirport !== facility.icao) {
       plan.setOriginAirport(facility.icao);
@@ -1484,20 +1485,121 @@ export class Epic2Fms {
     plan.calculate(0);
   }
 
+  private loadDepartureOpId = 0;
+
   /**
-   * Method to insert the arrival legs.
-   * @param facility is the facility to build legs from.
-   * @param procedureIndex is the procedure index to build legs from.
-   * @param enrouteTransitionIndex is the enroute transition index to build legs from.
-   * @param runwayTransitionIndex is the runway transition index to build legs from.
-   * @param oneWayRunway is the one way runway, if one is specified in the procedure.
-   * @returns InsertProcedureObject to insert into the flight plan.
+   * Loads a departure procedure into the primary flight plan.
+   * @param facility The procedure's parent airport facility.
+   * @param departureIndex The index of the procedure in the parent airport facility's departure array.
+   * @param runwayTransitionIndex The index of the procedure's runway transition, or `-1` if the procedure does not
+   * include a runway transition.
+   * @param enrouteTransitionIndex The index of the procedure's enroute transition, or `-1` if the procedure does not
+   * include an enroute transition.
+   * @param oneWayRunway The runway associated with the procedure, or `undefined` if there is no associated runway.
+   * @returns A Promise which fulfills with whether the specified departure procedure was successfully loaded.
    */
-  private buildDepartureLegs(facility: AirportFacility,
+  public async loadDeparture(
+    facility: AirportFacility,
+    departureIndex: number,
+    runwayTransitionIndex: number,
+    enrouteTransitionIndex: number,
+    oneWayRunway?: OneWayRunway | undefined
+  ): Promise<boolean> {
+    const opId = ++this.loadDepartureOpId;
+
+    const insertProcedureObject = await this.buildDepartureLegs(facility, departureIndex, enrouteTransitionIndex, runwayTransitionIndex, oneWayRunway, true);
+
+    if (opId !== this.loadDepartureOpId) {
+      return false;
+    }
+
+    const plan = this.getModFlightPlan();
+    plan.setDeparture(facility.icaoStruct, departureIndex, enrouteTransitionIndex, runwayTransitionIndex);
+    const segmentIndex = this.ensureOnlyOneSegmentOfType(FlightPlanSegmentType.Departure);
+
+    // Grabbing the active legs (if there are any) in the existing departure semgent,
+    // so that we can put them somewhere after clearing the segment.
+    const activeLegArray = !Simplane.getIsGrounded() && plan.activeLateralLeg > 0 ? this.getSegmentActiveLegsToDisplace(plan, segmentIndex) : undefined;
+
+    this.planClearSegment(segmentIndex, FlightPlanSegmentType.Departure);
+
+    if (!plan.originAirportIcao || !ICAO.valueEquals(plan.originAirportIcao, facility.icaoStruct)) {
+      plan.setOriginAirport(facility.icaoStruct);
+    }
+    plan.setOriginRunway(oneWayRunway);
+
+    insertProcedureObject.procedureLegs.forEach(l => this.planAddLeg(segmentIndex, l, undefined, Epic2ExtraLegDefinitionFlags.ProcedureLeg));
+
+    const nextLeg = plan.getNextLeg(segmentIndex, Infinity);
+    const depSegment = plan.getSegment(segmentIndex);
+    const lastDepLeg = depSegment.legs[depSegment.legs.length - 1];
+
+    if (nextLeg && lastDepLeg && this.isDuplicateLeg(lastDepLeg.leg, nextLeg.leg)) {
+      this.planRemoveDuplicateLeg(lastDepLeg, nextLeg);
+    }
+
+    this.generateSegmentVerticalData(plan, segmentIndex);
+
+    if (activeLegArray) {
+      this.displaceActiveLegsIntoSegment(plan, segmentIndex, activeLegArray, false);
+    }
+
+    await plan.calculate(0);
+
+    return true;
+  }
+
+  /**
+   * Builds a sequence of flight plan legs for a departure procedure.
+   * @param facility The procedure's parent airport facility.
+   * @param procedureIndex The index of the procedure in the parent airport facility's departure array.
+   * @param enrouteTransitionIndex The index of the procedure's enroute transition, or `-1` if the procedure does not
+   * include an enroute transition.
+   * @param runwayTransitionIndex The index of the procedure's runway transition, or `-1` if the procedure does not
+   * include a runway transition.
+   * @param departureRunway The runway associated with the procedure, or `undefined` if there is no associated runway.
+   * @param performLegRemap Whether to remap the built flight plan leg sequence to transform unsupported leg patterns
+   * into the closest equivalent supported leg patterns.
+   * @returns A sequence of flight plan legs for the specified departure procedure.
+   */
+  private buildDepartureLegs(
+    facility: AirportFacility,
     procedureIndex: number,
     enrouteTransitionIndex: number,
     runwayTransitionIndex: number,
-    oneWayRunway?: OneWayRunway): InsertProcedureObject {
+    departureRunway: OneWayRunway | undefined,
+    performLegRemap: false,
+  ): InsertProcedureObject;
+  /**
+   * Builds a sequence of flight plan legs for a departure procedure.
+   * @param facility The procedure's parent airport facility.
+   * @param procedureIndex The index of the procedure in the parent airport facility's departure array.
+   * @param enrouteTransitionIndex The index of the procedure's enroute transition, or `-1` if the procedure does not
+   * include an enroute transition.
+   * @param runwayTransitionIndex The index of the procedure's runway transition, or `-1` if the procedure does not
+   * include a runway transition.
+   * @param departureRunway The runway associated with the procedure, or `undefined` if there is no associated runway.
+   * @param performLegRemap Whether to remap the built flight plan leg sequence to transform unsupported leg patterns
+   * into the closest equivalent supported leg patterns.
+   * @returns A Promise which will fulfill with a sequence of flight plan legs for the specified departure procedure.
+   */
+  private buildDepartureLegs(
+    facility: AirportFacility,
+    procedureIndex: number,
+    enrouteTransitionIndex: number,
+    runwayTransitionIndex: number,
+    departureRunway: OneWayRunway | undefined,
+    performLegRemap: true,
+  ): Promise<InsertProcedureObject>;
+  // eslint-disable-next-line jsdoc/require-jsdoc
+  private buildDepartureLegs(
+    facility: AirportFacility,
+    procedureIndex: number,
+    enrouteTransitionIndex: number,
+    runwayTransitionIndex: number,
+    departureRunway: OneWayRunway | undefined,
+    performLegRemap: boolean,
+  ): InsertProcedureObject | Promise<InsertProcedureObject> {
 
     const departure = facility.departures[procedureIndex];
     const enRouteTransition = departure.enRouteTransitions[enrouteTransitionIndex];
@@ -1512,8 +1614,8 @@ export class Epic2Fms {
 
     // If the procedure did not start with a runway leg, we must insert an origin leg at the start of the procedure legs.
     if (insertProcedureObject.procedureLegs[0]?.fixIcaoStruct.type !== IcaoType.Runway) {
-      if (oneWayRunway) {
-        insertProcedureObject.procedureLegs.unshift(Epic2FmsUtils.buildRunwayLeg(facility, oneWayRunway, true));
+      if (departureRunway) {
+        insertProcedureObject.procedureLegs.unshift(Epic2FmsUtils.buildRunwayLeg(facility, departureRunway, true));
       } else {
         insertProcedureObject.procedureLegs.unshift(FlightPlan.createLeg({
           lat: facility.lat,
@@ -1524,7 +1626,7 @@ export class Epic2Fms {
       }
 
       // if there was no runway transition or no runway, then we should insert a disconinuity after the origin leg
-      if (insertProcedureObject.procedureLegs.length === 1 || !oneWayRunway) {
+      if (insertProcedureObject.procedureLegs.length === 1 || !departureRunway) {
         insertProcedureObject.procedureLegs.push(FlightPlan.createLeg({ type: LegType.Discontinuity }));
       }
     }
@@ -1555,7 +1657,11 @@ export class Epic2Fms {
       }
     }
 
-    return insertProcedureObject;
+    if (performLegRemap) {
+      return this.remapProcedureLegs(insertProcedureObject);
+    } else {
+      return insertProcedureObject;
+    }
   }
 
   /**
@@ -1586,6 +1692,7 @@ export class Epic2Fms {
    * @param arrivalRunwayTransitionIndex is the index of the arrival runway transition.
    * @param enrouteTransitionIndex is the index of the enroute transition.
    * @param oneWayRunway is the one way runway to set as the destination leg.
+   * @deprecated Please use `loadArrival()` instead.
    */
   public insertArrival(
     facility: AirportFacility,
@@ -1620,7 +1727,7 @@ export class Epic2Fms {
       this.planClearSegment(segmentIndex, FlightPlanSegmentType.Arrival);
     }
 
-    const insertProcedureObject: InsertProcedureObject = this.buildArrivalLegs(facility, arrivalIndex, enrouteTransitionIndex, arrivalRunwayTransitionIndex, oneWayRunway);
+    const insertProcedureObject = this.buildArrivalLegs(facility, arrivalIndex, enrouteTransitionIndex, arrivalRunwayTransitionIndex, false);
 
     let directTargetLeg: FlightPlanLeg | undefined;
     let handleDirectToDestination = false;
@@ -1683,21 +1790,175 @@ export class Epic2Fms {
     plan.calculate(0);
   }
 
+  private loadArrivalOpId = 0;
+
   /**
-   * Method to insert the arrival legs.
-   * @param facility is the facility to build legs from.
-   * @param procedureIndex is the procedure index to build legs from.
-   * @param enrouteTransitionIndex is the enroute transition index to build legs from.
-   * @param runwayTransitionIndex is the runway transition index to build legs from.
-   * @param oneWayRunway is the one way runway, if one is specified in the procedure.
-   * @returns InsertProcedureObject to insert into the flight plan.
+   * Loads an arrival procedure into the primary flight plan.
+   * @param facility The procedure's parent airport facility.
+   * @param arrivalIndex The index of the procedure in the parent airport facility's arrival array.
+   * @param runwayTransitionIndex The index of the procedure's runway transition, or `-1` if the procedure does not
+   * include a runway transition.
+   * @param enrouteTransitionIndex The index of the procedure's enroute transition, or `-1` if the procedure does not
+   * include an enroute transition.
+   * @param oneWayRunway The runway associated with the procedure, or `undefined` if there is no associated runway.
+   * @returns A Promise which fulfills with whether the specified arrival procedure was successfully loaded.
    */
-  private buildArrivalLegs(facility: AirportFacility,
+  public async loadArrival(
+    facility: AirportFacility,
+    arrivalIndex: number,
+    runwayTransitionIndex: number,
+    enrouteTransitionIndex: number,
+    oneWayRunway?: OneWayRunway | undefined
+  ): Promise<boolean> {
+    const opId = ++this.loadArrivalOpId;
+
+    const insertProcedureObject = await this.buildArrivalLegs(facility, arrivalIndex, enrouteTransitionIndex, runwayTransitionIndex, true);
+
+    if (opId !== this.loadArrivalOpId) {
+      return false;
+    }
+
+    const plan = this.getModFlightPlan();
+    const activeSegment = Epic2FmsUtils.getActiveSegment(plan);
+
+    if (plan.procedureDetails.approachIndex < 0) {
+      if (!plan.destinationAirportIcao || !ICAO.valueEquals(plan.destinationAirportIcao, facility.icaoStruct)) {
+        plan.setDestinationAirport(facility.icaoStruct);
+      }
+      plan.setDestinationRunway(oneWayRunway);
+    }
+
+    const segmentIndex = this.ensureOnlyOneSegmentOfType(FlightPlanSegmentType.Arrival);
+
+    const activeLegArray = this.getSegmentActiveLegsToDisplace(plan, segmentIndex);
+
+    let arrivalActiveLegIcao: undefined | string;
+
+    if (arrivalIndex > -1 && arrivalIndex === plan.procedureDetails.arrivalIndex && activeSegment !== undefined && activeLegArray !== undefined) {
+      arrivalActiveLegIcao = plan.tryGetLeg(plan.activeLateralLeg)?.leg?.fixIcao;
+    }
+
+    plan.setArrival(facility.icaoStruct, arrivalIndex, enrouteTransitionIndex, runwayTransitionIndex);
+
+    if (plan.getSegment(segmentIndex).legs.length > 0) {
+      this.planClearSegment(segmentIndex, FlightPlanSegmentType.Arrival);
+    }
+
+    let directTargetLeg: FlightPlanLeg | undefined;
+    let handleDirectToDestination = false;
+    const directToState = this.getDirectToState(Epic2FlightPlans.Pending);
+
+    if (directToState === DirectToState.TOEXISTING) {
+      directTargetLeg = this.getDirectToLeg();
+      if (
+        directTargetLeg
+        && plan.destinationAirportIcao
+        && ICAO.valueEquals(directTargetLeg.fixIcaoStruct, plan.destinationAirportIcao)
+        && ICAO.valueEquals(directTargetLeg.fixIcaoStruct, insertProcedureObject.procedureLegs[insertProcedureObject.procedureLegs.length - 1].fixIcaoStruct)
+      ) {
+        handleDirectToDestination = true;
+      }
+    }
+
+    if (!handleDirectToDestination) {
+      this.tryMoveDestinationLeg(plan);
+    }
+
+    insertProcedureObject.procedureLegs.forEach(l => this.planAddLeg(segmentIndex, l, undefined, Epic2ExtraLegDefinitionFlags.ProcedureLeg));
+
+    const arrSegment = plan.getSegment(segmentIndex);
+    const prevLeg = plan.getPrevLeg(segmentIndex, 0);
+    const firstArrLeg = arrSegment.legs[0];
+
+    let deduplicatedEnrouteLeg: LegDefinition | null = null;
+
+    if (prevLeg && firstArrLeg && this.isDuplicateLeg(prevLeg.leg, firstArrLeg.leg)) {
+      deduplicatedEnrouteLeg = this.planRemoveDuplicateLeg(prevLeg, firstArrLeg);
+    }
+
+    const nextLeg = plan.getNextLeg(segmentIndex, Infinity);
+    const lastArrLeg = arrSegment.legs[arrSegment.legs.length - 1];
+    if (nextLeg && lastArrLeg && this.isDuplicateLeg(lastArrLeg.leg, nextLeg.leg)) {
+      this.planRemoveDuplicateLeg(lastArrLeg, nextLeg);
+    }
+
+    if (handleDirectToDestination) {
+      this.moveDirectToDestinationLeg(plan, FlightPlanSegmentType.Arrival, segmentIndex);
+      this.activateLeg(segmentIndex, arrSegment.legs.length - 1);
+    }
+
+    // If we didn't remove a duplicate, insert a discontinuity at the start of the arrival
+    if (!deduplicatedEnrouteLeg && (!prevLeg || !Epic2FmsUtils.isVectorsLeg(prevLeg.leg.type))) {
+      this.tryInsertDiscontinuity(plan, segmentIndex);
+    }
+
+    this.generateSegmentVerticalData(plan, segmentIndex);
+
+    const matchingActiveProcedureLegIndex = Epic2FmsUtils.findIcaoInSegment(arrSegment, arrivalActiveLegIcao);
+
+    if (activeLegArray && matchingActiveProcedureLegIndex === undefined) {
+      this.displaceActiveLegsIntoSegment(plan, segmentIndex, activeLegArray, false);
+    } else if (matchingActiveProcedureLegIndex !== undefined) {
+      plan.setLateralLeg(arrSegment.offset + matchingActiveProcedureLegIndex);
+    }
+
+    this.cleanupLegsAfterApproach(plan);
+
+    this.tryConnectProcedures(plan);
+
+    await plan.calculate(0);
+
+    return true;
+  }
+
+  /**
+   * Builds a sequence of flight plan legs for an arrival procedure.
+   * @param facility The procedure's parent airport facility.
+   * @param procedureIndex The index of the procedure in the parent airport facility's arrival array.
+   * @param enrouteTransitionIndex The index of the procedure's enroute transition, or `-1` if the procedure does not
+   * include an enroute transition.
+   * @param runwayTransitionIndex The index of the procedure's runway transition, or `-1` if the procedure does not
+   * include a runway transition.
+   * @param arrivalRunway The runway associated with the procedure, or `undefined` if there is no associated runway.
+   * @param performLegRemap Whether to remap the built flight plan leg sequence to transform unsupported leg patterns
+   * into the closest equivalent supported leg patterns.
+   * @returns A sequence of flight plan legs for the specified arrival procedure.
+   */
+  private buildArrivalLegs(
+    facility: AirportFacility,
     procedureIndex: number,
     enrouteTransitionIndex: number,
     runwayTransitionIndex: number,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    oneWayRunway?: OneWayRunway): InsertProcedureObject {
+    performLegRemap: false,
+  ): InsertProcedureObject;
+  /**
+   * Builds a sequence of flight plan legs for an arrival procedure.
+   * @param facility The procedure's parent airport facility.
+   * @param procedureIndex The index of the procedure in the parent airport facility's arrival array.
+   * @param enrouteTransitionIndex The index of the procedure's enroute transition, or `-1` if the procedure does not
+   * include an enroute transition.
+   * @param runwayTransitionIndex The index of the procedure's runway transition, or `-1` if the procedure does not
+   * include a runway transition.
+   * @param arrivalRunway The runway associated with the procedure, or `undefined` if there is no associated runway.
+   * @param performLegRemap Whether to remap the built flight plan leg sequence to transform unsupported leg patterns
+   * into the closest equivalent supported leg patterns.
+   * @returns A Promise which will fulfill with a sequence of flight plan legs for the specified arrival procedure.
+   */
+  private buildArrivalLegs(
+    facility: AirportFacility,
+    procedureIndex: number,
+    enrouteTransitionIndex: number,
+    runwayTransitionIndex: number,
+    performLegRemap: true,
+  ): Promise<InsertProcedureObject>;
+  // eslint-disable-next-line jsdoc/require-jsdoc
+  private buildArrivalLegs(
+    facility: AirportFacility,
+    procedureIndex: number,
+    enrouteTransitionIndex: number,
+    runwayTransitionIndex: number,
+    performLegRemap: boolean,
+  ): InsertProcedureObject | Promise<InsertProcedureObject> {
 
     const arrival = facility.arrivals[procedureIndex];
     const enRouteTransition = arrival.enRouteTransitions[enrouteTransitionIndex];
@@ -1738,7 +1999,11 @@ export class Epic2Fms {
 
     this.tryInsertIFLeg(insertProcedureObject);
 
-    return insertProcedureObject;
+    if (performLegRemap) {
+      return this.remapProcedureLegs(insertProcedureObject);
+    } else {
+      return insertProcedureObject;
+    }
   }
 
   /**
@@ -1855,14 +2120,18 @@ export class Epic2Fms {
       this.setFlightPlanVisualApproachVfrVpa(plan.planIndex, undefined);
     }
 
-    plan.setApproach(description.facility.icao, description.approachIndex, description.approachTransitionIndex);
+    plan.setApproach(description.facility.icaoStruct, description.approachIndex, description.approachTransitionIndex);
 
     const directToState = this.getDirectToState(Epic2FlightPlans.Pending);
 
     let skipDestinationLegCheck = false;
     if (directToState === DirectToState.TOEXISTING) {
-      if (this.getDirectToLeg()?.fixIcao === plan.destinationAirport) {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const dtoLeg = this.getDirectToLeg();
+      if (
+        dtoLeg
+        && plan.destinationAirportIcao
+        && ICAO.valueEquals(dtoLeg.fixIcaoStruct, plan.destinationAirportIcao)
+      ) {
         skipDestinationLegCheck = true;
       }
     }
@@ -1871,8 +2140,8 @@ export class Epic2Fms {
       this.moveDirectToDestinationLeg(plan, FlightPlanSegmentType.Enroute);
     }
 
-    if (plan.destinationAirport !== description.facility.icao) {
-      plan.setDestinationAirport(description.facility.icao);
+    if (!plan.destinationAirportIcao || !ICAO.valueEquals(plan.destinationAirportIcao, description.facility.icaoStruct)) {
+      plan.setDestinationAirport(description.facility.icaoStruct);
     }
 
     // clean up destination segment if it exists
@@ -1936,37 +2205,6 @@ export class Epic2Fms {
       deduplicatedArrivalLeg = this.planRemoveDuplicateLeg(prevLeg, firstAppLeg);
     }
 
-    // Adds missed approach legs
-    if (!visualRunway && insertProcedureObject.procedureLegs.length > 0) {
-      const missedLegs = description.facility.approaches[description.approachIndex].missedLegs ?? [];
-
-      if (missedLegs.length > 0) {
-        let maphIndex = -1;
-        for (let m = missedLegs.length - 1; m >= 0; m--) {
-          switch (missedLegs[m].type) {
-            case LegType.HA:
-            case LegType.HF:
-            case LegType.HM:
-              maphIndex = m - 1;
-              break;
-          }
-        }
-
-        let flags = LegDefinitionFlags.MissedApproach;
-        flags |= Epic2ExtraLegDefinitionFlags.ProcedureLeg;
-
-        for (let n = 0; n < missedLegs.length; n++) {
-          const newLeg = FlightPlanUtils.convertLegRunwayIcaosToSdkFormat(FlightPlan.createLeg(missedLegs[n]));
-          if (maphIndex >= 0 && n === maphIndex) {
-            newLeg.fixTypeFlags |= FixTypeFlags.MAHP;
-            this.planAddLeg(segmentIndex, newLeg, undefined, flags);
-          } else {
-            this.planAddLeg(segmentIndex, newLeg, undefined, flags);
-          }
-        }
-      }
-    }
-
     const rnavTypeFlag = Epic2FmsUtils.getBestRnavType(approach.rnavTypeFlags);
     const approachIsCircling = !visualRunway && !approach?.runway;
     const approachName = Epic2FmsUtils.getApproachNameAsEfisString(approach);
@@ -1975,8 +2213,8 @@ export class Epic2Fms {
 
     const mapIndex = VNavUtils.getMissedApproachLegIndex(plan);
     const mapLeg = mapIndex >= 0 ? plan.tryGetLeg(mapIndex) : null;
-    const missedApproachFacility = mapLeg && mapLeg.leg.fixIcao && mapLeg.leg.fixIcao !== ICAO.emptyIcao
-      ? await this.facLoader.getFacility(ICAO.getFacilityType(mapLeg.leg.fixIcao), mapLeg.leg.fixIcao)
+    const missedApproachFacility = mapLeg && ICAO.isValueFacility(mapLeg.leg.fixIcaoStruct)
+      ? await this.facLoader.getFacility(ICAO.getFacilityTypeFromValue(mapLeg.leg.fixIcaoStruct), mapLeg.leg.fixIcaoStruct)
       : null;
 
     let referenceFacility = null;
@@ -2116,7 +2354,105 @@ export class Epic2Fms {
         insertProcedureObject.runway = RunwayUtils.matchOneWayRunway(description.facility, resolvedApproach.runwayNumber, resolvedApproach.runwayDesignator);
       }
 
-      return insertProcedureObject;
+      // Adds missed approach legs
+      if (insertProcedureObject.procedureLegs.length > 0) {
+        const missedLegs = resolvedApproach.missedLegs ?? [];
+
+        if (missedLegs.length > 0) {
+          let maphIndex = -1;
+          for (let m = missedLegs.length - 1; m >= 0; m--) {
+            switch (missedLegs[m].type) {
+              case LegType.HA:
+              case LegType.HF:
+              case LegType.HM:
+                maphIndex = m - 1;
+                break;
+            }
+          }
+
+          for (let n = 0; n < missedLegs.length; n++) {
+            const newLeg = FlightPlanUtils.convertLegRunwayIcaosToSdkFormat(FlightPlan.createLeg(missedLegs[n])) as InsertProcedureObjectLeg;
+            if (maphIndex >= 0 && n === maphIndex) {
+              newLeg.fixTypeFlags |= FixTypeFlags.MAHP;
+            }
+
+            newLeg.flags = LegDefinitionFlags.MissedApproach | Epic2ExtraLegDefinitionFlags.ProcedureLeg;
+
+            insertProcedureObject.procedureLegs.push(newLeg);
+          }
+        }
+      }
+    }
+
+    return this.remapProcedureLegs(insertProcedureObject);
+  }
+
+  /**
+   * Remaps unsupported leg patterns in a sequence of procedure flight plan legs into the closest equivalent supported
+   * leg patterns.
+   * @param insertProcedureObject The object containing the flight plan leg sequence to remap.
+   * @returns A Promise which is fulfilled with the object containing the flight plan leg sequence to remap, after the
+   * operation has been completed.
+   */
+  private async remapProcedureLegs(insertProcedureObject: InsertProcedureObject): Promise<InsertProcedureObject> {
+    for (let i = 0; i < insertProcedureObject.procedureLegs.length; i++) {
+      const leg = insertProcedureObject.procedureLegs[i];
+
+      // Find sequences of CI/VI -> IF -> TF legs and remap them to CI/VI -> CF legs.
+      if (
+        (leg.type === LegType.CI || leg.type === LegType.VI)
+        && insertProcedureObject.procedureLegs[i + 1]?.type === LegType.IF
+        && insertProcedureObject.procedureLegs[i + 2]?.type === LegType.TF
+      ) {
+        const ifLeg = insertProcedureObject.procedureLegs[i + 1];
+        const tfLeg = insertProcedureObject.procedureLegs[i + 2];
+        if (ICAO.isValueFacility(ifLeg.fixIcaoStruct) && ICAO.isValueFacility(tfLeg.fixIcaoStruct)) {
+          const [origin, terminator] = await this.facLoader.getFacilities([ifLeg.fixIcaoStruct, tfLeg.fixIcaoStruct], 0);
+          if (origin && terminator) {
+            const trueCourse = GeoPoint.finalBearing(origin.lat, origin.lon, terminator.lat, terminator.lon);
+            if (isFinite(trueCourse)) {
+              // Get the magnetic variation to use for the TF leg (to be converted to a CF leg). If the leg's reference
+              // facility is a VOR, then use the reference facility's magvar. Otherwise, get the magvar from the
+              // terminator facility.
+              let magVar: number;
+              if (ICAO.isValueFacility(tfLeg.originIcaoStruct, FacilityType.VOR)) {
+                const referenceFacility = await this.facLoader.tryGetFacility(FacilityType.VOR, tfLeg.originIcaoStruct);
+                if (referenceFacility) {
+                  magVar = FacilityUtils.getMagVar(referenceFacility);
+                }
+              }
+              magVar ??= FacilityUtils.getMagVar(terminator);
+
+              const magCourse = MagVar.trueToMagnetic(trueCourse, magVar);
+
+              // Remove IF leg.
+              insertProcedureObject.procedureLegs.splice(i + 1, 1);
+
+              // Convert TF leg to CF leg.
+              tfLeg.type = LegType.CF;
+              tfLeg.course = magCourse === 0 ? 360 : magCourse;
+              tfLeg.trueDegrees = false;
+              tfLeg.distance = UnitType.GA_RADIAN.convertTo(GeoPoint.distance(origin.lat, origin.lon, terminator.lat, terminator.lon), UnitType.METER);
+              tfLeg.distanceMinutes = false;
+
+              // Increment the index so that when we continue the iteration, we skip the converted CF (formerly TF) leg.
+              ++i;
+
+              continue;
+            }
+          } else {
+            console.warn(`Epic2Fms::remapProcedureLegs(): could not remap xI -> IF -> TF leg sequence because one or both of the origin (${ICAO.tryValueToStringV2(ifLeg.fixIcaoStruct)}) and terminator (${ICAO.tryValueToStringV2(tfLeg.fixIcaoStruct)}) facilities could not be found`);
+          }
+        } else {
+          console.warn('Epic2Fms::remapProcedureLegs(): could not remap xI -> IF -> TF leg sequence because one or both of the origin and terminator facilities were not defined');
+        }
+
+        // If we are here, then it means we could not remap the CI/VI -> IF -> TF leg sequence for some reason.
+        // Increment the index so that when we continue the iteration, we skip over all the legs in the sequence.
+        i += 2;
+
+        continue;
+      }
     }
 
     return insertProcedureObject;

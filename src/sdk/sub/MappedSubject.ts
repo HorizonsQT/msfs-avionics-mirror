@@ -1,4 +1,5 @@
 import { AbstractSubscribable } from './AbstractSubscribable';
+import { ReadonlyLifecycle } from './Lifecycle';
 import { MappedSubscribable, Subscribable } from './Subscribable';
 import { SubscribableMapFunctions } from './SubscribableMapFunctions';
 import { Subscription } from './Subscription';
@@ -219,5 +220,11 @@ export class MappedSubject<I extends any[], T> extends AbstractSubscribable<T> i
     for (let i = 0; i < this.inputSubs.length; i++) {
       this.inputSubs[i].destroy();
     }
+  }
+
+  /** @inheritdoc */
+  public withLifecycle(lifecycle: ReadonlyLifecycle): this {
+    lifecycle.register(this);
+    return this;
   }
 }

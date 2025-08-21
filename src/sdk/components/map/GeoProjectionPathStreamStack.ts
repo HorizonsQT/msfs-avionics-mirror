@@ -1,5 +1,8 @@
-import { GeoCircleResampler, GeoProjection } from '../../geo';
-import { AbstractTransformingPathStream, GeoProjectionPathStream, PathStream, TransformingPathStream, TransformingPathStreamStack } from '../../graphics/path';
+import { GeoCircleResampler } from '../../geo/GeoCircleResampler';
+import { GeoProjection } from '../../geo/GeoProjection';
+import { GeoProjectionPathStream } from '../../graphics/path/GeoProjectionPathStream';
+import { AbstractTransformingPathStream, PathStream, TransformingPathStream } from '../../graphics/path/PathStream';
+import { TransformingPathStreamStack } from '../../graphics/path/TransformingPathStreamStack';
 
 /**
  * A stack of {@link TransformingPathStream}s which transforms an input in spherical geographic coordinates to planar
@@ -144,14 +147,23 @@ export class GeoProjectionPathStreamStack extends AbstractTransformingPathStream
     this.preStack.beginPath();
   }
 
-  /** @inheritdoc */
-  public moveTo(x: number, y: number): void {
-    this.preStack.moveTo(x, y);
+  /**
+   * Moves to a specified point.
+   * @param lon The longitude of the point to which to move, in degrees.
+   * @param lat The latitude of the point to which to move, in degrees.
+   */
+  public moveTo(lon: number, lat: number): void {
+    this.preStack.moveTo(lon, lat);
   }
 
-  /** @inheritdoc */
-  public lineTo(x: number, y: number): void {
-    this.preStack.lineTo(x, y);
+  /**
+   * Paths a great-circle arc from the current point to a specified point.
+   * @param lon The longitude of the end point, in degrees.
+   * @param lat The latitude of the end point, in degrees.
+   * @throws Error if the specified point is antipodal to the last pathed point.
+   */
+  public lineTo(lon: number, lat: number): void {
+    this.preStack.lineTo(lon, lat);
   }
 
   /** @inheritdoc */
@@ -164,9 +176,21 @@ export class GeoProjectionPathStreamStack extends AbstractTransformingPathStream
     this.preStack.quadraticCurveTo(cpx, cpy, x, y);
   }
 
-  /** @inheritdoc */
-  public arc(x: number, y: number, radius: number, startAngle: number, endAngle: number, counterClockwise?: boolean): void {
-    this.preStack.arc(x, y, radius, startAngle, endAngle, counterClockwise);
+  /**
+   * Paths a small-circle arc.
+   * @param lon The longitude of the center of the circle containing the arc, in degrees.
+   * @param lat The latitude of the center of the circle containing the arc, in degrees.
+   * @param radius The radius of the arc, in great-arc radians.
+   * @param startAngle If the center of the circle containing the arc is not one of the poles, the true bearing, in
+   * degrees, from the center of the circle to the start of the arc; otherwise the longitude, in degrees, of the start
+   * of the arc.
+   * @param endAngle If the center of the circle containing the arc is not one of the poles, the true bearing, in
+   * degrees, from the center of the circle to the end of the arc; otherwise the longitude, in degrees, of the end of
+   * the arc.
+   * @param counterClockwise Whether the arc should be drawn counterclockwise. False by default.
+   */
+  public arc(lon: number, lat: number, radius: number, startAngle: number, endAngle: number, counterClockwise?: boolean): void {
+    this.preStack.arc(lon, lat, radius, startAngle, endAngle, counterClockwise);
   }
 
   /** @inheritdoc */

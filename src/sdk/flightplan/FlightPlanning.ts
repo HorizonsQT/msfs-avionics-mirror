@@ -200,16 +200,44 @@ export interface LegCalculations {
   /** The calculated base flight path for the leg. */
   flightPath: FlightPathVector[];
 
+  /** The calculated base ingress flight path for the leg. */
+  ingressBase: FlightPathVector[];
+
+  /**
+   * The index of the flight path vector in `flightPath` to which the base ingress flight path is joined. If the
+   * base ingress path directly joins the base egress path or otherwise does not end on the base flight path, then the
+   * index is equal to the length of the `flightPath` array. If there is no base ingress path, then the index is `-1`.
+   */
+  ingressBaseJoinIndex: number;
+
+  /** The calculated base egress flight path for the leg. */
+  egressBase: FlightPathVector[];
+
+  /**
+   * The index of the flight path vector in `flightPath` to which the base egress flight path is joined. If the base
+   * egress path directly joins the base ingress path or otherwise does not start on the base flight path, then the
+   * index is `-1`. If there is no base ingress path, then the index is `-1`.
+   */
+  egressBaseJoinIndex: number;
+
   /** The leg's flight path ingress transition. */
   ingress: FlightPathVector[];
 
-  /** The index of the flight path vector in `flightPath` to which the ingress transition is joined. */
+  /**
+   * The index of the flight path vector in `flightPath` to which the ingress transition is joined. If the ingress
+   * transition directly joins the egress transition or otherwise does not end on the base flight path, then the
+   * index is equal to the length of the `flightPath` array. If there is no ingress transition, then the index is `-1`.
+   */
   ingressJoinIndex: number;
 
   /** The leg's flight path between the ingress and egress transitions. */
   ingressToEgress: FlightPathVector[];
 
-  /** The index of the flight path vector in `flightPath` to which the egress transition is joined. */
+  /**
+   * The index of the flight path vector in `flightPath` to which the egress transition is joined. If the egress
+   * transition directly joins the ingress transition or otherwise does not start on the base flight path, then the
+   * index is `-1`. If there is no ingress transition, then the index is `-1`.
+   */
   egressJoinIndex: number;
 
   /** The leg's flight path egress transition. */

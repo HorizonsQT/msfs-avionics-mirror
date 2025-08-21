@@ -4,7 +4,8 @@ import {
   RunwaySurfaceType, RunwayUtils, Subject, Subscription, UnitType
 } from '@microsoft/msfs-sdk';
 
-import { FmaData } from '../../WT21ControlEvents';
+import { FmaData } from '@microsoft/msfs-wtlinesdk';
+
 import { RASystemEvents } from '../RadioAltimeterSystem';
 import { GpwsEvents } from './GpwsEvents';
 import { GpwsData, GpwsModule } from './GpwsModule';

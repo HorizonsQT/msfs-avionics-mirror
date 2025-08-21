@@ -67,8 +67,9 @@ export interface SubscribableSet<T> {
    * @param map The function to use to transform keys.
    * @param paused Whether the new subscription should be initialized as paused. Defaults to `false`.
    * @returns The new subscription.
+   * @template OT The element type of the set to which to pipe.
    */
-  pipe<M>(to: MutableSubscribableSet<M>, map: (input: T) => M, paused?: boolean): Subscription;
+  pipe<OT>(to: MutableSubscribableSet<OT>, map: (input: T) => OT, paused?: boolean): Subscription;
 }
 
 /**

@@ -137,6 +137,9 @@ export interface AutopilotDataProvider {
   /** Whether the selected speed is in manual mode or not. */
   targetSpeedIsManual: Subscribable<boolean>;
 
+  /** Whether the plane has an FMS speed mode available (selected on AP panel). */
+  hasFmsSpeedMode: boolean;
+
   /** The FMS target airspeed in knots CAS, or null when invalid. */
   fmsTargetCas: Subscribable<number | null>;
 
@@ -184,7 +187,10 @@ export interface AutopilotDataProvider {
 export class DefaultAutopilotDataProvider implements AutopilotDataProvider, Instrument {
   private readonly apSelectedHeading = ConsumerSubject.create<number | null>(null, null).pause();
   private readonly apHeadingTrackSelector = ConsumerSubject.create(null, false).pause();
-  private readonly apFmsManTargetSelector = ConsumerSubject.create(null, false).pause();
+  /** This is true (MAN) by default, for planes that don't have FMS speeds (older style AP panel). They will not plumb a consumer. */
+  private readonly apFmsManTargetSelector = ConsumerSubject.create(null, true).pause();
+
+  public readonly hasFmsSpeedMode = this.autopilotConfig.hasFmsSpeed;
 
   private readonly _rawLateralActive = Subject.create(APLateralModes.NONE);
   public readonly rawLateralActive = this._rawLateralActive as Subscribable<APLateralModes>;
@@ -554,7 +560,10 @@ export class DefaultAutopilotDataProvider implements AutopilotDataProvider, Inst
     this.vnavState.setConsumer(sub.on('vnav_state'));
     this.apSelectedHeading.setConsumer(sub.on('ap_heading_selected'));
     this.apHeadingTrackSelector.setConsumer(sub.on('epic2_ap_hdg_trk_selector'));
-    this.apFmsManTargetSelector.setConsumer(sub.on('epic2_ap_fms_man_selector'));
+
+    if (this.autopilotConfig.hasFmsSpeed) {
+      this.apFmsManTargetSelector.setConsumer(sub.on('epic2_ap_fms_man_selector'));
+    }
 
     this.pausable.push(sub.on('epic2_fms_approach_details_set').handle(details => {
       this._rnavMinimaText.set(details.selectedRnavMinima === RnavMinima.LNAV ? 'VNAV' : RnavMinima[details.selectedRnavMinima]);

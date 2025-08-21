@@ -71,21 +71,38 @@ export class TrackFromFixLegCalculator extends AbstractFlightPathLegCalculator {
 
     if (
       (!state.isDiscontinuity || options.calculateDiscontinuityVectors)
-      && state.isFallback && state.currentPosition.isValid() && state.currentCourse !== undefined
+      && state.isFallback && state.currentPosition.isValid()
     ) {
-      // If we are starting in a fallback state and the current position is defined, then path a direct course to the
-      // leg end point.
+      // We are starting in a fallback state and the current position is defined.
 
-      const flags = FlightPathVectorFlags.Fallback
-        | (state.isDiscontinuity ? FlightPathVectorFlags.Discontinuity : FlightPathVectorFlags.None);
+      // Only build vectors if the start of the leg is not equal to the end point.
+      if (!state.currentPosition.equals(endPos)) {
+        const flags = FlightPathVectorFlags.Fallback
+          | (state.isDiscontinuity ? FlightPathVectorFlags.Discontinuity : FlightPathVectorFlags.None);
 
-      vectorIndex += this.directToPointVectorBuilder.build(
-        vectors, vectorIndex,
-        state.currentPosition, state.currentCourse,
-        endPos,
-        state.getDesiredTurnRadius(calculateIndex), undefined,
-        flags
-      );
+        // If the course at the start of the leg is not defined or if the leg starts in a discontinuity and we are forced
+        // to build great-circle paths through discontinuities, then build a great-circle path to the end point.
+        // Otherwise, build a direct-to path to the end point.
+        if (
+          state.currentCourse === undefined
+          || (state.isDiscontinuity && options.useGreatCirclePathForDiscontinuity)
+        ) {
+          vectorIndex += this.circleVectorBuilder.buildGreatCircle(
+            vectors, vectorIndex,
+            state.currentPosition, endPos,
+            state.currentCourse ?? 0,
+            flags
+          );
+        } else {
+          vectorIndex += this.directToPointVectorBuilder.build(
+            vectors, vectorIndex,
+            state.currentPosition, state.currentCourse,
+            endPos,
+            state.getDesiredTurnRadius(calculateIndex), undefined,
+            flags
+          );
+        }
+      }
     } else {
       let startPos: GeoPoint;
 
@@ -94,22 +111,37 @@ export class TrackFromFixLegCalculator extends AbstractFlightPathLegCalculator {
         startPos = originPos;
       } else if (state.isDiscontinuity) {
         // If we are starting in a discontinuity, then we will start at the leg origin. If we are configured to
-        // calculate discontinuity vectors, then we will also build a path to the origin point.
+        // calculate discontinuity vectors and the start of the leg does not equal the origin point, then we will also
+        // build a path to the origin point.
 
-        if (options.calculateDiscontinuityVectors) {
-          const startPath = state.currentCourse
-            ? this.geoCircleCache[0].setAsGreatCircle(state.currentPosition, state.currentCourse)
-            : undefined;
-          const endPath = this.geoCircleCache[1].setAsGreatCircle(originPos, course);
+        if (options.calculateDiscontinuityVectors && !state.currentPosition.equals(originPos)) {
+          if (options.useGreatCirclePathForDiscontinuity) {
+            // Build a great-circle path to the origin point.
 
-          vectorIndex += this.directToJoinGreatCircleToPointVectorBuilder.build(
-            vectors, vectorIndex,
-            state.currentPosition, startPath,
-            originPos, endPath,
-            state.getDesiredTurnRadius(calculateIndex),
-            undefined,
-            FlightPathVectorFlags.Discontinuity, true
-          );
+            vectorIndex += this.circleVectorBuilder.buildGreatCircle(
+              vectors, vectorIndex,
+              state.currentPosition, originPos,
+              state.currentCourse ?? -course,
+              FlightPathVectorFlags.Discontinuity
+            );
+          } else {
+            // Build a path that turns from the start of the leg toward the origin point before turning to end at the
+            // origin point parallel to the defined leg course at the origin point.
+
+            const startPath = state.currentCourse
+              ? this.geoCircleCache[0].setAsGreatCircle(state.currentPosition, state.currentCourse)
+              : undefined;
+            const endPath = this.geoCircleCache[1].setAsGreatCircle(originPos, course);
+
+            vectorIndex += this.directToJoinGreatCircleToPointVectorBuilder.build(
+              vectors, vectorIndex,
+              state.currentPosition, startPath,
+              originPos, endPath,
+              state.getDesiredTurnRadius(calculateIndex),
+              undefined,
+              FlightPathVectorFlags.Discontinuity, true
+            );
+          }
         }
 
         startPos = originPos;

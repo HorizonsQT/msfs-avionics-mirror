@@ -1,4 +1,4 @@
-import { DisplayComponent, FSComponent, UserSettingRecord, UserSettingValueFilter, VNode } from '@microsoft/msfs-sdk';
+import { DisplayComponent, FSComponent, PropertyTypeOf, ToNonNullable, UserSettingRecord, UserSettingValueFilter, VNode } from '@microsoft/msfs-sdk';
 
 import { UserSettingControlProps } from './UserSettingControl';
 import { UserSettingToggleEnumControl } from './UserSettingToggleEnumControl';
@@ -29,7 +29,7 @@ export class UserSettingToggleControl<
         settingManager={this.props.settingManager}
         settingName={this.props.settingName}
         registerFunc={this.props.registerFunc}
-        values={[false, true] as NonNullable<T[K]>[]}
+        values={[false, true] as ToNonNullable<PropertyTypeOf<T, K>>[]}
         valueText={[this.props.falseText ?? 'false', this.props.trueText ?? 'true']}
         class={this.props.class ?? ''}
       />

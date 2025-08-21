@@ -4,6 +4,7 @@ import { TestingUtils } from './TestingUtils';
 
 /**
  * A testing class for creating dev flight plans.
+ * @deprecated Do not use this class. It will be removed in a future update.
  */
 export class DevPlan {
   /**

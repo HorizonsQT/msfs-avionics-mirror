@@ -1,7 +1,9 @@
 import {
-  DmsFormatter, Facility, FacilityType, FmcPageLifecyclePolicy, FmcRenderTemplate, FmcRenderTemplateRow, ICAO, LineSelectKeyEvent, Subject, VorClass,
-  VorFacility, VorType
+  DmsFormatter, DmsFormatter2, Facility, FmcPageLifecyclePolicy, FmcRenderTemplate, FmcRenderTemplateRow,
+  IcaoType, LineSelectKeyEvent, Subject, UnitType, VorClass, VorFacility, VorType,
 } from '@microsoft/msfs-sdk';
+
+import { PilotWaypointResult, PilotWaypointType } from '@microsoft/msfs-wtlinesdk';
 
 import { WT21FmcPage } from '../WT21FmcPage';
 
@@ -12,20 +14,22 @@ export class FmcSelectWptPopup extends WT21FmcPage {
 
   public static override lifecyclePolicy = FmcPageLifecyclePolicy.Transient;
 
-  facilities = Subject.create<Facility[]>([]);
+  // FIXME do the below with props instead
 
-  facilityType = 'WPT';
+  public readonly items = Subject.create<(Facility | PilotWaypointResult)[]>([]);
 
-  selectedFacility = Subject.create<Facility | null>(null);
+  public facilityType = 'WPT';
+
+  public readonly selectedItem = Subject.create<Facility | PilotWaypointResult | null>(null);
 
   /** @inheritDoc */
   onInit(): void {
-    this.addBinding(this.facilities.sub(() => this.invalidate()));
+    this.addBinding(this.items.sub(() => this.invalidate()));
   }
 
   /** @inheritDoc */
   render(): FmcRenderTemplate[] {
-    const numPages = Math.max(1, Math.ceil(this.facilities.get().length / 2));
+    const numPages = Math.max(1, Math.ceil(this.items.get().length / 2));
 
     const pages: FmcRenderTemplate[] = [];
 
@@ -38,6 +42,10 @@ export class FmcSelectWptPopup extends WT21FmcPage {
 
   private dmsFormatter = new DmsFormatter();
 
+  private pilotWaypointLatDmsFormatter = DmsFormatter2.create('{+[N]-[S]}{dd}{mm.m}', UnitType.ARC_SEC, 1);
+
+  private pilotWaypointLonDmsFormatter = DmsFormatter2.create('{+[E]-[W]}{ddd}{mm.m}', UnitType.ARC_SEC, 1);
+
   /**
    * Renders a facilities page
    *
@@ -46,13 +54,22 @@ export class FmcSelectWptPopup extends WT21FmcPage {
    * @returns template
    */
   private renderFacilitiesPage(pageIndex: number): FmcRenderTemplate {
-    return [
+    const template: FmcRenderTemplate = [
       ['', this.PagingIndicator, `SELECT ${this.facilityType}[blue]`],
-      [''],
-      [''],
-      [''],
-      ...this.renderFacilities(pageIndex),
     ];
+
+    const items = this.items.get();
+
+    if (items.length > 0 && 'icao' in items[0]) {
+      // Facilities: 3 empty rows
+      template.push([''], [''], ['']);
+    } else {
+      template.push([''], ['']);
+    }
+
+    template.push(...this.renderFacilities(pageIndex));
+
+    return template;
   }
 
   /**
@@ -67,55 +84,104 @@ export class FmcSelectWptPopup extends WT21FmcPage {
 
     const startIndex = pageIndex * 2;
 
-    for (const facility of this.facilities.get().slice(startIndex, startIndex + 2)) {
-      const latString = this.dmsFormatter.getLatDmsStr(facility.lat, false).slice(0, -1);
-      const lonString = this.dmsFormatter.getLonDmsStr(facility.lon).slice(0, -1);
-      const name = facility.name === '' ? ICAO.getIdent(facility.icao) : Utils.Translate(facility.name);
+    for (const item of this.items.get().slice(startIndex, startIndex + 2)) {
+      if ('icao' in item) {
+        const latString = this.dmsFormatter.getLatDmsStr(item.lat, false).slice(0, -1);
+        const lonString = this.dmsFormatter.getLonDmsStr(item.lon).slice(0, -1);
 
-      let facilitySuffix = '';
-      const facType = ICAO.getFacilityType(facility.icao);
-      let infostring = '';
-      // TODO RWY type
-      // TODO Pilot waypoints
-      switch (facType) {
-        case FacilityType.Airport:
-          facilitySuffix = 'AIRPORT';
-          break;
-        case FacilityType.NDB:
-          facilitySuffix = 'NDB';
-          break;
-        case FacilityType.VOR: {
-          const vorFac = facility as VorFacility;
-          const vorType = vorFac.type as VorType;
-          const vorClass = vorFac.vorClass as VorClass;
-          if (vorClass === VorClass.ILS) {
-            facilitySuffix = `ILS  ${vorFac.freqMHz.toFixed(2)}`;
-            infostring = ICAO.getAssociatedAirportIdent(facility.icao);
-          } else {
-            if (vorType === VorType.VORDME || vorType === VorType.TACAN || vorType === VorType.VORTAC) {
-              facilitySuffix = `V/D  ${vorFac.freqMHz.toFixed(2)}`;
-            } else if (vorType === VorType.DME) {
-              facilitySuffix = 'DME';
+        const name = item.icaoStruct.ident;
+
+        let identPadLength = 5;
+        let facilitySuffix = '';
+        let infostring = '';
+
+        // TODO RWY type
+        switch (item.icaoStruct.type) {
+          case IcaoType.Airport:
+            facilitySuffix = 'AIRPORT';
+            break;
+          case IcaoType.Ndb:
+            identPadLength = 4;
+            facilitySuffix = 'NDB';
+            break;
+          case IcaoType.Vor: {
+            identPadLength = 4;
+
+            const vorFac = item as VorFacility;
+            const vorType = vorFac.type as VorType;
+            const vorClass = vorFac.vorClass as VorClass;
+
+            if (vorClass === VorClass.ILS) {
+              facilitySuffix = `ILS  ${vorFac.freqMHz.toFixed(2)}`;
+              infostring = ' ' + item.icaoStruct.airport;
             } else {
-              facilitySuffix = 'VOR';
+              if (vorType === VorType.VORDME || vorType === VorType.TACAN || vorType === VorType.VORTAC) {
+                facilitySuffix = `V/D  ${vorFac.freqMHz.toFixed(2)}`;
+              } else if (vorType === VorType.DME) {
+                facilitySuffix = 'DME';
+              } else {
+                facilitySuffix = 'VOR';
+              }
             }
+            break;
           }
-          break;
+          case IcaoType.Waypoint: {
+            const apt = item.icaoStruct.airport;
+            facilitySuffix = apt === '' ? 'EN RTE WPT' : apt;
+            break;
+          }
+          case IcaoType.User: {
+            facilitySuffix = 'PILOT DEFINED';
+            break;
+          }
+          case IcaoType.Runway: {
+            facilitySuffix = item.icaoStruct.airport;
+            break;
+          }
         }
-        case FacilityType.Intersection: {
-          const apt = ICAO.getAssociatedAirportIdent(facility.icao);
-          facilitySuffix = apt === '' ? 'EN RTE WPT' : apt;
-          break;
+
+        if (infostring === '') {
+          infostring = ` ${latString}  ${lonString}`;
         }
-      }
 
-      if (infostring === '') {
-        infostring = `${latString} ${lonString}`;
-      }
+        render.push([`${name.padEnd(identPadLength, ' ')} ${facilitySuffix}`, item.region + ' ']);
+        render.push([` ${infostring}[d-text]`]);
+        render.push([''], ['']);
+      } else {
+        const latString = this.pilotWaypointLatDmsFormatter(item.facility.lat * 3600);
+        const lonString = this.pilotWaypointLonDmsFormatter(item.facility.lon * 3600);
 
-      render.push([`${name}  ${facilitySuffix}`, facility.region]);
-      render.push([` ${infostring}[d-text]`]);
-      render.push([''], ['']);
+        let header: string;
+        let desc = '';
+
+        switch (item.type) {
+          case PilotWaypointType.LatLong:
+            header = 'LAT LONG / NAME';
+            desc = `${latString}${lonString}`; // TODO wrong format for pilot wpt def
+            break;
+          case PilotWaypointType.PlaceBearingDistance:
+            header = 'PLACE BRG / DISTANCE';
+            desc = `${item.input.placeIdent} ${item.input.bearing.toFixed(1)}/${item.input.distance.toFixed(1)}`;
+            break;
+          case PilotWaypointType.PlaceBearingPlaceBearing:
+            header = 'PLACE BRG / PLACE BRG';
+            desc = `${item.input.placeAIdent} ${item.input.bearingA.toFixed(1)} / ${item.input.placeBIdent} ${item.input.bearingB.toFixed(1)}`;
+            break;
+          case PilotWaypointType.AlongTrackOffset:
+            header = 'ALONG TRK OFFSET';
+            desc = `${item.input.placeIdent}/${item.input.distance.toFixed(1)}`;
+            break;
+        }
+
+        if ('newIdent' in item.input && item.input.newIdent !== undefined) {
+          desc += `/${item.input.newIdent}`;
+        } else if ('ident' in item.input) {
+          desc += `/${item.input.ident}`;
+        }
+
+        render.push([' ' + header + '[blue]']);
+        render.push([desc]);
+      }
     }
 
     return render;
@@ -134,7 +200,7 @@ export class FmcSelectWptPopup extends WT21FmcPage {
 
     const index = pageStartIndex + row / 4 - 1;
 
-    this.selectedFacility.set(this.facilities.get()[index]);
+    this.selectedItem.set(this.items.get()[index]);
 
     return true;
   }

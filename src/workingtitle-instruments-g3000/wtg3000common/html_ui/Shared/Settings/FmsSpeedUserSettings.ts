@@ -1,8 +1,13 @@
 import {
-  Consumer, DefaultUserSettingManager, EventBus, MathUtils, UserSetting, UserSettingDefinition, UserSettingManager, UserSettingMap,
+  DefaultUserSettingManager, EventBus, MathUtils, OptionalUserSettingFromManager, UserSetting,
+  UserSettingConsumerFromManager, UserSettingDefinition, UserSettingFromManager, UserSettingManager, UserSettingMap,
   UserSettingRecord, UserSettingValue
 } from '@microsoft/msfs-sdk';
-import { FmsConfigurationSpeedDefinition, FmsSpeedClimbSchedule, FmsSpeedCruiseSchedule, FmsSpeedDescentSchedule, FmsSpeedsConfig } from '../AvionicsConfig/VNavConfig';
+
+import {
+  FmsConfigurationSpeedDefinition, FmsSpeedClimbSchedule, FmsSpeedCruiseSchedule, FmsSpeedDescentSchedule,
+  FmsSpeedsConfig
+} from '../AvionicsConfig/VNavConfig';
 
 /**
  * FMS speed user settings.
@@ -337,17 +342,17 @@ export class FmsSpeedUserSettingManager implements UserSettingManager<FmsSpeedUs
   }
 
   /** @inheritdoc */
-  public tryGetSetting<K extends string>(name: K): K extends keyof FmsSpeedUserSettingTypes ? UserSetting<FmsSpeedUserSettingTypes[K]> : undefined {
-    return this.manager.tryGetSetting(name) as any;
+  public tryGetSetting<K extends string>(name: K): OptionalUserSettingFromManager<FmsSpeedUserSettingTypes, K> {
+    return this.manager.tryGetSetting(name);
   }
 
   /** @inheritdoc */
-  public getSetting<K extends keyof FmsSpeedUserSettingTypes & string>(name: K): UserSetting<NonNullable<FmsSpeedUserSettingTypes[K]>> {
+  public getSetting<K extends keyof FmsSpeedUserSettingTypes & string>(name: K): UserSettingFromManager<FmsSpeedUserSettingTypes, K> {
     return this.manager.getSetting(name);
   }
 
   /** @inheritdoc */
-  public whenSettingChanged<K extends keyof FmsSpeedUserSettingTypes & string>(name: K): Consumer<NonNullable<FmsSpeedUserSettingTypes[K]>> {
+  public whenSettingChanged<K extends keyof FmsSpeedUserSettingTypes & string>(name: K): UserSettingConsumerFromManager<FmsSpeedUserSettingTypes, K> {
     return this.manager.whenSettingChanged(name);
   }
 

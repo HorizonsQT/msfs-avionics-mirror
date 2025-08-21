@@ -1,7 +1,7 @@
 import css from 'rollup-plugin-import-css';
 import resolve from '@rollup/plugin-node-resolve';
 
-const packageName = 'workingtitle-instruments-uns-1lw';
+const packageName = 'workingtitle-instruments-uns-1lw-v2';
 const htmlUiPath = 'html_ui/Pages/VCockpit/Instruments/NavSystems/WTUns1v2';
 
 export default [
@@ -18,4 +18,4 @@ export default [
     external: ['@microsoft/msfs-sdk'],
     plugins: [css({ output: 'WTUns1.css' }), resolve()]
   }
-]
+];

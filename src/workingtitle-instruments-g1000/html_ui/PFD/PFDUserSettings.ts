@@ -1,4 +1,4 @@
-import { DefaultUserSettingManager, EventBus } from '@microsoft/msfs-sdk';
+import { DefaultUserSettingManager, EventBus, UserSettingManager } from '@microsoft/msfs-sdk';
 
 /**
  * The wind overlay options.
@@ -51,7 +51,7 @@ export class PFDUserSettings {
    * @param bus The event bus.
    * @returns a manager for map user settings.
    */
-  public static getManager(bus: EventBus): DefaultUserSettingManager<PFDUserSettingTypes> {
+  public static getManager(bus: EventBus): UserSettingManager<PFDUserSettingTypes> {
     return PFDUserSettings.INSTANCE ??= new DefaultUserSettingManager(bus, [
       {
         name: 'windOption',

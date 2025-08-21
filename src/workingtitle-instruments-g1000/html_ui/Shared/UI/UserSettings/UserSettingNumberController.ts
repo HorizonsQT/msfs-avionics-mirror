@@ -1,4 +1,4 @@
-import { Subject, UserSettingManager, UserSettingRecord, UserSettingValueFilter } from '@microsoft/msfs-sdk';
+import { PropertyTypeOf, Subject, ToNonNullable, UserSettingManager, UserSettingRecord, UserSettingValueFilter } from '@microsoft/msfs-sdk';
 
 import { UserSettingController } from './UserSettingController';
 
@@ -44,6 +44,6 @@ export class UserSettingNumberController<T extends UserSettingRecord, K extends 
    * @param value The new value of the input.
    */
   private onInputChanged(value: number): void {
-    this.setting.value = value as NonNullable<T[K]>;
+    this.setting.value = value as ToNonNullable<PropertyTypeOf<T, K>>;
   }
 }

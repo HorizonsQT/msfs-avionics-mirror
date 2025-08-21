@@ -1,4 +1,4 @@
-/// <reference types="@microsoft/msfs-types/js/simvar" />
+/// <reference types="@microsoft/msfs-types/js/simvar" preserve="true" />
 
 import { EventBus, IndexedEventType } from '../data/EventBus';
 import { PublishPacer } from '../data/EventBusPacer';

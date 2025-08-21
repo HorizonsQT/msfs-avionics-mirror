@@ -1,10 +1,9 @@
-import { ChartMetadata, ChartsClient, Wait } from '@microsoft/msfs-sdk';
+import { ChartMetadata, ChartService, Wait } from '@microsoft/msfs-sdk';
 
 import { G3XChartsPageData, G3XChartsPageSelectionData } from './G3XChartsTypes';
 
 /**
  * A utility class for working with G3X Touch electronic charts.
- * @experimental
  */
 export class G3XChartsUtils {
   /**
@@ -25,11 +24,13 @@ export class G3XChartsUtils {
    * the order of their associated metadata in the metadata array. If a chart has multiple pages, then the data for
    * each page is placed consecutively in the returned array in ascending page order (page 1, page 2, ..., page n).
    * Page data for charts that could not be retrieved are omitted from the returned array.
+   * @param chartService The chart service from which to get page data.
    * @param metadataArray The chart metadata array for which to get page data.
    * @returns A Promise which will be fulfilled with the G3X Touch chart page data corresponding to the specified chart
    * metadata.
    */
   public static async getPageDataFromMetadata(
+    chartService: ChartService,
     metadataArray: readonly ChartMetadata[]
   ): Promise<G3XChartsPageData[]> {
     // Protect against waiting forever by using a timeout.
@@ -37,7 +38,7 @@ export class G3XChartsUtils {
 
     const metadataPages = await Promise.all(metadataArray.map(metadata => {
       return Promise.race([
-        ChartsClient.getChartPages(metadata.guid).catch(() => undefined),
+        chartService.getChartPages(metadata.guid).catch(() => undefined),
         timeout
       ]);
     }));

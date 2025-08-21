@@ -1,3 +1,4 @@
+export * from './PfdMsgInfo';
 export * from './IMessageReceiver';
 export * from './Message';
 export * from './MessageDefinition';
@@ -8,4 +9,3 @@ export * from './OperatingMessage';
 export * from './PfdMessage';
 export * from './PfdMessagePacket';
 export * from './PfdMessageReceiver';
-export * from './PfdMsgInfo';

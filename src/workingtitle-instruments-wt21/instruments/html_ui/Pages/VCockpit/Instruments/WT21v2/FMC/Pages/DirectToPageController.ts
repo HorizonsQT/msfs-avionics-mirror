@@ -4,9 +4,8 @@ import {
   NavMath, RawFormatter, Subject, Subscription, UnitType, VNavUtils
 } from '@microsoft/msfs-sdk';
 
-import { WT21FmsUtils, WT21LNavDataEvents } from '@microsoft/msfs-wt21-shared';
+import { WT21Fms, WT21FmsUtils, WT21LNavDataEvents } from '@microsoft/msfs-wt21-shared';
 
-import { WT21Fms } from '../FlightPlan/WT21Fms';
 import { WT21FmcPage } from '../WT21FmcPage';
 import { WT21FmcScreen } from '../WT21FmcScreen';
 import { DirectToPage } from './DirectToPage';

@@ -1,28 +1,32 @@
 import { ApproachIdentifier, RunwayIdentifier } from '../navigation/Facilities';
 import { IcaoValue } from '../navigation/Icao';
+import { DeepReadonly } from '../utils/types/UtilityTypes';
 
 /**
- * A chart index for an airport
+ * A chart index for an airport.
  */
 export interface ChartIndex<T extends string> {
-  /** The ICAO (FSID) of the airport this chart index is for */
-  airportIcao: IcaoValue;
+  /** The ICAO of the airport to which this chart index belongs. */
+  readonly airportIcao: IcaoValue;
 
-  /** A list of chart categories with an array of charts of that category */
-  charts: ChartIndexCategory<T>[];
+  /** A list of chart categories with an array of charts of that category. */
+  readonly charts: readonly ChartIndexCategory<T>[];
 }
 
 /**
- * A category in a chart index
+ * A category in a chart index.
  */
 export interface ChartIndexCategory<T extends string> {
-  /** The name of the category */
+  /** The name of the category. */
   readonly name: T;
 
-  /** The charts present in the category */
-  readonly charts: ChartMetadata<T>[];
+  /** The charts present in the category. */
+  readonly charts: readonly ChartMetadata<T>[];
 }
 
+/**
+ * Procedure types used by charts.
+ */
 export enum ChartProcedureType {
   Sid,
   Star,
@@ -30,214 +34,253 @@ export enum ChartProcedureType {
 }
 
 /**
- * A base chart procedure identifier
+ * A base chart procedure identifier.
  */
 export interface BaseChartProcedureIdentifier {
-  /** The C++ binding type */
-  readonly __Type: 'JS_ChartProcedureIdentifier';
-
-  /** The type of procedure being identified */
+  /** The type of procedure. */
   readonly type: ChartProcedureType;
 
-  /** The 8-letter procedure identifier. Empty for approaches. */
-  readonly ident: unknown;
+  /** The enroute transition (or approach transition) identifier, if applicable. */
+  readonly enrouteTransition: string | null;
 
-  /** The runway transition identifier, if applicable */
-  readonly runwayTransition?: string;
-
-  /** The enroute transition (or approach transition) identifier, if applicable */
-  readonly enrouteTransition?: string;
-
-  /** The approach identifier, if applicable */
-  readonly approachIdentifier: unknown;
+  /** The runways to which the procedure applies. */
+  readonly runways: readonly Readonly<RunwayIdentifier>[];
 }
 
 /**
- * A SID/STAR chart procedure identifier
+ * A SID/STAR chart procedure identifier.
  */
 export interface ChartSidStarProcedureIdentifier extends BaseChartProcedureIdentifier {
-  /** The type of procedure being identified */
+  /** @inheritDoc */
   readonly type: ChartProcedureType.Sid | ChartProcedureType.Star;
 
-  /** The 8-letter procedure identifier. Empty for approaches. */
+  /** The procedure identifier string. */
   readonly ident: string;
 
   /** @inheritDoc */
-  readonly approachIdentifier: undefined;
+  readonly approachIdentifier: null;
 }
 
 /**
- * An approach chart procedure identifier
+ * An approach chart procedure identifier.
  */
 export interface ChartApproachProcedureIdentifier extends BaseChartProcedureIdentifier {
-  /** The type of procedure being identified */
+  /** @inheritDoc */
   readonly type: ChartProcedureType.Approach;
 
-  /** The 8-letter procedure identifier. Empty for approaches. */
+  /** The empty string. */
   readonly ident: '';
 
   /** @inheritDoc */
-  readonly approachIdentifier: ApproachIdentifier;
+  readonly approachIdentifier: DeepReadonly<ApproachIdentifier>;
 }
 
 /**
- * An chart procedure identifier
+ * A chart procedure identifier.
  */
 export type ChartProcedureIdentifier = ChartSidStarProcedureIdentifier | ChartApproachProcedureIdentifier;
 
 /**
- * Metadata regarding an airport chart
+ * Relationship types between two charts.
+ */
+export enum ChartRelationshipType {
+  /** A relationship from a textual chart to a graphical chart associated with a procedure. */
+  ProcedureTextualToGraphical = 0,
+
+  /** A relationship from a graphical chart to a textual chart associated with a procedure. */
+  ProcedureGraphicalToTextual = 1,
+}
+
+/**
+ * A relationship from one chart to another.
+ */
+export interface ChartRelationship {
+  /** The type of this relationship, as a number that extends {@link ChartRelationshipType}. */
+  readonly type: number;
+
+  /** The GUID of the chart on the FROM side of this relationship (the FROM chart). */
+  readonly fromChartGuid: string;
+
+  /** The GUID of the chart on the TO side of this relationship (the TO chart). */
+  readonly toChartGuid: string;
+
+  /**
+   * The (zero-based) index of the page of the TO chart to which this relationship applies, or `null` if the
+   * relationship is not page-specific.
+   */
+  readonly toChartPage: number | null;
+
+  /** The procedure associated with this relationship, if any. */
+  readonly procedure: ChartProcedureIdentifier | null;
+}
+
+/**
+ * Metadata describing a chart.
  */
 export interface ChartMetadata<T extends string = string> {
-  /** The GUID of this chart */
+  /** The chart provider from which these data were obtained. */
+  readonly provider: string;
+
+  /** The GUID of the chart. */
   readonly guid: string;
 
-  /** The type of the chart */
+  /** The type of the chart. */
   readonly type: T;
 
-  /** The ICAO (FSID) of the airport this chart is for */
+  /** The ICAO of the airport associated with the chart. */
   readonly airportIcao: IcaoValue;
 
-  /** The name of this chart */
+  /** The name of the chart. */
   readonly name: string;
 
-  /** Whether any of the chart's pages are georeferenced */
+  /** Whether any of the chart's pages are georeferenced. */
   readonly geoReferenced: boolean;
 
-  /** A list of the FSIDs of procedures to which this chart is related */
-  readonly procedures: ChartProcedureIdentifier[];
+  /** A list of procedures associated with the chart. */
+  readonly procedures: readonly ChartProcedureIdentifier[];
 
-  /** The identifiers of the runways associated with this chart */
-  readonly runways: RunwayIdentifier[];
+  /** A list of runways associated with the chart. */
+  readonly runways: readonly Readonly<RunwayIdentifier>[];
 
-  /** The date from which this chart is valid, as a Javascript timestamp, or `null` if the date is not available. */
+  /**
+   * The aircraft types to which the chart applies. If the chart has no aircraft type restrictions, then the array is
+   * empty.
+   */
+  readonly aircraftTypes: readonly string[];
+
+  /** A list of relationships from the chart to other charts. */
+  readonly relationships: readonly ChartRelationship[];
+
+  /** The date from which the chart is valid, as a Javascript timestamp, or `null` if the date is not available. */
   readonly validFrom: number | null;
 
-  /** The date to which this chart is valid, as a Javascript timestamp, or `null` if the date is not available. */
+  /** The date to which the chart is valid, as a Javascript timestamp, or `null` if the date is not available. */
   readonly validUntil: number | null;
 }
 
-/** A list of chart pages for a chart */
+/**
+ * A list of pages for a chart.
+ */
 export interface ChartPages {
-  /** The chart pages */
-  pages: ChartPage[];
+  /** The chart pages. */
+  readonly pages: readonly ChartPage[];
 }
 
 /**
- * A page of a chart
+ * A page of a chart.
  */
 export interface ChartPage {
-  /** The width, in arbitrary units, of the page. */
+  /** The width, in arbitrary units, of this page. */
   readonly width: number;
 
-  /** The height, in arbitrary units, of the page. */
+  /** The height, in arbitrary units, of this page. */
   readonly height: number;
 
-  /** Whether the chart page is georeferenced */
+  /**
+   * Whether this chart page is georeferenced. A page is georeferenced if and only if it contains at least one
+   * georeferenced area.
+   */
   readonly geoReferenced: boolean;
 
-  /** The georeferenced areas of this chart page */
-  readonly areas: ChartArea[];
+  /** The areas defined for this chart page. */
+  readonly areas: readonly ChartArea[];
 
-  /** The urls associated with different image/document files for this chart page */
-  readonly urls: ChartUrl[];
+  /** The URLs associated with individual image/document files for this chart page. */
+  readonly urls: readonly ChartUrl[];
 }
 
 /**
- * A URL to a chart page
+ * A URL for a chart page.
  */
 export interface ChartUrl {
   /** The name of the URL. This should contain information useful to determine the type of file this refers to. */
   readonly name: string;
 
-  /** The URL itself */
+  /** The URL string. */
   readonly url: string;
 }
+
 /**
- * Base type for a chart area
+ * Base type for a chart area.
  */
 export interface BaseChartArea {
-  /** The layer name of this area */
+  /** The layer name of this area. */
   readonly layer: string;
 
-  /** The rectangle representing this area, projected on the chart. Coordinates in pixels. */
+  /**
+   * The rectangle representing this area, projected on the chart. The rectangle coordinates are expressed in the same
+   * units used to measure the parent chart's width and height.
+   */
   readonly chartRectangle: ChartRectangle;
-
-  /** The projection used for this area */
-  readonly projection: unknown;
 }
 
 /**
- * A georeferenced chart area
+ * A georeferenced chart area.
  */
 export interface GeoReferencedChartArea extends BaseChartArea {
-  /** Whether this area is georeferenced */
+  /** Whether this area is georeferenced. */
   readonly geoReferenced: true;
 
-  /** The rectangle representing this area, projected on the world. Coordinates in degrees. */
+  /**
+   * The rectangle representing this area, projected on the world. The rectangle coordinates are expressed in degrees
+   * of longitude or latitude.
+   */
   readonly worldRectangle: ChartRectangle;
 
-  /** The LCC projection used for this area */
+  /**
+   * A description of the Lambert conformal conic projection used to project world coordinates to chart coordinates for
+   * this area.
+   */
   readonly projection: ChartLambertConformalConicProjection;
 }
 
 /**
- * An LCC projection for a chart area
+ * A description of a Lambert conformal conic projection used to project world coordinates to chart coordinates for a
+ * chart area.
  */
 export interface ChartLambertConformalConicProjection {
-  /** The type from the simulator */
-  __Type: 'JS_ChartGeoReferenceLambertConformalConicProjection';
-
   /** The first standard parallel, in degrees. */
-  standardParallel1: number;
+  readonly standardParallel1: number;
 
   /** The second standard parallel, in degrees. */
-  standardParallel2: number;
+  readonly standardParallel2: number;
 
   /** The central meridian, in degrees. */
-  centralMeridian: number;
+  readonly centralMeridian: number;
 }
 
 /**
- * A non-georeferenced chart area
+ * A non-georeferenced chart area.
  */
 export interface NonGeoReferencedChartArea extends BaseChartArea {
-  /** Whether this area is georeferenced */
+  /** Whether this area is georeferenced. */
   readonly geoReferenced: false;
 }
 
 /**
- * A chart area
+ * A chart area.
  */
 export type ChartArea = GeoReferencedChartArea | NonGeoReferencedChartArea;
 
 /**
- * A rectangle on a chart
+ * A rectangle on a chart.
  */
 export interface ChartRectangle {
   /**
-   * The upper left corner of this rectangle, in arbitrary units for image coordinates or degrees for
-   * latitude/longitude coordinates.
+   * The upper left corner of this rectangle, as `[x, y]` in arbitrary units for image coordinates or `[lon, lat]` in
+   * degrees for world coordinates.
    */
-  readonly upperLeft: [xOrLon: number, yOrLat: number];
+  readonly upperLeft: readonly [xOrLon: number, yOrLat: number];
 
   /**
-   * The upper left corner of this rectangle, in arbitrary units for image coordinates or degrees for
-   * latitude/longitude coordinates.
+   * The lower right corner of this rectangle, as `[x, y]` in arbitrary units for image coordinates or `[lon, lat]` in
+   * degrees for world coordinates.
    */
-  readonly lowerRight: [xOrLon: number, yOrLat: number];
+  readonly lowerRight: readonly [xOrLon: number, yOrLat: number];
 
   /**
    * The angle, in degrees, by which this rectangle's internal coordinate system is rotated relative to the containing
    * chart. Positive values indicate counterclockwise rotation.
    */
   readonly orientation: number;
-}
-
-/**
- * Chart providers built into the simulator
- */
-export enum BuiltInChartProvider {
-  Lido = 'LIDO',
-  Faa = 'FAA',
 }

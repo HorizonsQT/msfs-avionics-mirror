@@ -1,12 +1,13 @@
 import { Context, FSComponent } from '@microsoft/msfs-sdk';
 
-import { WT21NavIndicators } from '../WT21NavIndicators';
+import { WTLineNavIndicators } from '@microsoft/msfs-wtlinesdk';
 
-export let NavIndicatorContext: Context<WT21NavIndicators>;
+
+export let NavIndicatorContext: Context<WTLineNavIndicators>;
 
 /** TODO
  * @param navIndicatorsInstrument TODO
  */
-export function initNavIndicatorContext(navIndicatorsInstrument: WT21NavIndicators): void {
-  NavIndicatorContext = FSComponent.createContext<WT21NavIndicators>(navIndicatorsInstrument);
+export function initNavIndicatorContext(navIndicatorsInstrument: WTLineNavIndicators): void {
+  NavIndicatorContext = FSComponent.createContext<WTLineNavIndicators>(navIndicatorsInstrument);
 }

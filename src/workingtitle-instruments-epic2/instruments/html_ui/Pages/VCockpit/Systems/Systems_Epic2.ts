@@ -1,10 +1,10 @@
-/// <reference types="@microsoft/msfs-types/js/avionics" />
-/// <reference types="@microsoft/msfs-types/js/common" />
-/// <reference types="@microsoft/msfs-types/js/simvar" />
-/// <reference types="@microsoft/msfs-types/pages/vcockpit/core/vcockpitlogic" />
-/// <reference types="@microsoft/msfs-types/pages/vcockpit/systems/systems" />
-/// <reference types="@microsoft/msfs-types/pages/vcockpit/instruments/shared/utils/xmllogic" />
-/// <reference types="@microsoft/msfs-types/pages/vcockpit/instruments/shared/baseinstrument" />
+/// <reference types="@microsoft/msfs-types/js/avionics" preserve="true" />
+/// <reference types="@microsoft/msfs-types/js/common" preserve="true" />
+/// <reference types="@microsoft/msfs-types/js/simvar" preserve="true" />
+/// <reference types="@microsoft/msfs-types/pages/vcockpit/core/vcockpitlogic" preserve="true" />
+/// <reference types="@microsoft/msfs-types/pages/vcockpit/systems/systems" preserve="true" />
+/// <reference types="@microsoft/msfs-types/pages/vcockpit/instruments/shared/utils/xmllogic" preserve="true" />
+/// <reference types="@microsoft/msfs-types/pages/vcockpit/instruments/shared/baseinstrument" preserve="true" />
 
 /** Epic2 screen swap VCockpit logic. */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

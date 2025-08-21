@@ -1,4 +1,4 @@
-/// <reference types="@microsoft/msfs-types/js/simvar" />
+/// <reference types="@microsoft/msfs-types/js/simvar" preserve="true" />
 
 import { SimVarValueType } from '../../data/SimVars';
 import { MathUtils } from '../../math/MathUtils';

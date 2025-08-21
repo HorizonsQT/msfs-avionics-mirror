@@ -1,6 +1,7 @@
 import {
-  Consumer, DefaultUserSettingManager, EventBus, Subscribable, UserSetting, UserSettingDefinition, UserSettingManager,
-  UserSettingMap, UserSettingRecord, UserSettingValue
+  DefaultUserSettingManager, EventBus, OptionalUserSettingFromManager, Subscribable, UserSetting,
+  UserSettingConsumerFromManager, UserSettingDefinition, UserSettingFromManager, UserSettingManager, UserSettingMap,
+  UserSettingRecord, UserSettingValue
 } from '@microsoft/msfs-sdk';
 
 import { WeightBalanceConfig } from '../Performance/WeightBalance/WeightBalanceConfig';
@@ -95,17 +96,17 @@ export class WeightBalanceUserSettingManager implements UserSettingManager<Weigh
   }
 
   /** @inheritdoc */
-  public tryGetSetting<K extends string>(name: K): K extends keyof WeightBalanceUserSettingTypes ? UserSetting<WeightBalanceUserSettingTypes[K]> : undefined {
-    return this.manager.tryGetSetting(name) as any;
+  public tryGetSetting<K extends string>(name: K): OptionalUserSettingFromManager<WeightBalanceUserSettingTypes, K> {
+    return this.manager.tryGetSetting(name);
   }
 
   /** @inheritdoc */
-  public getSetting<K extends keyof WeightBalanceUserSettingTypes & string>(name: K): UserSetting<NonNullable<WeightBalanceUserSettingTypes[K]>> {
+  public getSetting<K extends keyof WeightBalanceUserSettingTypes & string>(name: K): UserSettingFromManager<WeightBalanceUserSettingTypes, K> {
     return this.manager.getSetting(name);
   }
 
   /** @inheritdoc */
-  public whenSettingChanged<K extends keyof WeightBalanceUserSettingTypes & string>(name: K): Consumer<NonNullable<WeightBalanceUserSettingTypes[K]>> {
+  public whenSettingChanged<K extends keyof WeightBalanceUserSettingTypes & string>(name: K): UserSettingConsumerFromManager<WeightBalanceUserSettingTypes, K> {
     return this.manager.whenSettingChanged(name);
   }
 

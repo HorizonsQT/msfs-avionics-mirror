@@ -162,7 +162,7 @@ class UnsDeparturePageController {
     const batch = plan.openBatch('uns1.cdu.departure.handleModifyFlightPlan');
 
     if (runway && departureProc) {
-      this.fms.insertDeparture(
+      await this.fms.insertDeparture(
         airport,
         departureProcIndex,
         departureRunwayIndex,

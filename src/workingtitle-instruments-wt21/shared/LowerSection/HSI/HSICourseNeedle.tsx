@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { AhrsEvents, ComponentProps, DisplayComponent, EventBus, FSComponent, NavSourceType, Subject, VNode, VorToFrom } from '@microsoft/msfs-sdk';
 
+import { WTLineNavIndicator, WTLineNavIndicators, WTLineNavSource } from '@microsoft/msfs-wtlinesdk';
+
 import { NavIndicatorContext } from '../../Navigation/NavIndicators/NavIndicatorContext';
-import { WT21NavIndicator, WT21NavIndicators, WT21NavSource } from '../../Navigation/WT21NavIndicators';
 import { NavIndicatorAnimator } from './NavIndicatorAnimator';
 
 import './HSICourseNeedle.css';
@@ -20,7 +21,7 @@ interface HSICourseNeedleProps extends ComponentProps {
 }
 
 /** The HSI course needle. */
-export class HSICourseNeedle extends DisplayComponent<HSICourseNeedleProps, [WT21NavIndicators]> {
+export class HSICourseNeedle extends DisplayComponent<HSICourseNeedleProps, [WTLineNavIndicators]> {
   public readonly contextType = [NavIndicatorContext] as const;
   private readonly courseNeedleRef = FSComponent.createRef<HTMLDivElement>();
   private readonly courseDeviationRef = FSComponent.createRef<HTMLDivElement>();
@@ -33,7 +34,7 @@ export class HSICourseNeedle extends DisplayComponent<HSICourseNeedleProps, [WT2
   private readonly toFromRotated = Subject.create(false);
   private readonly adcHdgDeg = Subject.create(0);
   private readonly half: number;
-  private courseNeedleIndicator!: WT21NavIndicator;
+  private courseNeedleIndicator!: WTLineNavIndicator;
 
   /** @inheritdoc */
   constructor(props: HSICourseNeedleProps) {
@@ -103,7 +104,7 @@ export class HSICourseNeedle extends DisplayComponent<HSICourseNeedleProps, [WT2
     this.courseDeviationRef.instance.classList.toggle('hidden', !isVisible);
   };
 
-  private readonly handleNewSource = (source: WT21NavSource | null): void => {
+  private readonly handleNewSource = (source: WTLineNavSource | null): void => {
     if (!source) {
       throw new Error('This should not happen');
     } else {

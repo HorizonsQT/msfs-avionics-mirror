@@ -1,4 +1,4 @@
-import { ApproachPerformanceResults, TakeoffPerformanceCalculatorResults } from './Performance/PerformanceCalculatorResultsTypes';
+import { ApproachPerformanceResults, TakeoffPerformanceCalculatorResults } from '@microsoft/msfs-wtlinesdk';
 
 /**
  * Outputs of TO perf to MFD

@@ -1,4 +1,5 @@
 export * from './AirportWaypoint';
+export * from './CdiAutoSlewManager';
 export * from './FmsPositionSystemSelector';
 export * from './GarminExistingUserWaypointsArray';
 export * from './GarminFacilityWaypointCache';

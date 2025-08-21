@@ -266,10 +266,10 @@ export class FlightTimerPublisher<ID extends string = any> extends SimVarPublish
     const suffix = FlightTimerUtils.getIdSuffix(id);
 
     const entries: [keyof BaseFlightTimerEventsForId<ID>, SimVarPublisherEntry<any>][] = [
-      [`timer_mode${suffix}`, { name: `L:WTFltTimer_Mode${suffix}:#index#`, type: SimVarValueType.Number, indexed: true, defaultIndex: null }],
-      [`timer_is_running${suffix}`, { name: `L:WTFltTimer_Running${suffix}:#index#`, type: SimVarValueType.Bool, indexed: true, defaultIndex: null }],
-      [`timer_initial_value_ms${suffix}`, { name: `L:WTFltTimer_Initial_Value${suffix}:#index#`, type: SimVarValueType.Number, indexed: true, defaultIndex: null }],
-      [`timer_value_ms${suffix}`, { name: `L:WTFltTimer_Value${suffix}:#index#`, type: SimVarValueType.Number, indexed: true, defaultIndex: null }]
+      [`timer_mode${suffix}` as const, { name: `L:WTFltTimer_Mode${suffix}:#index#`, type: SimVarValueType.Number, indexed: true, defaultIndex: null }],
+      [`timer_is_running${suffix}` as const, { name: `L:WTFltTimer_Running${suffix}:#index#`, type: SimVarValueType.Bool, indexed: true, defaultIndex: null }],
+      [`timer_initial_value_ms${suffix}` as const, { name: `L:WTFltTimer_Initial_Value${suffix}:#index#`, type: SimVarValueType.Number, indexed: true, defaultIndex: null }],
+      [`timer_value_ms${suffix}` as const, { name: `L:WTFltTimer_Value${suffix}:#index#`, type: SimVarValueType.Number, indexed: true, defaultIndex: null }]
     ];
 
     super(entries, bus, pacer);

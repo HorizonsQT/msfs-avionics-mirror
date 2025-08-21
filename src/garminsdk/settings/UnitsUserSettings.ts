@@ -1,6 +1,7 @@
 import {
-  BasicNavAngleUnit, Consumer, DefaultUserSettingManager, EventBus, NavAngleUnit, Subject, Subscribable, Unit,
-  UnitFamily, UnitType, UserSetting, UserSettingManager, UserSettingMap, UserSettingRecord, UserSettingValue
+  BasicNavAngleUnit, DefaultUserSettingManager, EventBus, NavAngleUnit, OptionalUserSettingFromManager, Subject,
+  Subscribable, Unit, UnitFamily, UnitType, UserSetting, UserSettingConsumerFromManager, UserSettingFromManager,
+  UserSettingManager, UserSettingMap, UserSettingRecord, UserSettingValue
 } from '@microsoft/msfs-sdk';
 
 /**
@@ -355,17 +356,17 @@ export class DefaultUnitsUserSettingManager<T extends UnitsUserSettingTypes & Us
   }
 
   /** @inheritDoc */
-  public tryGetSetting<K extends string>(name: K): K extends keyof T ? UserSetting<NonNullable<T[K]>> : undefined {
+  public tryGetSetting<K extends string>(name: K): OptionalUserSettingFromManager<T, K> {
     return this.sourceSettingManager.tryGetSetting(name) as any;
   }
 
   /** @inheritDoc */
-  public getSetting<K extends keyof T & string>(name: K): UserSetting<NonNullable<T[K]>> {
+  public getSetting<K extends keyof T & string>(name: K): UserSettingFromManager<T, K> {
     return this.sourceSettingManager.getSetting(name);
   }
 
   /** @inheritDoc */
-  public whenSettingChanged<K extends keyof T & string>(name: K): Consumer<NonNullable<T[K]>> {
+  public whenSettingChanged<K extends keyof T & string>(name: K): UserSettingConsumerFromManager<T, K> {
     return this.sourceSettingManager.whenSettingChanged(name);
   }
 

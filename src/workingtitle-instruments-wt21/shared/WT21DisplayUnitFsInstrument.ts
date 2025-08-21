@@ -1,31 +1,31 @@
-/// <reference types="@microsoft/msfs-types/Pages/VCockpit/Instruments/Shared/BaseInstrument" />
-/// <reference types="@microsoft/msfs-types/Pages/VCockpit/Core/VCockpit" />
-/// <reference types="@microsoft/msfs-types/js/simvar" />
-/// <reference types="@microsoft/msfs-types/js/avionics" />
-/// <reference types="@microsoft/msfs-types/js/common" />
+/// <reference types="@microsoft/msfs-types/pages/vcockpit/instruments/shared/baseinstrument" preserve="true" />
+/// <reference types="@microsoft/msfs-types/pages/vcockpit/core/vcockpit" preserve="true" />
+/// <reference types="@microsoft/msfs-types/js/simvar" preserve="true" />
+/// <reference types="@microsoft/msfs-types/js/avionics" preserve="true" />
+/// <reference types="@microsoft/msfs-types/js/common" preserve="true" />
 
 import {
   AdcPublisher, AhrsPublisher, AutopilotInstrument, BaseInstrumentPublisher, BasicAvionicsSystem, Clock,
-  DefaultFlightPathAnticipatedDataCalculator, ElectricalPublisher, EventBus, FacilityLoader, FacilityRepository, FlightPathAirplaneSpeedMode, FlightPathAirplaneWindMode,
-  FlightPathCalculator, FlightPlanner, FsInstrument, GNSSPublisher, HEventPublisher, InstrumentBackplane, MinimumsSimVarPublisher, NavComSimVarPublisher, TrafficInstrument,
-  VNavSimVarPublisher, Wait, XPDRSimVarPublisher
+  DefaultFlightPathAnticipatedDataCalculator, ElectricalPublisher, EventBus, FacilityLoader, FacilityRepository,
+  FlightPathAirplaneSpeedMode, FlightPathAirplaneWindMode, FlightPathCalculator, FlightPlanner, FsInstrument,
+  GNSSPublisher, HEventPublisher, InstrumentBackplane, MinimumsSimVarPublisher, NavComSimVarPublisher,
+  TrafficInstrument, VNavSimVarPublisher, Wait, XPDRSimVarPublisher
 } from '@microsoft/msfs-sdk';
 
-import { AvionicsConfig } from './Config/AvionicsConfig';
-import { InstrumentConfig } from './Config/InstrumentConfig';
-import { FmcSimVarPublisher } from './FmcSimVars';
 import {
-  AdfRadioSource, GpsSource, initNavIndicatorContext, NavIndicators, NavRadioNavSource, NavSources, WT21BearingPointerNavIndicator,
-  WT21CourseNeedleNavIndicator, WT21GhostNeedleNavIndicator, WT21NavIndicator, WT21NavIndicatorName, WT21NavIndicators, WT21NavSourceNames
-} from './Navigation';
-import { PerformancePlanRepository } from './Performance';
+  AdfRadioSource, FmcSimVarPublisher, GpsSource, NavIndicators, NavRadioNavSource, NavSources,
+  PerformancePlanRepository, WTLineBearingPointerNavIndicator, WTLineControlPublisher, WTLineCourseNeedleNavIndicator,
+  WTLineFixInfoConfig, WTLineFixInfoManager, WTLineFmsUtils, WTLineGhostNeedleNavIndicator, WTLineNavIndicator,
+  WTLineNavIndicatorName, WTLineNavIndicators, WTLineNavSourceNames,
+} from '@microsoft/msfs-wtlinesdk';
+
 import {
-  AdcSystem, AdcSystemSelector, AhrsSystem, AhrsSystemSelector, AOASystem, RadioAltimeterSystem, TransponderSystem, WT21FixInfoConfig, WT21FixInfoManager,
-  WT21FmsUtils
+  AdcSystem, AdcSystemSelector, AhrsSystem, AhrsSystemSelector, AOASystem, RadioAltimeterSystem, TransponderSystem,
 } from './Systems';
 import { WT21TCAS } from './Traffic';
-import { WT21ControlPublisher } from './WT21ControlEvents';
 import { WT21ControlSimVarPublisher } from './WT21ControlVarEvents';
+import { AvionicsConfig, InstrumentConfig, WT21InstrumentType } from './Config';
+import { initNavIndicatorContext } from './Navigation/NavIndicators';
 
 import './WT21_Common.css';
 
@@ -56,9 +56,9 @@ export abstract class WT21DisplayUnitFsInstrument implements FsInstrument {
       })
   }, this.bus);
 
-  protected readonly planner = FlightPlanner.getPlanner(this.bus, this.calculator, WT21FmsUtils.buildWT21LegName);
+  protected readonly planner = FlightPlanner.getPlanner(this.bus, this.calculator, WTLineFmsUtils.buildWT21LegName);
   protected readonly perfPlanRepository = new PerformancePlanRepository(this.planner, this.bus);
-  protected readonly fixInfoManager = new WT21FixInfoManager(this.bus, this.facLoader, WT21FmsUtils.PRIMARY_ACT_PLAN_INDEX, this.planner, WT21FixInfoConfig); // FIXME Add route predictor when FlightPlanPredictor refactored to implement FlightPlanPredictionsProvider
+  protected readonly fixInfoManager = new WTLineFixInfoManager(this.bus, this.facLoader, WTLineFmsUtils.PRIMARY_ACT_PLAN_INDEX, this.planner, WTLineFixInfoConfig); // FIXME Add route predictor when FlightPlanPredictor refactored to implement FlightPlanPredictionsProvider
 
   protected readonly trafficInstrument = new TrafficInstrument(this.bus, { realTimeUpdateFreq: 2, simTimeUpdateFreq: 1, contactDeprecateTime: 10 });
   protected readonly clock = new Clock(this.bus);
@@ -73,22 +73,22 @@ export abstract class WT21DisplayUnitFsInstrument implements FsInstrument {
   protected readonly fmcSimVarPublisher = new FmcSimVarPublisher(this.bus);
   protected readonly minimumsPublisher = new MinimumsSimVarPublisher(this.bus);
   protected readonly xpdrSimVarPublisher = new XPDRSimVarPublisher(this.bus);
-  protected readonly wt21ControlPublisher = new WT21ControlPublisher(this.bus);
+  protected readonly wt21ControlPublisher = new WTLineControlPublisher(this.bus);
   protected readonly wt21ControlVarPublisher = new WT21ControlSimVarPublisher(this.bus);
 
-  protected readonly navSources = new NavSources<WT21NavSourceNames>(
-    new NavRadioNavSource<WT21NavSourceNames>(this.bus, 'NAV1', 1),
-    new NavRadioNavSource<WT21NavSourceNames>(this.bus, 'NAV2', 2),
-    new AdfRadioSource<WT21NavSourceNames>(this.bus, 'ADF', 1),
-    new GpsSource<WT21NavSourceNames>(this.bus, 'FMS1', 1, this.planner),
-    new GpsSource<WT21NavSourceNames>(this.bus, 'FMS2', 2, this.planner),
+  protected readonly navSources = new NavSources<WTLineNavSourceNames>(
+    new NavRadioNavSource<WTLineNavSourceNames>(this.bus, 'NAV1', 1),
+    new NavRadioNavSource<WTLineNavSourceNames>(this.bus, 'NAV2', 2),
+    new AdfRadioSource<WTLineNavSourceNames>(this.bus, 'ADF', 1),
+    new GpsSource<WTLineNavSourceNames>(this.bus, 'FMS1', 1, this.planner),
+    new GpsSource<WTLineNavSourceNames>(this.bus, 'FMS2', 2, this.planner),
   );
-  protected readonly courseNeedleIndicator = new WT21CourseNeedleNavIndicator(this.navSources, this.instrumentConfig, this.bus);
-  protected readonly navIndicators: WT21NavIndicators = new NavIndicators(new Map<WT21NavIndicatorName, WT21NavIndicator>([
+  protected readonly courseNeedleIndicator = new WTLineCourseNeedleNavIndicator(this.navSources, this.instrumentConfig.instrumentType === WT21InstrumentType.Pfd, this.bus);
+  protected readonly navIndicators: WTLineNavIndicators = new NavIndicators(new Map<WTLineNavIndicatorName, WTLineNavIndicator>([
     ['courseNeedle', this.courseNeedleIndicator],
-    ['ghostNeedle', new WT21GhostNeedleNavIndicator(this.navSources, this.bus)],
-    ['bearingPointer1', new WT21BearingPointerNavIndicator(this.navSources, this.bus, 1, 'NAV1')],
-    ['bearingPointer2', new WT21BearingPointerNavIndicator(this.navSources, this.bus, 2, 'NAV2')],
+    ['ghostNeedle', new WTLineGhostNeedleNavIndicator(this.navSources, this.bus)],
+    ['bearingPointer1', new WTLineBearingPointerNavIndicator(this.navSources, this.bus, 1, 'NAV1')],
+    ['bearingPointer2', new WTLineBearingPointerNavIndicator(this.navSources, this.bus, 2, 'NAV2')],
   ]));
   protected readonly navComSimVarPublisher = new NavComSimVarPublisher(this.bus);
   protected readonly vnavSimVarPublisher = new VNavSimVarPublisher(this.bus);

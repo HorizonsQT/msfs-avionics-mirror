@@ -8,7 +8,10 @@ import {
   ApproachListItem, FmsUtils, MinimumsDataProvider, ProcedureType, TouchButton, TransitionListItem, UnitsUserSettings
 } from '@microsoft/msfs-garminsdk';
 
-import { ApproachNameDisplay, ControllableDisplayPaneIndex, G3000ChartsAirportSelectionData, G3000ChartsSource, G3000ChartsUtils, G3000FmsUtils } from '@microsoft/msfs-wtg3000-common';
+import {
+  ApproachNameDisplay, ControllableDisplayPaneIndex, G3000ChartsAirportSelectionData, G3000ChartsSource,
+  G3000ChartsUtils, G3000FmsUtils
+} from '@microsoft/msfs-wtg3000-common';
 
 import { GtcList } from '../../Components/List/GtcList';
 import { GtcMinimumsTouchButton } from '../../Components/Minimums/GtcMinimumsTouchButton';
@@ -314,7 +317,9 @@ export class GtcApproachPage extends GtcProcedureSelectionPage<GtcApproachPagePr
     chartsSource: G3000ChartsSource,
     chartIndex: ChartIndex<string>
   ): Promise<G3000ChartsAirportSelectionData> {
-    const approachPages = await G3000ChartsUtils.getPageDataFromMetadata(chartsSource.getApproachCharts(chartIndex))
+    const service = chartsSource.getChartService();
+
+    const approachPages = await G3000ChartsUtils.getPageDataFromMetadata(service, chartsSource.getApproachCharts(chartIndex))
       .catch(() => []);
 
     return {

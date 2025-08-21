@@ -1,7 +1,8 @@
 import { ComponentProps, DisplayComponent, EventBus, FSComponent, NavMath, Subject, VNode } from '@microsoft/msfs-sdk';
 
+import { WTLineNavIndicator, WTLineNavIndicators } from '@microsoft/msfs-wtlinesdk';
+
 import { NavIndicatorContext } from '../../Navigation/NavIndicators/NavIndicatorContext';
-import { WT21NavIndicator, WT21NavIndicators } from '../../Navigation/WT21NavIndicators';
 import { NavIndicatorAnimator } from './NavIndicatorAnimator';
 
 // eslint-disable-next-line jsdoc/require-jsdoc
@@ -19,13 +20,13 @@ interface HSIBearingPointerProps extends ComponentProps {
 }
 
 /** An HSI bearing pointer. */
-export class HSIBearingPointer extends DisplayComponent<HSIBearingPointerProps, [WT21NavIndicators]> {
+export class HSIBearingPointer extends DisplayComponent<HSIBearingPointerProps, [WTLineNavIndicators]> {
   public readonly contextType = [NavIndicatorContext] as const;
   private readonly bearingPointerRef = FSComponent.createRef<HTMLDivElement>();
   private readonly half: number;
   private readonly pointerAnimator = new NavIndicatorAnimator();
   private readonly isVisible = Subject.create(false);
-  private bearingPointerIndicator!: WT21NavIndicator;
+  private bearingPointerIndicator!: WTLineNavIndicator;
 
   /** @inheritdoc */
   constructor(props: HSIBearingPointerProps) {

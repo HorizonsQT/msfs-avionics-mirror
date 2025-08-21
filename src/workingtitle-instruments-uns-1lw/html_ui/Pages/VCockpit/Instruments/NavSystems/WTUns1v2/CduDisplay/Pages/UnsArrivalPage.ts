@@ -194,7 +194,7 @@ class UnsArrivalPageController {
     const batch = plan.openBatch('uns1.cdu.arrival.handleModifyFlightPlan');
 
     if (runway && arrivalProc) {
-      this.fms.insertArrival(
+      await this.fms.insertArrival(
         airport,
         arrivalProcIndex,
         arrivalRunwayIndex,

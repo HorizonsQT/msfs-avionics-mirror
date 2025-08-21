@@ -15,7 +15,7 @@ import {
   G3000ApproachPreviewDataProvider, G3000ApproachPreviewNavIndicator, G3000BearingPointerNavIndicator,
   G3000DmeInfoNavIndicator, G3000FilePaths, G3000NavIndicator, G3000NavIndicatorName, G3000NavIndicators,
   G3000NavInfoNavIndicator, G3000NavSource, G3000NavSourceName, G3000NavSources, GduInteractionEventUtils,
-  InstrumentBackplaneNames, NavigationMapPaneView, NearestPaneView, ObsAutoSlew, PfdIndex, PfdUserSettings,
+  InstrumentBackplaneNames, NavigationMapPaneView, NearestPaneView, PfdIndex, PfdUserSettings,
   ProcedurePreviewPaneView, TrafficMapPaneView, WaypointInfoPaneView, WeatherRadarPaneView, WeightBalancePaneView,
   WeightBalancePaneViewModule, WTG3000BaseInstrument, WTG3000FsInstrument
 } from '@microsoft/msfs-wtg3000-common';
@@ -66,8 +66,6 @@ export class WTG3000PfdInstrument extends WTG3000FsInstrument {
   private readonly flightPlanStore = new FlightPlanStore(this.bus, this.fms, Fms.PRIMARY_PLAN_INDEX, this.config.vnav.advanced);
 
   private readonly flightPlanListManager = new FlightPlanListManager(this.bus, this.flightPlanStore, this.fms, Fms.PRIMARY_PLAN_INDEX, Subject.create(false));
-
-  private readonly obsAutoSlew = [] as ObsAutoSlew[];
 
   private readonly trafficInstrument = new TrafficInstrument(this.bus, { realTimeUpdateFreq: 2, simTimeUpdateFreq: 1, contactDeprecateTime: 10 });
   private readonly trafficAvionicsSystem = this.config.traffic.resolve()(this.bus, this.trafficInstrument, 10000);
@@ -146,9 +144,6 @@ export class WTG3000PfdInstrument extends WTG3000FsInstrument {
     this.approachPreviewDataProvider = new G3000ApproachPreviewDataProvider(this.navSources, this.bus);
 
     this.navIndicators = this.createNavReferenceIndicatorCollection();
-
-    this.obsAutoSlew[0] = new ObsAutoSlew(this.navSources.get('NAV1'));
-    this.obsAutoSlew[1] = new ObsAutoSlew(this.navSources.get('NAV2'));
 
     this.courseKnobHandler = new PfdCourseKnobInputHandler(
       this.pfdIndex,

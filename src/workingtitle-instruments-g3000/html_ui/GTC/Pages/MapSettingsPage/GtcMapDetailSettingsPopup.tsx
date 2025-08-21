@@ -1,4 +1,4 @@
-import { FSComponent, Subject, Subscription, UserSettingManager, VNode } from '@microsoft/msfs-sdk';
+import { FSComponent, PropertyTypeOf, Subject, Subscription, ToNonNullable, UserSettingManager, VNode } from '@microsoft/msfs-sdk';
 
 import { MapDeclutterSettingMode } from '@microsoft/msfs-garminsdk';
 
@@ -22,7 +22,7 @@ export interface GtcMapDetailSettingsPopupProps extends GtcViewProps {
    * A function which writes selected setting values. If not defined, selected values will be written to settings
    * retrieved from `mapReadSettingManager`.
    */
-  writeToSetting?: <K extends keyof G3000MapUserSettingTypes & string>(settingName: K, value: NonNullable<G3000MapUserSettingTypes[K]>) => void;
+  writeToSetting?: <K extends keyof G3000MapUserSettingTypes & string>(settingName: K, value: ToNonNullable<PropertyTypeOf<G3000MapUserSettingTypes, K>>) => void;
 }
 
 /**

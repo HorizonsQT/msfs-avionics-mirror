@@ -6,7 +6,7 @@ export default [
   {
     input: 'build/Plugins/PFD/index.js',
     output: {
-      file: 'dist/workingtitle-aircraft-cj4/SimObjects/Airplanes/Asobo_CJ4/panel/Instruments/WT21/Plugins/CJ4PfdPlugins.js',
+      file: 'dist/workingtitle-aircraft-cj4/SimObjects/Airplanes/Asobo_CJ4/common/panel/Instruments/WT21/Plugins/CJ4PfdPlugins.js',
       format: 'iife',
       name: 'cj4Pfd',
       globals: {
@@ -21,7 +21,7 @@ export default [
   {
     input: 'build/Plugins/MFD/index.js',
     output: {
-      file: 'dist/workingtitle-aircraft-cj4/SimObjects/Airplanes/Asobo_CJ4/panel/Instruments/WT21/Plugins/CJ4MfdPlugins.js',
+      file: 'dist/workingtitle-aircraft-cj4/SimObjects/Airplanes/Asobo_CJ4/common/panel/Instruments/WT21/Plugins/CJ4MfdPlugins.js',
       format: 'iife',
       name: 'cj4Mfd',
       globals: {
@@ -36,7 +36,7 @@ export default [
   {
     input: 'build/Plugins/FMC/index.js',
     output: {
-      file: 'dist/workingtitle-aircraft-cj4/SimObjects/Airplanes/Asobo_CJ4/panel/Instruments/WT21/Plugins/CJ4FmcPlugins.js',
+      file: 'dist/workingtitle-aircraft-cj4/SimObjects/Airplanes/Asobo_CJ4/common/panel/Instruments/WT21/Plugins/CJ4FmcPlugins.js',
       format: 'iife',
       name: 'cj4Fmc',
       globals: {

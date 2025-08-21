@@ -1,6 +1,6 @@
 import { ComponentProps, DisplayComponent, EventBus, FSComponent, VNode } from '@microsoft/msfs-sdk';
 
-import { MfdDisplayMode, MFDUserSettings } from '@microsoft/msfs-wt21-shared';
+import { WT21Fms, MfdDisplayMode, MFDUserSettings } from '@microsoft/msfs-wt21-shared';
 
 import { FmcPageEvent, FmcPrevNextEvent, FmcSelectKeysEvent } from './FmcEvent';
 import { FmcSelectWptPopup } from './Framework/FmcSelectWptPage';
@@ -47,7 +47,6 @@ import { WeatherViewSingleTermWxPage } from './Pages/WeatherViewSingleTermWxPage
 import { WeatherViewTermWxPage } from './Pages/WeatherViewTermWxPage';
 import { WT21_FMC_Instrument } from './WT21_FMC_Instrument';
 import { WT21FmcScreen } from './WT21FmcScreen';
-import { WT21Fms } from './FlightPlan/WT21Fms';
 
 /**
  * Props for {@link WT21CduDisplay}

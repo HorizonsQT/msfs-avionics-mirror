@@ -118,6 +118,7 @@ export class Epic2FmsSpeedManager {
   private readonly apSelectedIas = ConsumerSubject.create(null, 0);
   private readonly apSelectedMach = ConsumerSubject.create(null, 0);
   private readonly apSelectedSpeedIsMach = ConsumerSubject.create(null, false);
+  /** This is true by default, for planes that don't have FMS speeds (older style AP panel). They will not plumb a consumer. */
   private readonly apSelectedSpeedIsManual = ConsumerSubject.create(null, true);
 
   private readonly isOnGround = ConsumerSubject.create(null, false);
@@ -314,7 +315,10 @@ export class Epic2FmsSpeedManager {
     this.apSelectedIas.setConsumer(sub.on('ap_ias_selected'));
     this.apSelectedMach.setConsumer(sub.on('ap_mach_selected'));
     this.apSelectedSpeedIsMach.setConsumer(sub.on('ap_selected_speed_is_mach'));
-    this.apSelectedSpeedIsManual.setConsumer(sub.on('epic2_ap_fms_man_selector'));
+
+    if (this.config.autopilot.hasFmsSpeed) {
+      this.apSelectedSpeedIsManual.setConsumer(sub.on('epic2_ap_fms_man_selector'));
+    }
 
     this.apSelectedAltitude.setConsumer(sub.on('ap_altitude_selected'));
     this.apFmaData.setConsumer(sub.on('epic2_fma_data'));

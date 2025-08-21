@@ -1,17 +1,20 @@
 import {
-  AbstractFmcPage, AltitudeRestrictionType, BitFlags, ComputedSubject, ConsumerSubject, ControlEvents, DisplayField, EventBus, FixTypeFlags, FlightPathUtils,
-  FlightPlan, FlightPlanActiveLegEvent, FlightPlanCalculatedEvent, FlightPlanLegEvent, FlightPlannerEvents, FlightPlanSegment, FlightPlanSegmentType,
-  FmcListUtility, FmcRenderTemplate, FmcRenderTemplateRow, GeoPoint, GNSSEvents, ICAO, LegTurnDirection, LegType, LNavDataEvents, LNavEvents, MagVar,
+  AbstractFmcPage, AltitudeRestrictionType, BitFlags, ComputedSubject, ConsumerSubject, ControlEvents, DisplayField,
+  EventBus, FixTypeFlags, FlightPathUtils, FlightPlan, FlightPlanActiveLegEvent, FlightPlanCalculatedEvent,
+  FlightPlanLegEvent, FlightPlannerEvents, FlightPlanSegment, FlightPlanSegmentType, FmcListUtility, FmcRenderTemplate,
+  FmcRenderTemplateRow, GeoPoint, GNSSEvents, ICAO, LegTurnDirection, LegType, LNavDataEvents, LNavEvents, MagVar,
   RawFormatter, SpeedRestrictionType, SpeedUnit, Subject, Subscription, VNavConstraint, VNavLeg
 } from '@microsoft/msfs-sdk';
 
-import { WT21FmsUtils, WT21LNavDataEvents } from '@microsoft/msfs-wt21-shared';
+import {
+  DirectToState, PilotWaypointError, PilotWaypointType, WT21Fms, WT21FmsUtils, WT21LNavDataEvents,
+  WT21PilotWaypointUtils
+} from '@microsoft/msfs-wt21-shared';
 
-import { DirectToState, WT21Fms } from '../FlightPlan/WT21Fms';
-import { WT21PilotWaypointUtils } from '../Navigation/WT21PilotWaypointUtils';
 import { WT21FmcPage } from '../WT21FmcPage';
 import { LegsPage } from './LegsPage';
 import { LegPageItem, LegsPageStore } from './LegsPageStore';
+import { WaypointAlreadyExistsPrompt } from './Common/WaypointAlreadyExistsPrompt';
 
 /**
  * LEGS PAGE Controller
@@ -170,12 +173,14 @@ export class LegsPageController {
    * @param fms The Fms
    * @param store The Store
    * @param page The FMC Page
+   * @param wptAlreadyExistsPrompt The WPT ALREADY EXISTS prompt wrapper
    */
   constructor(
     private readonly eventBus: EventBus,
     private readonly fms: WT21Fms,
     private readonly store: LegsPageStore,
     private readonly page: WT21FmcPage,
+    private readonly wptAlreadyExistsPrompt: WaypointAlreadyExistsPrompt,
   ) { }
 
   /**
@@ -691,20 +696,57 @@ export class LegsPageController {
 
       // Pilot-defined waypoints
       if (!selectedFacility) {
-        const result = await WT21PilotWaypointUtils.createFromScratchpadEntry(
+        const results = await WT21PilotWaypointUtils.parseFromString(
           this.fms,
           (ident, refPos) => this.page.screen.selectWptFromIdent(ident, refPos),
           scratchpadContents,
           data?.globalIndex,
         );
 
-        if (result) {
-          const [userFacility] = result;
-          [, insertAfter] = result;
+        if (Array.isArray(results) && results.length > 0) {
+          this.page.screen.clearScratchpad();
 
-          this.fms.addUserFacility(userFacility);
+          const result = results.length > 1 ? await this.page.screen.selectPilotWaypointEntry(results) : results[0];
 
-          selectedFacility = userFacility;
+          if (result) {
+            const userFacility = result.facility;
+            insertAfter = result.type === PilotWaypointType.AlongTrackOffset && result.insertAfter;
+
+            // Prompt to replace waypoint if needed
+            if (this.fms.pilotDefinedWaypointExistsWithIdent(result.facility.icaoStruct.ident)) {
+              try {
+                const replace = await this.wptAlreadyExistsPrompt.showPromptAndWaitForResponse();
+
+                if (!replace) {
+                  return true;
+                }
+              } catch (e) {
+                // Do nothing if the page is navigated away from
+                return true;
+              }
+            }
+
+            this.fms.addUserFacility(userFacility);
+
+            selectedFacility = userFacility;
+          }
+
+          // TODO handle null better (probably just return from the whole method)
+        } else if (typeof results === 'number' && results in PilotWaypointError) {
+          switch (results) {
+            case PilotWaypointError.PilotWaypointListFull:
+             return Promise.reject('PILOT WPT LIST FULL');
+            case PilotWaypointError.ReferenceFixInPolarRegion:
+              return Promise.reject('N/A IN POLAR REGION');
+            case PilotWaypointError.NoIntersection:
+              return Promise.reject('NO INTERSECTION');
+            case PilotWaypointError.AlongTrackOffsetDistanceTooLarge:
+              return Promise.reject('DISTANCE TOO LARGE');
+            case PilotWaypointError.AlongTrackOffsetNotAvailable:
+              return Promise.reject('ALONG TRK WPT N/A');
+            case PilotWaypointError.AlongTrackOffsetFixNotMatched:
+              return Promise.reject('WPT NOT MATCHED');
+          }
         }
       }
 
@@ -913,6 +955,4 @@ export class LegsPageController {
 
     return false;
   }
-
-
 }

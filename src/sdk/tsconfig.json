@@ -28,16 +28,7 @@
     "./**/*.tsx"
   ],
   "exclude": [
-    "Gulpfile.ts",
     "build",
     "dist"
-  ],
-  "ts-node": {
-    "transpiler": "@sucrase/ts-node-plugin",
-    "transpileOnly": true,
-    "compilerOptions": {
-      "module": "commonjs"
-    },
-    "files": true
-  }
+  ]
 }

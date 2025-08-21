@@ -176,7 +176,7 @@ export class DisplayPanesUserSettings {
     const map: UserSettingMap<DisplayPaneSettings, DisplayPaneUserSettingTypes<Index>> = {};
 
     for (const name of DisplayPanesUserSettings.ALIASED_SETTING_NAMES) {
-      map[name] = `${name}_${index}`;
+      map[name] = `${name}_${index}` as const;
     }
 
     return map;

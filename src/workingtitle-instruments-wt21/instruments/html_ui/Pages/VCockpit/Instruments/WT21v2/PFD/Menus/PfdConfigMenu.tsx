@@ -1,4 +1,4 @@
-import { DefaultUserSettingManager, EventBus, FSComponent, Subject, VNode } from '@microsoft/msfs-sdk';
+import { EventBus, FSComponent, Subject, UserSettingManager, VNode } from '@microsoft/msfs-sdk';
 
 import { GuiDialog, GuiDialogProps, PFDSettings, PFDUserSettings, PopupSubMenu, RadioBox, RadioList } from '@microsoft/msfs-wt21-shared';
 
@@ -17,7 +17,7 @@ export class PfdConfigMenu extends GuiDialog<PfdConfigMenuProps> {
   private readonly metricOption = Subject.create<number>(0);
   private readonly flAlertOption = Subject.create<number>(0);
   private readonly aoaOption = Subject.create<number>(0);
-  private pfdSettingsManager!: DefaultUserSettingManager<PFDSettings>;
+  private pfdSettingsManager!: UserSettingManager<PFDSettings>;
 
   /** @inheritdoc */
   public onAfterRender(node: VNode): void {

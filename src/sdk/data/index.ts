@@ -15,3 +15,4 @@ export * from './KeyEventManager';
 export * from './SharedGlobal';
 export * from './SimVars';
 export * from './StallWarningPublisher';
+export * from './SharedDataBus';

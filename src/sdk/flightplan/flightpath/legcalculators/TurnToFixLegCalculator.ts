@@ -70,35 +70,49 @@ export abstract class TurnToFixLegCalculator extends AbstractFlightPathLegCalcul
       if (!state.isDiscontinuity || options.calculateDiscontinuityVectors) {
         const direction = leg.leg.turnDirection === LegTurnDirection.Left ? 'left' : 'right';
 
-        if (state.isDiscontinuity || (state.isFallback && state.currentCourse !== undefined)) {
+        if (state.isDiscontinuity || state.isFallback) {
           // If we are starting in a discontinuity or a fallback state, then the start of the leg is not guaranteed to
           // lie anywhere near the leg's defined turn circle. Therefore, we will ignore the turn circle and build a
-          // path that ends at the leg terminator in the same direction that the turn circle would cross the
-          // terminator.
+          // path that ends at the leg terminator.
 
           const endVec = terminatorPos.toCartesian(this.vec3Cache[0]);
 
-          const radial = this.geoCircleCache[0].setAsGreatCircle(turnCenter, endVec);
-          if (radial.isValid()) {
-            const startPath = state.currentCourse !== undefined
-              ? this.geoCircleCache[1].setAsGreatCircle(state.currentPosition, state.currentCourse)
-              : undefined;
-            const endPath = radial.rotate(endVec, direction === 'left' ? -MathUtils.HALF_PI : MathUtils.HALF_PI, Math.PI);
+          const flags = (state.isDiscontinuity ? FlightPathVectorFlags.Discontinuity : FlightPathVectorFlags.None)
+            | (state.isFallback ? FlightPathVectorFlags.Fallback : FlightPathVectorFlags.None);
 
-            const flags = (state.isDiscontinuity ? FlightPathVectorFlags.Discontinuity : FlightPathVectorFlags.None)
-              | (state.isFallback && state.currentCourse !== undefined ? FlightPathVectorFlags.Fallback : FlightPathVectorFlags.None);
+          if (state.isDiscontinuity && options.useGreatCirclePathForDiscontinuity) {
+            // We are starting in a discontinuity state and are forced to build great-circle paths through
+            // discontinuities.
 
-            vectorIndex += this.directToJoinGreatCircleToPointVectorBuilder.build(
+            vectorIndex += this.circleVectorBuilder.buildGreatCircle(
               vectors, vectorIndex,
-              state.currentPosition, startPath,
-              endVec, endPath,
-              state.getDesiredTurnRadius(calculateIndex),
-              undefined,
-              flags, true
+              state.currentPosition, endVec,
+              state.currentCourse ?? 0,
+              flags
             );
           } else {
-            // The terminator is coincident with or antipodal to the turn center. In this case we can't calculate a
-            // proper path.
+            // We are free to build non-great-circle paths. Therefore, attempt to build a path that ends at the leg
+            // terminator in the same direction that the turn circle would cross the terminator.
+
+            const radial = this.geoCircleCache[0].setAsGreatCircle(turnCenter, endVec);
+            if (radial.isValid()) {
+              const startPath = state.currentCourse !== undefined
+                ? this.geoCircleCache[1].setAsGreatCircle(state.currentPosition, state.currentCourse)
+                : undefined;
+              const endPath = radial.rotate(endVec, direction === 'left' ? -MathUtils.HALF_PI : MathUtils.HALF_PI, Math.PI);
+
+              vectorIndex += this.directToJoinGreatCircleToPointVectorBuilder.build(
+                vectors, vectorIndex,
+                state.currentPosition, startPath,
+                endVec, endPath,
+                state.getDesiredTurnRadius(calculateIndex),
+                undefined,
+                flags, true
+              );
+            } else {
+              // The terminator is coincident with or antipodal to the turn center. In this case we can't calculate a
+              // proper path.
+            }
           }
         } else {
           const radius = this.getTurnRadius(leg.leg, turnCenter);

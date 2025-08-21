@@ -75,6 +75,7 @@ export class Gpws {
     radarAltitude: 0,
     isGsGpActive: false,
     nearestRunwayAltitude: null,
+    nearestRunwayDistance: null,
     isSteepApproachActive: false,
     inhibits: {
       flaps: false,
@@ -364,9 +365,11 @@ export class Gpws {
         this.nearestAirport = undefined;
         this.nearestAirportRunways = undefined;
         this.data.nearestRunwayAltitude = null;
+        this.data.nearestRunwayDistance = null;
       }
     } else {
       this.data.nearestRunwayAltitude = null;
+      this.data.nearestRunwayDistance = null;
     }
 
     this.publishedData.set('gpws_nearest_runway_altitude', this.data.nearestRunwayAltitude);
@@ -404,6 +407,7 @@ export class Gpws {
 
       if (nearestRunway) {
         this.data.nearestRunwayAltitude = UnitType.METER.convertTo(nearestRunway.elevation, UnitType.FOOT);
+        this.data.nearestRunwayDistance = UnitType.GA_RADIAN.convertTo(nearestDistance, UnitType.NMILE);
       } else {
         this.data.nearestRunwayAltitude = null;
       }

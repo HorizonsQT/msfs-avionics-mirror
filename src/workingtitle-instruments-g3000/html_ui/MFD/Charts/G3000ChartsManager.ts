@@ -1,7 +1,7 @@
 import {
-  Accessible, AdcEvents, AirportFacility, AirportFacilityDataFlags, ApproachUtils, ChartIndex, ChartsClient,
-  ConsumerValue, EventBus, FacilityType, GeoPoint, GeoPointInterface, ICAO, IcaoValue, MappedValue, RunwayTransition,
-  RunwayUtils, Subscribable, Subscription, UnitType
+  Accessible, AdcEvents, AirportFacility, AirportFacilityDataFlags, ApproachUtils, ChartIndex, ConsumerValue, EventBus,
+  FacilityType, GeoPoint, GeoPointInterface, ICAO, IcaoValue, MappedValue, RunwayTransition, RunwayUtils, Subscribable,
+  Subscription, UnitType
 } from '@microsoft/msfs-sdk';
 
 import { Fms, FmsPositionMode, FmsPositionSystemEvents, FmsUtils } from '@microsoft/msfs-garminsdk';
@@ -441,7 +441,9 @@ class ChartsDisplayPaneManager {
   private async getAirportChartIndexData(airportIcao: IcaoValue, source: G3000ChartsSource | undefined): Promise<AirportChartIndexData> {
     if (source) {
       try {
-        const chartIndex = await ChartsClient.getIndexForAirport(airportIcao, source.provider);
+        const service = source.getChartService();
+
+        const chartIndex = await service.getIndexForAirport(source.provider, airportIcao);
 
         const [
           infoPages,
@@ -449,10 +451,10 @@ class ChartsDisplayPaneManager {
           arrivalPages,
           approachPages
         ] = await Promise.all([
-          G3000ChartsUtils.getPageDataFromMetadata(source.getInfoCharts(chartIndex)),
-          G3000ChartsUtils.getPageDataFromMetadata(source.getDepartureCharts(chartIndex)),
-          G3000ChartsUtils.getPageDataFromMetadata(source.getArrivalCharts(chartIndex)),
-          G3000ChartsUtils.getPageDataFromMetadata(source.getApproachCharts(chartIndex)),
+          G3000ChartsUtils.getPageDataFromMetadata(service, source.getInfoCharts(chartIndex)),
+          G3000ChartsUtils.getPageDataFromMetadata(service, source.getDepartureCharts(chartIndex)),
+          G3000ChartsUtils.getPageDataFromMetadata(service, source.getArrivalCharts(chartIndex)),
+          G3000ChartsUtils.getPageDataFromMetadata(service, source.getApproachCharts(chartIndex)),
         ]);
 
         return {

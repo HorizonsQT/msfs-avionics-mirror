@@ -1,8 +1,9 @@
 import { ComponentProps, DisplayComponent, EventBus, FSComponent, VNode } from '@microsoft/msfs-sdk';
 
+import { WTLineCourseNeedleNavIndicator, WTLineNavIndicators } from '@microsoft/msfs-wtlinesdk';
+
 import { DisplayUnitLayout } from '../../Config/DisplayUnitConfig';
-import { NavIndicatorContext } from '../../Navigation';
-import { WT21CourseNeedleNavIndicator, WT21NavIndicators } from '../../Navigation/WT21NavIndicators';
+import { NavIndicatorContext } from '../../Navigation/NavIndicators';
 
 import './NavSourcePreset.css';
 
@@ -18,7 +19,7 @@ interface NavSourcePresetProps extends ComponentProps {
 /**
  * The NavSourcePreset component.
  */
-export class NavSourcePreset extends DisplayComponent<NavSourcePresetProps, [WT21NavIndicators]> {
+export class NavSourcePreset extends DisplayComponent<NavSourcePresetProps, [WTLineNavIndicators]> {
   public readonly contextType = [NavIndicatorContext] as const;
   private readonly navSourcePresetRef = FSComponent.createRef<HTMLDivElement>();
 
@@ -29,7 +30,7 @@ export class NavSourcePreset extends DisplayComponent<NavSourcePresetProps, [WT2
   /** @inheritdoc */
   public render(): VNode {
     const navIndicators = this.getContext(NavIndicatorContext).get();
-    const courseNeedleIndicator = navIndicators.get('courseNeedle') as WT21CourseNeedleNavIndicator;
+    const courseNeedleIndicator = navIndicators.get('courseNeedle') as WTLineCourseNeedleNavIndicator;
 
     const isUsingSoftkeys = this.props.displayUnitLayout === DisplayUnitLayout.Softkeys;
 

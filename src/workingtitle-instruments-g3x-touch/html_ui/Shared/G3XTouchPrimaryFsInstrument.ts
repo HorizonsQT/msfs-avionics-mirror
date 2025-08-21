@@ -9,10 +9,10 @@ import {
 } from '@microsoft/msfs-sdk';
 
 import {
-  APExternalGuidanceProvider, FlightPathCalculatorManager, GarminAPConfig, GarminAPStateManager, GarminAPUtils,
-  GarminAutopilot, GarminFlightPlanRouteSyncManager, GarminObsLNavModule, GarminTimerControlEvents, GarminTimerManager,
-  GarminVNavGlidepathGuidance, GarminVNavGuidance, GarminVNavPathGuidance, MinimumsUnitsManager, NavdataComputer,
-  TrafficOperatingModeSetting
+  APExternalGuidanceProvider, CdiAutoSlewManager, FlightPathCalculatorManager, GarminAPConfig, GarminAPStateManager,
+  GarminAPUtils, GarminAutopilot, GarminFlightPlanRouteSyncManager, GarminObsLNavModule, GarminTimerControlEvents,
+  GarminTimerManager, GarminVNavGlidepathGuidance, GarminVNavGuidance, GarminVNavPathGuidance, MinimumsUnitsManager,
+  NavdataComputer, TrafficOperatingModeSetting
 } from '@microsoft/msfs-garminsdk';
 
 import { G3XAPApproachAvailableManager } from './Autopilot/G3XAPApproachAvailableManager';
@@ -28,7 +28,6 @@ import { FuelTotalizer } from './Fuel';
 import { G3XTouchFsInstrument } from './G3XTouchFsInstrument';
 import { InstrumentBackplaneNames } from './Instruments/InstrumentBackplaneNames';
 import { SavedNavComFrequencyManager } from './NavCom/SavedNavComFrequencyManager';
-import { CdiAutoSlewManager } from './Navigation';
 import { ActiveNavSourceManager } from './Navigation/ActiveNavSourceManager';
 import { FplCalculationUserSettings } from './Settings/FplCalculationUserSettings';
 import { FplSourceUserSettings, G3XFplSourceSettingMode } from './Settings/FplSourceUserSettings';
@@ -281,7 +280,7 @@ export class G3XTouchPrimaryFsInstrument extends G3XTouchFsInstrument {
 
   private lastActiveFplCalcTime = 0;
 
-  private avionicsGlobalPowerState: boolean | undefined = undefined;
+  private readonly avionicsGlobalPowerState = Subject.create<boolean | undefined>(undefined);
 
   /**
    * Creates a new instance of G3XTouchFsInstrument.
@@ -437,6 +436,7 @@ export class G3XTouchPrimaryFsInstrument extends G3XTouchFsInstrument {
     });
 
     this.doDelayedInit();
+    this.doInGameInit();
   }
 
   /**
@@ -448,6 +448,15 @@ export class G3XTouchPrimaryFsInstrument extends G3XTouchFsInstrument {
     this.casLegacyAdapter.start();
     // this.comRadioSpacingManager.init();
     // this.navRadioMonitorManager.init();
+  }
+
+  /**
+   * Performs initialization tasks when the sim enters the in-game state.
+   */
+  private async doInGameInit(): Promise<void> {
+    await Wait.awaitSubscribable(GameStateProvider.get(), state => state === GameState.ingame, true);
+
+    this.initCdiAutoSlewManagers();
   }
 
   /** @inheritDoc */
@@ -538,7 +547,7 @@ export class G3XTouchPrimaryFsInstrument extends G3XTouchFsInstrument {
 
     this.isPrimaryFlightPlanInit = true;
 
-    if (this.avionicsGlobalPowerState) {
+    if (this.avionicsGlobalPowerState.get()) {
       this.flightPlanRouteSyncManager.startAutoSync();
     }
   }
@@ -562,6 +571,29 @@ export class G3XTouchPrimaryFsInstrument extends G3XTouchFsInstrument {
     if (needInit) {
       this.autopilot?.setSelectedAltitudeInitialized(true);
       this.altSelectManager?.setSelectedAltitudeInitialized(true);
+    }
+  }
+
+  /**
+   * Initializes all CDI auto-slew managers.
+   */
+  private initCdiAutoSlewManagers(): void {
+    for (let i = 0; i < this.cdiAutoSlewManagers.length; i++) {
+      const manager = this.cdiAutoSlewManagers[i];
+      const radioDef = this.config.radios.navDefinitions[i];
+      if (manager && radioDef) {
+        manager.init(true);
+        MappedSubject.create(
+          this.avionicsGlobalPowerState,
+          this.radiosDataProvider.navRadioDataProviders[radioDef.index]!.isPowered
+        ).sub(([avionicsGlobalPowerState, isRadioPowered]) => {
+          if (avionicsGlobalPowerState && isRadioPowered) {
+            manager.resume();
+          } else {
+            manager.pause();
+          }
+        }, true);
+      }
     }
   }
 
@@ -626,7 +658,7 @@ export class G3XTouchPrimaryFsInstrument extends G3XTouchFsInstrument {
    * @param event The event describing the change in the avionics global power state.
    */
   private onGlobalPowerChanged(event: Readonly<AvionicsStatusGlobalPowerEvent>): void {
-    this.avionicsGlobalPowerState = event.current;
+    this.avionicsGlobalPowerState.set(event.current);
 
     if (event.previous === true && event.current === false) {
       // Avionics global power off.
@@ -698,7 +730,7 @@ export class G3XTouchPrimaryFsInstrument extends G3XTouchFsInstrument {
     // the flight plans in the middle of a load.
     await this.flightPlanRouteSyncManager.cancelLoad();
 
-    if (!this.avionicsGlobalPowerState) {
+    if (!this.avionicsGlobalPowerState.get()) {
       this.fms.resetAllFlightPlans();
     }
   }

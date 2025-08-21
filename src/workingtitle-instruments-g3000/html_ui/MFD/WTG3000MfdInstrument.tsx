@@ -9,7 +9,7 @@ import {
 } from '@microsoft/msfs-sdk';
 
 import {
-  AdcSystemSelector, ComRadioSpacingManager, DateTimeUserSettings, DefaultGpsIntegrityDataProvider,
+  AdcSystemSelector, CdiAutoSlewManager, ComRadioSpacingManager, DateTimeUserSettings, DefaultGpsIntegrityDataProvider,
   DefaultRadarAltimeterDataProvider, DefaultTerrainSystemDataProvider, DefaultVNavDataProvider,
   DefaultWindDataProvider, DmeUserSettings, FlightPathCalculatorManager, Fms, FmsPositionMode, GarminAPStateManager,
   GarminAPUtils, GarminFlightPlanRouteSyncManager, GarminGoAroundManager, GarminHeadingSyncManager,
@@ -154,6 +154,11 @@ export class WTG3000MfdInstrument extends WTG3000FsInstrument {
   private readonly activeNavSourceManager = new ActiveNavSourceManager(this.bus);
   private readonly navRadioMonitorManager = new NavRadioMonitorManager(this.bus, NavRadioMonitorUserSettings.getManager(this.bus));
   private readonly dmeTuneManager = new DmeTuneManager(this.bus, DmeUserSettings.getManager(this.bus), this.config.radios.dmeCount);
+
+  private readonly cdiAutoSlewManagers = {
+    [1]: new CdiAutoSlewManager(this.navSources.get('NAV1')),
+    [2]: new CdiAutoSlewManager(this.navSources.get('NAV2')),
+  };
 
   // TODO: Figure out how many generic timers the G3000 can actually support (i.e. whether the pilot/copilot each gets their own timer)
   private readonly timerManager = new GarminTimerManager(this.bus, 1);
@@ -531,9 +536,8 @@ export class WTG3000MfdInstrument extends WTG3000FsInstrument {
 
     this.bus.getSubscriber<HEvent>().on('hEvent').handle(this.onHEvent.bind(this));
 
-    this.initNavigationLoop();
-
     this.doDelayedInit();
+    this.doInGameInit();
   }
 
   /**
@@ -585,6 +589,20 @@ export class WTG3000MfdInstrument extends WTG3000FsInstrument {
     if (this.trafficSystem.type === TrafficSystemType.TcasII) {
       TrafficUserSettings.getManager(this.bus).getSetting('trafficOperatingMode').value = TrafficOperatingModeSetting.Auto;
     }
+  }
+
+  /**
+   * Performs initialization tasks when the sim enters the in-game state.
+   */
+  private async doInGameInit(): Promise<void> {
+    await Wait.awaitSubscribable(GameStateProvider.get(), state => state === GameState.ingame, true);
+
+    const isAvionicsGlobalPowerOn = this.avionicsGlobalPowerState === true;
+
+    this.initNavigationLoop();
+
+    this.cdiAutoSlewManagers[1].init(!isAvionicsGlobalPowerOn);
+    this.cdiAutoSlewManagers[2].init(!isAvionicsGlobalPowerOn);
   }
 
   /**
@@ -770,9 +788,7 @@ export class WTG3000MfdInstrument extends WTG3000FsInstrument {
   /**
    * Initializes the update loop for LNAV, autopilot, and ESP.
    */
-  private async initNavigationLoop(): Promise<void> {
-    await Wait.awaitSubscribable(GameStateProvider.get(), state => state === GameState.ingame, true);
-
+  private initNavigationLoop(): void {
     const lnavComputerDataProvider = new DefaultLNavComputerDataProvider({
       isPositionDataValid: MappedValue.create(
         ([fmsPosMode]) => fmsPosMode !== FmsPositionMode.None,
@@ -1154,6 +1170,9 @@ export class WTG3000MfdInstrument extends WTG3000FsInstrument {
       this.baroTransitionAlertManager.reset();
       this.baroTransitionAlertManager.pause();
 
+      this.cdiAutoSlewManagers[1].pause();
+      this.cdiAutoSlewManagers[2].pause();
+
       this.vSpeedBugManager.pause();
       this.trafficOperatingModeManager?.pause();
       this.xpdrTcasManager?.pause();
@@ -1219,6 +1238,9 @@ export class WTG3000MfdInstrument extends WTG3000FsInstrument {
 
       this.navRadioMonitorManager.reset();
       this.comRadioTxRxManager.reset();
+      this.cdiAutoSlewManagers[1].resume();
+      this.cdiAutoSlewManagers[2].resume();
+
       this.vSpeedBugManager.reset();
       this.vSpeedBugManager.resume();
       this.displayPanesController.reset();

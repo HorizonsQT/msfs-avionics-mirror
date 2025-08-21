@@ -2,7 +2,7 @@ import {
   ComponentProps, ConsumerSubject, DisplayComponent, EventBus, FSComponent, MappedSubject, MinimumsEvents, MinimumsMode, Subject, VNode
 } from '@microsoft/msfs-sdk';
 
-import { WT21ControlEvents } from '../../WT21ControlEvents';
+import { WTLineControlEvents } from '@microsoft/msfs-wtlinesdk';
 
 import './MinimumsDisplay.css';
 
@@ -44,7 +44,7 @@ export class MinimumsDisplay extends DisplayComponent<MinimumsDisplayProps> {
       this.minimumsRef.instance.classList.toggle('hidden', mode === MinimumsMode.OFF);
     }, true);
 
-    const cp = this.props.bus.getSubscriber<WT21ControlEvents>();
+    const cp = this.props.bus.getSubscriber<WTLineControlEvents>();
 
     cp.on('minimums_alert').whenChanged().handle(isAlerting => {
       this.minimumsRef.instance.classList.toggle('alert', isAlerting);

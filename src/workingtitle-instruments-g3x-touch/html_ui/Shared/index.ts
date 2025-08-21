@@ -3,6 +3,7 @@ export * from './AvionicsConfig';
 export * from './AvionicsStatus';
 export * from './Backlight';
 export * from './CAS';
+export * from './Charts';
 export * from './Components';
 export * from './Config';
 export * from './Eis';

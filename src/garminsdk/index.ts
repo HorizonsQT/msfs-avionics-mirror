@@ -1,6 +1,6 @@
-/// <reference types="@microsoft/msfs-types/js/avionics" />
-/// <reference types="@microsoft/msfs-types/js/common" />
-/// <reference types="@microsoft/msfs-types/js/simvar" />
+/// <reference types="@microsoft/msfs-types/js/avionics" preserve="true" />
+/// <reference types="@microsoft/msfs-types/js/common" preserve="true" />
+/// <reference types="@microsoft/msfs-types/js/simvar" preserve="true" />
 
 export * from './alerts';
 export * from './autopilot';

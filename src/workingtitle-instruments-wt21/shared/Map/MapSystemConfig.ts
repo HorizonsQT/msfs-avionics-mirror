@@ -5,9 +5,9 @@ import {
   UserSetting, UserSettingManager, Vec2Math, VorFacility, VorType, Waypoint, WaypointDisplayBuilder, WaypointTypes
 } from '@microsoft/msfs-sdk';
 
-import { FmcSimVarEvents } from '../FmcSimVars';
+import { CDIScaleLabel, FmcSimVarEvents, WTLineLNavDataEvents } from '@microsoft/msfs-wtlinesdk';
+
 import { WaypointAlerter } from '../LowerSection/WaypointAlerter';
-import { CDIScaleLabel, WT21LNavDataEvents } from '../Systems/Autopilot/WT21LNavDataEvents';
 import { WT21_PFD_MFD_Colors as WT21_PFD_MFD_Colors } from '../WT21_Colors';
 import { ActiveWaypointIcon } from './ActiveWaypoint';
 import { FlightPathWaypointLabel } from './FlightPathWaypointLabel';
@@ -264,7 +264,7 @@ export class MapSystemConfig {
     return (builder): void => {
       const effectiveLegIndex = Subject.create(-1);
 
-      const sub = bus.getSubscriber<WT21LNavDataEvents & GNSSEvents>();
+      const sub = bus.getSubscriber<WTLineLNavDataEvents & GNSSEvents>();
 
       const showMissedAppr = (): boolean => BitFlags.isAll(settings.getSetting('mapWaypointsDisplay').value, MapWaypointsDisplay.MissedApproach);
 
@@ -365,7 +365,7 @@ export class MapSystemConfig {
       const showMissedAppr = (): boolean => BitFlags.isAll(settings.getSetting('mapWaypointsDisplay').value, MapWaypointsDisplay.MissedApproach);
 
       const isMissedApproachActive = Subject.create(false);
-      bus.getSubscriber<WT21LNavDataEvents>().on('lnavdata_cdi_scale_label')
+      bus.getSubscriber<WTLineLNavDataEvents>().on('lnavdata_cdi_scale_label')
         .handle(x => isMissedApproachActive.set(x === CDIScaleLabel.MissedApproach));
 
       const currentlyInMod = Subject.create(false);

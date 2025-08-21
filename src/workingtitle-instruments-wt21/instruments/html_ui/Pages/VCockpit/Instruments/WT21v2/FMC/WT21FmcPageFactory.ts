@@ -1,9 +1,10 @@
 import { EventBus, FmcPageFactory, FmcRenderCallback } from '@microsoft/msfs-sdk';
 
+import { WT21Fms } from '@microsoft/msfs-wt21-shared';
+
 import { WT21_FMC_Instrument } from './WT21_FMC_Instrument';
 import { WT21FmcPage } from './WT21FmcPage';
 import { WT21FmcScreen } from './WT21FmcScreen';
-import { WT21Fms } from './FlightPlan/WT21Fms';
 
 /**
  * FMC page factory for {@link WT21FmcPage}

@@ -1,7 +1,7 @@
 import {
-  AirportFacility, ChartIndex, ChartsClient, ConsumerValue, FacilityType, FlightPathCalculator, FlightPlanUtils,
-  FSComponent, ICAO, LegDefinition, MappedSubject, MappedSubscribable, NodeReference, StringUtils, Subject,
-  SubscribableArray, SubscribableMapFunctions, Subscription, UserSettingManager, VNode
+  AirportFacility, ChartIndex, ConsumerValue, FacilityType, FlightPathCalculator, FlightPlanUtils, FSComponent, ICAO,
+  LegDefinition, MappedSubject, MappedSubscribable, NodeReference, StringUtils, Subject, SubscribableArray,
+  SubscribableMapFunctions, Subscription, UserSettingManager, VNode
 } from '@microsoft/msfs-sdk';
 
 import { Fms, FmsUtils, GarminFacilityWaypointCache, ProcedureType, TouchButton } from '@microsoft/msfs-garminsdk';
@@ -365,7 +365,9 @@ export abstract class GtcProcedureSelectionPage<P extends GtcProcedureSelectionP
         || this.airportChartData.source !== chartsSource.uid
         || !ICAO.valueEquals(this.airportChartData.icao, selectedAirport.icaoStruct)
       ) {
-        const chartIndex = await ChartsClient.getIndexForAirport(selectedAirport.icaoStruct, chartsSource.provider);
+        const service = chartsSource.getChartService();
+
+        const chartIndex = await service.getIndexForAirport(chartsSource.provider, selectedAirport.icaoStruct);
 
         if (opId !== this.refreshAirportChartDataOpId) {
           return;

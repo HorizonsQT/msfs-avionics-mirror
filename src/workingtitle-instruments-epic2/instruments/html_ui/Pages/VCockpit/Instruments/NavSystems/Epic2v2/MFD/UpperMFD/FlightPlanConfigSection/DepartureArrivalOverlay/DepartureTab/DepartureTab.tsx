@@ -276,13 +276,13 @@ export class DepartureTab extends TabContent<DepartureTabProps> {
                 variant="bar"
                 label="Insert"
                 isEnabled={this.selectedRunway.map(x => !!x)}
-                onPressed={() => {
+                onPressed={async () => {
                   const selectedAirport = this.selectedAirport.get();
                   const selectedDeparture = this.selectedDeparture.get();
 
                   if (selectedAirport) {
                     if (selectedDeparture) {
-                      this.props.fms.insertDeparture(
+                      await this.props.fms.loadDeparture(
                         selectedAirport,
                         this.selectedDepartureIndex.get(),
                         this.selectedRunwayTransitionIndex.get(),

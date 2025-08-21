@@ -1,4 +1,7 @@
-import { GeoCircle, GeoMath, GeoPoint, LatLonInterface } from '../../geo';
+import { GeoCircle, ReadonlyGeoCircle } from '../../geo/GeoCircle';
+import { LatLonInterface } from '../../geo/GeoInterfaces';
+import { GeoMath } from '../../geo/GeoMath';
+import { GeoPoint } from '../../geo/GeoPoint';
 import { MathUtils, ReadonlyFloat64Array, UnitType, Vec3Math } from '../../math';
 import { FlightPlanLeg, LegTurnDirection } from '../../navigation/Facilities';
 import { ArrayUtils } from '../../utils/datastructures/ArrayUtils';
@@ -49,7 +52,7 @@ export class FlightPathUtils {
    */
   public static setVectorFromCircle(
     vector: FlightPathVector,
-    circle: GeoCircle,
+    circle: ReadonlyGeoCircle,
     start: ReadonlyFloat64Array | LatLonInterface,
     end: ReadonlyFloat64Array | LatLonInterface,
     flags: number,
@@ -199,7 +202,7 @@ export class FlightPathUtils {
    * @param out A GeoCircle object to which to write the result.
    * @returns A turn circle which has the same turn center and turn radius, but the opposite direction as `circle`.
    */
-  public static reverseTurnCircle(circle: GeoCircle, out: GeoCircle): GeoCircle {
+  public static reverseTurnCircle(circle: ReadonlyGeoCircle, out: GeoCircle): GeoCircle {
     return out.set(Vec3Math.multScalar(circle.center, -1, FlightPathUtils.vec3Cache[0]), Math.PI - circle.radius);
   }
 
@@ -208,7 +211,7 @@ export class FlightPathUtils {
    * @param circle The geo circle describing the turn.
    * @returns The direction of the turn described by the circle.
    */
-  public static getTurnDirectionFromCircle(circle: GeoCircle): VectorTurnDirection {
+  public static getTurnDirectionFromCircle(circle: ReadonlyGeoCircle): VectorTurnDirection {
     return circle.radius > MathUtils.HALF_PI ? 'right' : 'left';
   }
 
@@ -217,7 +220,7 @@ export class FlightPathUtils {
    * @param circle The geo circle describing the turn.
    * @returns The radius of the turn described by the circle, in great-arc radians.
    */
-  public static getTurnRadiusFromCircle(circle: GeoCircle): number {
+  public static getTurnRadiusFromCircle(circle: ReadonlyGeoCircle): number {
     return Math.min(circle.radius, Math.PI - circle.radius);
   }
 
@@ -227,7 +230,7 @@ export class FlightPathUtils {
    * @param out A GeoPoint or 3D vector object to which to write the result.
    * @returns The center of a turn described by the circle.
    */
-  public static getTurnCenterFromCircle<T extends GeoPoint | Float64Array>(circle: GeoCircle, out: T): T {
+  public static getTurnCenterFromCircle<T extends GeoPoint | Float64Array>(circle: ReadonlyGeoCircle, out: T): T {
     return (
       circle.radius > MathUtils.HALF_PI
         ? out instanceof Float64Array
@@ -270,8 +273,8 @@ export class FlightPathUtils {
    * @throws Error if `point` does not lie on both `initialPath` and `finalPath`.
    */
   public static pathAngleDistance(
-    initialPath: GeoCircle,
-    finalPath: GeoCircle,
+    initialPath: ReadonlyGeoCircle,
+    finalPath: ReadonlyGeoCircle,
     point: ReadonlyFloat64Array | LatLonInterface,
     turnDirection: VectorTurnDirection | null,
     tolerance = GeoMath.ANGULAR_TOLERANCE
@@ -332,7 +335,7 @@ export class FlightPathUtils {
    */
   public static getGreatCircleTangentToPath(
     point: ReadonlyFloat64Array | LatLonInterface,
-    path: GeoCircle,
+    path: ReadonlyGeoCircle,
     out: GeoCircle
   ): GeoCircle {
     return out.setAsGreatCircle(point, path);
@@ -366,7 +369,7 @@ export class FlightPathUtils {
    */
   public static getTurnCircleStartingFromPath(
     start: ReadonlyFloat64Array | LatLonInterface,
-    path: GeoCircle,
+    path: ReadonlyGeoCircle,
     turnRadius: number,
     turnDirection: VectorTurnDirection,
     out: GeoCircle
@@ -387,6 +390,29 @@ export class FlightPathUtils {
   }
 
   /**
+   * Gets the point where two tangent geo circles meet.
+   * @param circle1 The first geo circle.
+   * @param circle2 The second geo circle.
+   * @param out A GeoPoint or 3D vector object to which to write the result.
+   * @returns The tangent point between the two specified geo circles. If the geo circles are not tangent, then the
+   * value of the result is not meaningful.
+   */
+  public static getTangentPointBetweenCircles<T extends GeoPoint | Float64Array>(circle1: ReadonlyGeoCircle, circle2: ReadonlyGeoCircle, out: T): T {
+    let smallerCircle: ReadonlyGeoCircle;
+    let largerCircle: ReadonlyGeoCircle;
+
+    if (circle1.radius > circle2.radius) {
+      smallerCircle = circle2;
+      largerCircle = circle1;
+    } else {
+      smallerCircle = circle1;
+      largerCircle = circle2;
+    }
+
+    return largerCircle.closest(smallerCircle.center, out);
+  }
+
+  /**
    * Gets the signed distance along an arc from a defined start point to a query point. The start, query, and end
    * points will be projected onto the arc's parent circle if they do not already lie on it. A negative distance
    * indicates that the query point lies somewhere before the start of the arc but after the point on the arc's parent
@@ -400,7 +426,7 @@ export class FlightPathUtils {
    * @returns The signed distance along the arc from the start point to the query point, in great-arc radians.
    */
   public static getAlongArcSignedDistance(
-    circle: GeoCircle,
+    circle: ReadonlyGeoCircle,
     start: ReadonlyFloat64Array | LatLonInterface,
     end: ReadonlyFloat64Array | LatLonInterface,
     pos: ReadonlyFloat64Array | LatLonInterface,
@@ -432,7 +458,7 @@ export class FlightPathUtils {
    * @returns The normalized distance along the arc from the start point to the query point.
    */
   public static getAlongArcNormalizedDistance(
-    circle: GeoCircle,
+    circle: ReadonlyGeoCircle,
     start: ReadonlyFloat64Array | LatLonInterface,
     end: ReadonlyFloat64Array | LatLonInterface,
     pos: ReadonlyFloat64Array | LatLonInterface,
@@ -465,7 +491,7 @@ export class FlightPathUtils {
    * @returns Whether the query point lies between the start and end points of the specified arc.
    */
   public static isPointAlongArc(
-    circle: GeoCircle,
+    circle: ReadonlyGeoCircle,
     start: ReadonlyFloat64Array | LatLonInterface,
     end: ReadonlyFloat64Array | LatLonInterface,
     pos: ReadonlyFloat64Array | LatLonInterface,
@@ -484,7 +510,7 @@ export class FlightPathUtils {
    * @returns Whether the query point lies between the start and end points (inclusive) of the specified arc.
    */
   public static isPointAlongArc(
-    circle: GeoCircle,
+    circle: ReadonlyGeoCircle,
     start: ReadonlyFloat64Array | LatLonInterface,
     angularWidth: number,
     pos: ReadonlyFloat64Array | LatLonInterface,
@@ -493,7 +519,7 @@ export class FlightPathUtils {
   ): boolean;
   // eslint-disable-next-line jsdoc/require-jsdoc
   public static isPointAlongArc(
-    circle: GeoCircle,
+    circle: ReadonlyGeoCircle,
     start: ReadonlyFloat64Array | LatLonInterface,
     end: ReadonlyFloat64Array | LatLonInterface | number,
     pos: ReadonlyFloat64Array | LatLonInterface,
@@ -544,7 +570,7 @@ export class FlightPathUtils {
     speed: number,
     position: LatLonInterface | ReadonlyFloat64Array,
     bearing: number,
-    projectTo: GeoCircle
+    projectTo: ReadonlyGeoCircle
   ): number;
   /**
    * Projects an instantaneous velocity at a point along a geo circle onto another geo circle.
@@ -570,14 +596,14 @@ export class FlightPathUtils {
     speed: number,
     position: LatLonInterface | ReadonlyFloat64Array,
     path: GeoCircle,
-    projectTo: GeoCircle
+    projectTo: ReadonlyGeoCircle
   ): number;
   // eslint-disable-next-line jsdoc/require-jsdoc
   public static projectVelocityToCircle(
     speed: number,
     position: LatLonInterface | ReadonlyFloat64Array,
     direction: number | GeoCircle,
-    projectTo: GeoCircle
+    projectTo: ReadonlyGeoCircle
   ): number {
     if (projectTo.radius <= GeoCircle.ANGULAR_TOLERANCE) {
       return NaN;
@@ -612,6 +638,42 @@ export class FlightPathUtils {
   }
 
   /**
+   * Performs a deep copy of a flight path vector array into another array.
+   * @param from The array to copy from.
+   * @param to The array to copy to.
+   * @param fromStartIndex The lowest index in the source array to copy, inclusive. Defaults to zero.
+   * @param fromEndIndex The highest index in the source array to copy, exclusive. Defaults to the length of the source
+   * array.
+   * @param toStartIndex The index in the target array to which to copy the lowest copied index in the source array.
+   * Each index `i` copied from the source array will be copied to the index in the target array equal to
+   * `toStartIndex + i - fromStartIndex`. Defaults to zero.
+   * @returns The target array, after the copy is complete.
+   */
+  public static deepCopyVectorArray(
+    from: readonly Readonly<FlightPathVector>[],
+    to: FlightPathVector[],
+    fromStartIndex = 0,
+    fromEndIndex = from.length,
+    toStartIndex = 0
+  ): FlightPathVector[] {
+    const offset = toStartIndex - fromStartIndex;
+
+    // Choose the order in which to copy the vectors such that if the source and target arrays are the same, the copy
+    // operation is still performed without error.
+    if (offset < 0) {
+      for (let i = fromStartIndex; i < fromEndIndex; i++) {
+        Object.assign(to[i + offset] ??= FlightPathUtils.createEmptyVector(), from[i]);
+      }
+    } else {
+      for (let i = fromEndIndex - 1; i >= fromStartIndex; i--) {
+        Object.assign(to[i + offset] ??= FlightPathUtils.createEmptyVector(), from[i]);
+      }
+    }
+
+    return to;
+  }
+
+  /**
    * Resolves the ingress to egress vectors for a set of flight plan leg calculations. This operation will populate the
    * `ingressToEgress` array with a sequence of vectors connecting the ingress transition to the egress transition
    * while following the flight path defined by the vectors in the `flightPath` array.
@@ -622,115 +684,123 @@ export class FlightPathUtils {
     const vectors = legCalc.ingressToEgress;
     let vectorIndex = 0;
 
-    let flightPathVectorIndex = Math.max(0, legCalc.ingressJoinIndex);
-
     const lastIngressVector = legCalc.ingress[legCalc.ingress.length - 1];
     const ingressJoinVector = legCalc.flightPath[legCalc.ingressJoinIndex];
     const firstEgressVector = legCalc.egress[0];
     const egressJoinVector = legCalc.flightPath[legCalc.egressJoinIndex];
 
-    if (lastIngressVector && ingressJoinVector) {
-      // There is an ingress transition and a valid base flight path vector at which the ingress joins the base flight path.
+    // If there is an ingress transition and it does not join the base flight path or there is an egress transition and
+    // it does not join the base flight path, then we assume that the ingress and egress transitions are directly
+    // joined and therefore do not write any ingress-to-egress vectors.
+    if (!(
+      (lastIngressVector && !ingressJoinVector)
+      || (firstEgressVector && !egressJoinVector)
+    )) {
+      let flightPathVectorIndex = Math.max(0, legCalc.ingressJoinIndex);
 
-      // Check if the last ingress vector joins the base flight path before the end of the joined base flight path vector.
+      if (lastIngressVector && ingressJoinVector) {
+        // There is an ingress transition and a valid base flight path vector at which the ingress joins the base flight path.
 
-      const ingressEnd = FlightPathUtils.geoPointCache[0].set(lastIngressVector.endLat, lastIngressVector.endLon);
-      const ingressJoinVectorStart = FlightPathUtils.geoPointCache[1].set(ingressJoinVector.startLat, ingressJoinVector.startLon);
-      const ingressJoinVectorEnd = legCalc.ingressJoinIndex === legCalc.egressJoinIndex && firstEgressVector
-        ? FlightPathUtils.geoPointCache[2].set(firstEgressVector.startLat, firstEgressVector.startLon)
-        : FlightPathUtils.geoPointCache[2].set(ingressJoinVector.endLat, ingressJoinVector.endLon);
+        // Check if the last ingress vector joins the base flight path before the end of the joined base flight path vector.
 
-      const ingressJoinVectorCircle = FlightPathUtils.setGeoCircleFromVector(ingressJoinVector, FlightPathUtils.geoCircleCache[0]);
+        const ingressEnd = FlightPathUtils.geoPointCache[0].set(lastIngressVector.endLat, lastIngressVector.endLon);
+        const ingressJoinVectorStart = FlightPathUtils.geoPointCache[1].set(ingressJoinVector.startLat, ingressJoinVector.startLon);
+        const ingressJoinVectorEnd = legCalc.ingressJoinIndex === legCalc.egressJoinIndex && firstEgressVector
+          ? FlightPathUtils.geoPointCache[2].set(firstEgressVector.startLat, firstEgressVector.startLon)
+          : FlightPathUtils.geoPointCache[2].set(ingressJoinVector.endLat, ingressJoinVector.endLon);
 
-      const ingressEndAlongVectorDistance = FlightPathUtils.getAlongArcNormalizedDistance(
-        ingressJoinVectorCircle, ingressJoinVectorStart, ingressJoinVectorEnd, ingressEnd
-      );
-      const normalizedTolerance = GeoMath.ANGULAR_TOLERANCE / UnitType.METER.convertTo(ingressJoinVector.distance, UnitType.GA_RADIAN);
+        const ingressJoinVectorCircle = FlightPathUtils.setGeoCircleFromVector(ingressJoinVector, FlightPathUtils.geoCircleCache[0]);
 
-      if (ingressEndAlongVectorDistance < 1 - normalizedTolerance) {
-        // Ingress joins the base flight path before the end of the joined vector. Therefore we must insert all or
-        // part of the joined vector into the ingress-to-egress array.
-
-        if (ingressEndAlongVectorDistance > normalizedTolerance) {
-          // Ingress joins the base flight path after the start of the joined vector. Therefore we must create a new
-          // vector that extends from where the ingress joins up to the end of the joined vector and insert the new
-          // vector into the ingress-to-egress array.
-
-          ingressJoinVectorCircle.closest(ingressEnd, ingressEnd);
-
-          FlightPathUtils.setVectorFromCircle(
-            vectors[vectorIndex++] ??= FlightPathUtils.createEmptyVector(),
-            ingressJoinVectorCircle, ingressEnd, ingressJoinVectorEnd,
-            ingressJoinVector.flags,
-            ingressJoinVector.heading, ingressJoinVector.isHeadingTrue
-          );
-        } else {
-          // Ingress joins the base flight path at or before the start of the joined vector. Therefore we can copy the
-          // entire joined vector into the ingress-to-egress array.
-
-          Object.assign(vectors[vectorIndex++] ??= FlightPathUtils.createEmptyVector(), ingressJoinVector);
-        }
-      }
-
-      flightPathVectorIndex++;
-    }
-
-    // Now we must copy all base flight path vectors between the ingress-joined and egress-joined vectors (exclusive)
-    // into the ingress-to-egress array.
-
-    const end = Math.min(legCalc.flightPath.length, legCalc.egressJoinIndex < 0 ? Infinity : legCalc.egressJoinIndex);
-    for (let i = flightPathVectorIndex; i < end; i++) {
-      Object.assign(vectors[vectorIndex++] ??= FlightPathUtils.createEmptyVector(), legCalc.flightPath[i]);
-      flightPathVectorIndex++;
-    }
-
-    if (flightPathVectorIndex === legCalc.egressJoinIndex && egressJoinVector) {
-      if (firstEgressVector) {
-        // There is an egress transition and a valid base flight path vector at which the egress joins the base flight path.
-
-        // Check if the first egress vector joins the base flight path after the start of the joined base flight path vector.
-
-        const egressStart = FlightPathUtils.geoPointCache[0].set(firstEgressVector.startLat, firstEgressVector.startLon);
-        const egressJoinVectorStart = FlightPathUtils.geoPointCache[1].set(egressJoinVector.startLat, egressJoinVector.startLon);
-        const egressJoinVectorEnd = FlightPathUtils.geoPointCache[2].set(egressJoinVector.endLat, egressJoinVector.endLon);
-
-        const egressJoinVectorCircle = FlightPathUtils.setGeoCircleFromVector(egressJoinVector, FlightPathUtils.geoCircleCache[0]);
-
-        const egressStartAlongVectorDistance = FlightPathUtils.getAlongArcNormalizedDistance(
-          egressJoinVectorCircle, egressJoinVectorStart, egressJoinVectorEnd, egressStart
+        const ingressEndAlongVectorDistance = FlightPathUtils.getAlongArcNormalizedDistance(
+          ingressJoinVectorCircle, ingressJoinVectorStart, ingressJoinVectorEnd, ingressEnd
         );
-        const normalizedTolerance = GeoMath.ANGULAR_TOLERANCE / UnitType.METER.convertTo(egressJoinVector.distance, UnitType.GA_RADIAN);
+        const normalizedTolerance = GeoMath.ANGULAR_TOLERANCE / UnitType.METER.convertTo(ingressJoinVector.distance, UnitType.GA_RADIAN);
 
-        if (egressStartAlongVectorDistance > normalizedTolerance) {
-          // Egress joins the base flight path after the start of the joined vector. Therefore we must insert all or
+        if (ingressEndAlongVectorDistance < 1 - normalizedTolerance) {
+          // Ingress joins the base flight path before the end of the joined vector. Therefore we must insert all or
           // part of the joined vector into the ingress-to-egress array.
 
-          if (egressStartAlongVectorDistance < 1 - normalizedTolerance) {
-            // Egress joins the base flight path before the end of the joined vector. Therefore we must create a new
-            // vector that extends from the start of the joined vector up to where the egress joins and insert the new
+          if (ingressEndAlongVectorDistance > normalizedTolerance) {
+            // Ingress joins the base flight path after the start of the joined vector. Therefore we must create a new
+            // vector that extends from where the ingress joins up to the end of the joined vector and insert the new
             // vector into the ingress-to-egress array.
 
-            egressJoinVectorCircle.closest(egressStart, egressStart);
+            ingressJoinVectorCircle.closest(ingressEnd, ingressEnd);
 
             FlightPathUtils.setVectorFromCircle(
               vectors[vectorIndex++] ??= FlightPathUtils.createEmptyVector(),
-              egressJoinVectorCircle, egressJoinVectorStart, egressStart,
-              egressJoinVector.flags,
-              egressJoinVector.heading, egressJoinVector.isHeadingTrue
+              ingressJoinVectorCircle, ingressEnd, ingressJoinVectorEnd,
+              ingressJoinVector.flags,
+              ingressJoinVector.heading, ingressJoinVector.isHeadingTrue
             );
           } else {
-            // Egress joins the base flight path at or after the end of the joined vector. Therefore we can copy the
+            // Ingress joins the base flight path at or before the start of the joined vector. Therefore we can copy the
             // entire joined vector into the ingress-to-egress array.
 
-            Object.assign(vectors[vectorIndex++] ??= FlightPathUtils.createEmptyVector(), egressJoinVector);
+            Object.assign(vectors[vectorIndex++] ??= FlightPathUtils.createEmptyVector(), ingressJoinVector);
           }
         }
-      } else {
-        // There is no egress, but there is a base flight path vector flagged as the vector with which the egress
-        // joins. This is technically an invalid state, but we can easily just treat this as a regular "no-egress"
-        // case and copy the entire egress join vector into the resolved vectors array.
 
-        Object.assign(vectors[vectorIndex++] ??= FlightPathUtils.createEmptyVector(), egressJoinVector);
+        flightPathVectorIndex++;
+      }
+
+      // Now we must copy all base flight path vectors between the ingress-joined and egress-joined vectors (exclusive)
+      // into the ingress-to-egress array.
+
+      const end = Math.min(legCalc.flightPath.length, legCalc.egressJoinIndex < 0 ? Infinity : legCalc.egressJoinIndex);
+      for (let i = flightPathVectorIndex; i < end; i++) {
+        Object.assign(vectors[vectorIndex++] ??= FlightPathUtils.createEmptyVector(), legCalc.flightPath[i]);
+        flightPathVectorIndex++;
+      }
+
+      if (flightPathVectorIndex === legCalc.egressJoinIndex && egressJoinVector) {
+        if (firstEgressVector) {
+          // There is an egress transition and a valid base flight path vector at which the egress joins the base flight path.
+
+          // Check if the first egress vector joins the base flight path after the start of the joined base flight path vector.
+
+          const egressStart = FlightPathUtils.geoPointCache[0].set(firstEgressVector.startLat, firstEgressVector.startLon);
+          const egressJoinVectorStart = FlightPathUtils.geoPointCache[1].set(egressJoinVector.startLat, egressJoinVector.startLon);
+          const egressJoinVectorEnd = FlightPathUtils.geoPointCache[2].set(egressJoinVector.endLat, egressJoinVector.endLon);
+
+          const egressJoinVectorCircle = FlightPathUtils.setGeoCircleFromVector(egressJoinVector, FlightPathUtils.geoCircleCache[0]);
+
+          const egressStartAlongVectorDistance = FlightPathUtils.getAlongArcNormalizedDistance(
+            egressJoinVectorCircle, egressJoinVectorStart, egressJoinVectorEnd, egressStart
+          );
+          const normalizedTolerance = GeoMath.ANGULAR_TOLERANCE / UnitType.METER.convertTo(egressJoinVector.distance, UnitType.GA_RADIAN);
+
+          if (egressStartAlongVectorDistance > normalizedTolerance) {
+            // Egress joins the base flight path after the start of the joined vector. Therefore we must insert all or
+            // part of the joined vector into the ingress-to-egress array.
+
+            if (egressStartAlongVectorDistance < 1 - normalizedTolerance) {
+              // Egress joins the base flight path before the end of the joined vector. Therefore we must create a new
+              // vector that extends from the start of the joined vector up to where the egress joins and insert the new
+              // vector into the ingress-to-egress array.
+
+              egressJoinVectorCircle.closest(egressStart, egressStart);
+
+              FlightPathUtils.setVectorFromCircle(
+                vectors[vectorIndex++] ??= FlightPathUtils.createEmptyVector(),
+                egressJoinVectorCircle, egressJoinVectorStart, egressStart,
+                egressJoinVector.flags,
+                egressJoinVector.heading, egressJoinVector.isHeadingTrue
+              );
+            } else {
+              // Egress joins the base flight path at or after the end of the joined vector. Therefore we can copy the
+              // entire joined vector into the ingress-to-egress array.
+
+              Object.assign(vectors[vectorIndex++] ??= FlightPathUtils.createEmptyVector(), egressJoinVector);
+            }
+          }
+        } else {
+          // There is no egress, but there is a base flight path vector flagged as the vector with which the egress
+          // joins. This is technically an invalid state, but we can easily just treat this as a regular "no-egress"
+          // case and copy the entire egress join vector into the resolved vectors array.
+
+          Object.assign(vectors[vectorIndex++] ??= FlightPathUtils.createEmptyVector(), egressJoinVector);
+        }
       }
     }
 

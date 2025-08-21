@@ -1,7 +1,7 @@
 import {
-  Accessible, AdcEvents, AirportFacilityDataFlags, ApproachUtils, ChartIndex, ChartsClient, ConsumerValue, EventBus,
-  FacilityType, GeoPointInterface, ICAO, IcaoValue, MappedSubscribable, RunwayTransition, RunwayUtils, Subject,
-  Subscribable, UserSettingManager
+  Accessible, AdcEvents, AirportFacilityDataFlags, ApproachUtils, ChartIndex, ConsumerValue, EventBus, FacilityType,
+  GeoPointInterface, ICAO, IcaoValue, MappedSubscribable, RunwayTransition, RunwayUtils, Subject, Subscribable,
+  UserSettingManager
 } from '@microsoft/msfs-sdk';
 
 import { FmsFplUserDataKey, FmsFplVfrApproachData, FmsUtils } from '@microsoft/msfs-garminsdk';
@@ -204,7 +204,9 @@ export class G3XChartsSelectionManager {
   private async getAirportChartIndexData(airportIcao: IcaoValue, source: G3XChartsSource | undefined): Promise<AirportChartIndexData> {
     if (source) {
       try {
-        const chartIndex = await ChartsClient.getIndexForAirport(airportIcao, source.provider);
+        const chartService = source.getChartService();
+
+        const chartIndex = await chartService.getIndexForAirport(source.provider, airportIcao);
 
         const [
           airportDiagramPages,
@@ -213,11 +215,11 @@ export class G3XChartsSelectionManager {
           arrivalPages,
           approachPages
         ] = await Promise.all([
-          G3XChartsUtils.getPageDataFromMetadata(source.getAirportDiagramCharts(chartIndex)),
-          G3XChartsUtils.getPageDataFromMetadata(source.getInfoCharts(chartIndex)),
-          G3XChartsUtils.getPageDataFromMetadata(source.getDepartureCharts(chartIndex)),
-          G3XChartsUtils.getPageDataFromMetadata(source.getArrivalCharts(chartIndex)),
-          G3XChartsUtils.getPageDataFromMetadata(source.getApproachCharts(chartIndex)),
+          G3XChartsUtils.getPageDataFromMetadata(chartService, source.getAirportDiagramCharts(chartIndex)),
+          G3XChartsUtils.getPageDataFromMetadata(chartService, source.getInfoCharts(chartIndex)),
+          G3XChartsUtils.getPageDataFromMetadata(chartService, source.getDepartureCharts(chartIndex)),
+          G3XChartsUtils.getPageDataFromMetadata(chartService, source.getArrivalCharts(chartIndex)),
+          G3XChartsUtils.getPageDataFromMetadata(chartService, source.getApproachCharts(chartIndex)),
         ]);
 
         return {

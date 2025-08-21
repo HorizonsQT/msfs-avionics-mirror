@@ -7,7 +7,8 @@ export enum FlightLevelChangeType {
 export class AutopilotConfig {
   /** The type of flight level change. */
   public readonly flcType: FlightLevelChangeType = FlightLevelChangeType.FLC;
-
+  /** Whether the AP has FMS/MAN speed selection. The older style AP panel is manual speed only. */
+  public readonly hasFmsSpeed: boolean = true;
 
   /**
    * Creates a new SensorsConfig from a configuration document element.
@@ -23,10 +24,10 @@ export class AutopilotConfig {
           console.warn('AutopilotConfig: Multiple FlightLevelChange elements found! Ignoring all but the first one.');
         }
       }
-    } else {
-      // no error at the moment, just default FLC mode.
-      //console.warn('AutopilotConfig: No AutopilotConfig element found!');
     }
+
+    // We assume this is true for any install except the old style AP panel with SPD mode.
+    this.hasFmsSpeed = this.flcType !== FlightLevelChangeType.SPD;
   }
 
   /**

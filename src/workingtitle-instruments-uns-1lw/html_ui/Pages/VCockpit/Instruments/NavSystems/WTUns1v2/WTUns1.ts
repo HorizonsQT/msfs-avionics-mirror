@@ -1,6 +1,6 @@
-/// <reference types="@microsoft/msfs-types/pages/vcockpit/instruments/shared/baseinstrument" />
-/// <reference types="@microsoft/msfs-types/Pages/VCockpit/Core/VCockpit" />
-/// <reference types="@microsoft/msfs-types/js/avionics" />
+/// <reference types="@microsoft/msfs-types/pages/vcockpit/instruments/shared/baseinstrument" preserve="true" />
+/// <reference types="@microsoft/msfs-types/pages/vcockpit/core/vcockpit" preserve="true" />
+/// <reference types="@microsoft/msfs-types/js/avionics" preserve="true" />
 
 import { FsBaseInstrument } from '@microsoft/msfs-sdk';
 

@@ -1,7 +1,8 @@
 import { ComponentProps, ConsumerSubject, DisplayComponent, EventBus, FSComponent, Subject, Subscribable, VNode } from '@microsoft/msfs-sdk';
 
+import { WTLineControlEvents } from '@microsoft/msfs-wtlinesdk';
+
 import { InstrumentConfig, WT21InstrumentType } from '../../Config';
-import { WT21ControlEvents } from '../../WT21ControlEvents';
 
 import './FormatInfo.css';
 
@@ -31,7 +32,7 @@ export class FormatSwitch extends DisplayComponent<FormatInfoProps> {
     right: 'M 3, 2 l 4, 5 l -4, 5',
   };
 
-  private readonly formatChangeSub = ConsumerSubject.create(this.props.bus.getSubscriber<WT21ControlEvents>().on(`softkeyFormatChangeActive_${this.props.instrumentConfig.instrumentIndex as 1 | 2}`), false);
+  private readonly formatChangeSub = ConsumerSubject.create(this.props.bus.getSubscriber<WTLineControlEvents>().on(`softkeyFormatChangeActive_${this.props.instrumentConfig.instrumentIndex as 1 | 2}`), false);
 
   private readonly formatText = this.props.instrumentConfig.instrumentType === WT21InstrumentType.Pfd ? 'FORMAT' : (this.props.format === 'upper' ? 'UPPER FORMAT' : 'LOWER FORMAT');
 

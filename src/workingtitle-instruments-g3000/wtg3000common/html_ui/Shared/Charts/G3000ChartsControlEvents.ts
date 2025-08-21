@@ -5,7 +5,6 @@ import { G3000ChartsPageSelectionData } from './G3000ChartsTypes';
 
 /**
  * Base events used to control G3000 electronic charts.
- * @experimental
  */
 export interface BaseG3000ChartsControlEvents {
   /** Selects an airport. The event data is the ICAO of the airport to select. */
@@ -42,6 +41,5 @@ type IndexedEvents<Index extends ControllableDisplayPaneIndex> = {
 
 /**
  * Events used to control G3000 electronic charts.
- * @experimental
  */
 export type G3000ChartsControlEvents = IndexedEvents<ControllableDisplayPaneIndex>;

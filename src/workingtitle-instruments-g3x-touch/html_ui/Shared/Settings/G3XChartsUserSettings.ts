@@ -1,7 +1,6 @@
 import {
-  Consumer,
-  DefaultUserSettingManager, EventBus, UserSetting, UserSettingDefinition, UserSettingManager, UserSettingMap,
-  UserSettingRecord,
+  DefaultUserSettingManager, EventBus, OptionalUserSettingFromManager, UserSetting, UserSettingConsumerFromManager,
+  UserSettingDefinition, UserSettingFromManager, UserSettingManager, UserSettingMap, UserSettingRecord,
   UserSettingValue
 } from '@microsoft/msfs-sdk';
 
@@ -92,17 +91,17 @@ export class G3XChartsUserSettingManager implements UserSettingManager<G3XCharts
   }
 
   /** @inheritDoc */
-  public tryGetSetting<K extends string>(name: K): K extends keyof G3XChartsAllUserSettingTypes ? UserSetting<G3XChartsAllUserSettingTypes[K]> : undefined {
+  public tryGetSetting<K extends string>(name: K): OptionalUserSettingFromManager<G3XChartsAllUserSettingTypes, K> {
     return this.manager.tryGetSetting(name) as any;
   }
 
   /** @inheritDoc */
-  public getSetting<K extends keyof G3XChartsAllUserSettingTypes & string>(name: K): UserSetting<NonNullable<G3XChartsAllUserSettingTypes[K]>> {
+  public getSetting<K extends keyof G3XChartsAllUserSettingTypes & string>(name: K): UserSettingFromManager<G3XChartsAllUserSettingTypes, K> {
     return this.manager.getSetting(name);
   }
 
   /** @inheritDoc */
-  public whenSettingChanged<K extends keyof G3XChartsAllUserSettingTypes & string>(name: K): Consumer<NonNullable<G3XChartsAllUserSettingTypes[K]>> {
+  public whenSettingChanged<K extends keyof G3XChartsAllUserSettingTypes & string>(name: K): UserSettingConsumerFromManager<G3XChartsAllUserSettingTypes, K> {
     return this.manager.whenSettingChanged(name);
   }
 

@@ -1084,6 +1084,8 @@ export class LNavComputer {
     if (transitionMode === LNavTransitionMode.Unsuspend && leg.calculated) {
       if (leg.calculated.ingressJoinIndex < 0) {
         vectorEndIndex = 0;
+      } else if (leg.calculated.ingressJoinIndex >= leg.calculated.flightPath.length) {
+        vectorEndIndex = leg.calculated.flightPath.length;
       } else {
         const ingress = leg.calculated.ingress;
         const ingressJoinVector = leg.calculated.flightPath[leg.calculated.ingressJoinIndex];
@@ -1092,7 +1094,6 @@ export class LNavComputer {
         // joined vector.
         if (
           ingress.length > 0
-          && ingressJoinVector
           && GeoPoint.equals(
             ingress[ingress.length - 1].endLat,
             ingress[ingress.length - 1].endLon,

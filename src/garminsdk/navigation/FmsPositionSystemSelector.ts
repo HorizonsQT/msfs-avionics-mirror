@@ -111,7 +111,7 @@ export class FmsPositionSystemSelector {
     }
 
     if (this.fmsPosModes.size === 1) {
-      this._selectedIndex.set(this.fmsPosModes.keys().next().value);
+      this._selectedIndex.set(this.fmsPosModes.keys().next().value!);
       return;
     }
 
@@ -119,7 +119,6 @@ export class FmsPositionSystemSelector {
     let bestState = this.fmsPosModes.get(bestIndex)?.get();
 
     for (const index of this.fmsPosModes.keys()) {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const state = this.fmsPosModes.get(index)!.get();
       if (bestIndex < 0 || !bestState || FmsPositionSystemSelector.compareFmsPosMode(state, bestState) < 0) {
         bestIndex = index;

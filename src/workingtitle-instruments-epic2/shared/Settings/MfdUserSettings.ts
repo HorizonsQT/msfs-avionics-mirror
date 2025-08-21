@@ -1,5 +1,6 @@
 import {
-  Consumer, DefaultUserSettingManager, EventBus, UserSetting, UserSettingDefinition, UserSettingManager, UserSettingMap, UserSettingRecord, UserSettingValue
+  DefaultUserSettingManager, EventBus, OptionalUserSettingFromManager, UserSetting, UserSettingConsumerFromManager,
+  UserSettingDefinition, UserSettingFromManager, UserSettingManager, UserSettingMap, UserSettingRecord, UserSettingValue
 } from '@microsoft/msfs-sdk';
 
 import { AvionicsConfig } from '../AvionicsConfig';
@@ -225,17 +226,17 @@ export class MfdUserSettingManager implements UserSettingManager<MfdAllUserSetti
   }
 
   /** @inheritdoc */
-  public tryGetSetting<K extends string>(name: K): K extends keyof MfdAllUserSettingTypes ? UserSetting<MfdAllUserSettingTypes[K]> : undefined {
+  public tryGetSetting<K extends string>(name: K): OptionalUserSettingFromManager<MfdAllUserSettingTypes, K> {
     return this.manager.tryGetSetting(name) as any;
   }
 
   /** @inheritdoc */
-  public getSetting<K extends keyof MfdAllUserSettingTypes & string>(name: K): UserSetting<NonNullable<MfdAllUserSettingTypes[K]>> {
+  public getSetting<K extends keyof MfdAllUserSettingTypes & string>(name: K): UserSettingFromManager<MfdAllUserSettingTypes, K> {
     return this.manager.getSetting(name);
   }
 
   /** @inheritdoc */
-  public whenSettingChanged<K extends keyof MfdAllUserSettingTypes & string>(name: K): Consumer<NonNullable<MfdAllUserSettingTypes[K]>> {
+  public whenSettingChanged<K extends keyof MfdAllUserSettingTypes & string>(name: K): UserSettingConsumerFromManager<MfdAllUserSettingTypes, K> {
     return this.manager.whenSettingChanged(name);
   }
 
@@ -366,7 +367,7 @@ export class MfdUserSettingManager implements UserSettingManager<MfdAllUserSetti
     const map: UserSettingMap<MfdAliasedUserSettingTypes, MfdIndexedUserSettingTypes<Index>> = {};
 
     for (const name of MfdUserSettingManager.INDEXED_SETTING_NAMES) {
-      map[name] = `${name}_${index}`;
+      map[name] = `${name}_${index}` as const;
     }
 
     return map;

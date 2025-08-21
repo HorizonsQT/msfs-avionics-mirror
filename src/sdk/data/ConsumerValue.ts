@@ -1,4 +1,5 @@
 import { Accessible } from '../sub/Accessible';
+import { ReadonlyLifecycle } from '../sub/Lifecycle';
 import { Subscription } from '../sub/Subscription';
 import { Consumer } from './Consumer';
 
@@ -191,5 +192,11 @@ export class ConsumerValue<T> implements Accessible<T>, Subscription {
    */
   public static create<T>(consumer: Consumer<T> | null, initialValue: T): ConsumerValue<T> {
     return new ConsumerValue<T>(consumer, initialValue);
+  }
+
+  /** @inheritdoc */
+  public withLifecycle(lifecycle: ReadonlyLifecycle): this {
+    lifecycle.register(this);
+    return this;
   }
 }

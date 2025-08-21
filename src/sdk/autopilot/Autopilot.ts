@@ -1,4 +1,4 @@
-/// <reference types="@microsoft/msfs-types/coherent/apcontroller" />
+/// <reference types="@microsoft/msfs-types/coherent/apcontroller" preserve="true" />
 
 import { CdiEvents } from '../cdi/CdiEvents';
 import { CdiUtils } from '../cdi/CdiUtils';

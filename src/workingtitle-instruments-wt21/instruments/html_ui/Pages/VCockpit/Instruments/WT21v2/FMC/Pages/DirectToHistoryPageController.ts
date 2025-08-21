@@ -3,9 +3,8 @@ import {
   FlightPlannerEvents, FmcListUtility, FmcRenderTemplate, FmcRenderTemplateRow, LegType, NavMath, RawFormatter, Subject, Subscription
 } from '@microsoft/msfs-sdk';
 
-import { WT21FmsUtils, WT21LNavDataEvents } from '@microsoft/msfs-wt21-shared';
+import { WT21Fms, WT21FmsUtils, WT21LNavDataEvents } from '@microsoft/msfs-wt21-shared';
 
-import { WT21Fms } from '../FlightPlan/WT21Fms';
 import { WT21FmcPage } from '../WT21FmcPage';
 import { DirectToPage } from './DirectToPage';
 import { DirectToPageItem, DirectToPageStore } from './DirectToPageStore';

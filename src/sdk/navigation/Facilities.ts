@@ -820,6 +820,9 @@ export interface IntersectionFacility extends Facility {
 
   /** This distance to the nearest VOR. */
   readonly nearestVorDistance: number;
+
+  /** The type of this intersection. */
+  readonly type: IntersectionType;
 }
 
 /**

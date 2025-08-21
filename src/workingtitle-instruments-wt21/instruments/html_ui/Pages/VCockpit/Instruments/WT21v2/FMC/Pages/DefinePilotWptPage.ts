@@ -1,15 +1,25 @@
 import {
-  DisplayField, FmcRenderTemplate, ICAO, LatLongInterface, MappedSubject, PageLinkField, Subject, TextInputField, UserFacilityUtils
+  DisplayField, FacilityUtils, FmcRenderTemplate, FmcRenderTemplateColumn, GeoPoint, ICAO, LatLongInterface,
+  MappedSubject, PageLinkField,
+  Subject,
+  TextInputField, UserFacilityUtils
 } from '@microsoft/msfs-sdk';
 
+import { WTLineFacilityUtils } from '@microsoft/msfs-wtlinesdk';
+
+import { PlaceBearingDistanceInput, PlaceBearingPlaceBearingInput } from '@microsoft/msfs-wt21-shared';
 import { LatLongTextFormat, PlaceBearingDistanceInputFormat, PlaceBearingPlaceBearingInputFormat, StringInputFormat } from '../Framework/FmcFormats';
-import { PlaceBearingDistanceInput, PlaceBearingPlaceBearingInput, WT21PilotWaypointUtils } from '../Navigation/WT21PilotWaypointUtils';
 import { WT21FmcPage } from '../WT21FmcPage';
+import { WaypointAlreadyExistsPrompt } from './Common/WaypointAlreadyExistsPrompt';
 
 /**
  * Fix Info page
  */
 export class DefinePilotWptPage extends WT21FmcPage {
+  private static readonly geoPointCache = [new GeoPoint(0, 0)];
+
+  private readonly wptAlreadyExistsPrompt = new WaypointAlreadyExistsPrompt();
+
   private readonly identSub = Subject.create<string | null>(null);
 
   private readonly latLongSub = Subject.create<LatLongInterface | null>(null);
@@ -41,9 +51,13 @@ export class DefinePilotWptPage extends WT21FmcPage {
       const facility = await this.screen.selectWptFromIdent(value.placeIdent, this.fms.ppos);
 
       if (facility) {
-        const pos = WT21PilotWaypointUtils.createPlaceBearingDistance(facility, value.bearing, false, value.distance);
+        if (Math.abs(facility.lat) > 80) {
+          return Promise.reject('N/A IN POLAR REGION');
+        } else {
+          const pos = FacilityUtils.getLatLonFromRadialDistance(facility, value.bearing, value.distance, DefinePilotWptPage.geoPointCache[0]);
 
-        this.latLongSub.set({ lat: pos.lat, long: pos.lon });
+          this.latLongSub.set({ lat: pos.lat, long: pos.lon });
+        }
       } else {
         return Promise.reject('NOT IN DATA BASE');
       }
@@ -64,14 +78,16 @@ export class DefinePilotWptPage extends WT21FmcPage {
       const facilityB = await this.screen.selectWptFromIdent(value.placeBIdent, this.fms.ppos);
 
       if (facilityA && facilityB) {
-        const pos = WT21PilotWaypointUtils.createPlaceBearingPlaceBearing(
-          facilityA, value.bearingA, facilityB, value.bearingB,
-        );
-
-        if (pos) {
-          this.latLongSub.set({ lat: pos.lat, long: pos.lon });
+        if (Math.abs(facilityA.lat) > 80 || Math.abs(facilityB.lat) > 80) {
+          return Promise.reject('N/A IN POLAR REGION');
         } else {
-          return Promise.reject('NO INTERSECTION');
+          const pos = FacilityUtils.getLatLonFromRadialRadial(facilityA, value.bearingA, facilityB, value.bearingB, DefinePilotWptPage.geoPointCache[0]);
+
+          if (pos) {
+            this.latLongSub.set({ lat: pos.lat, long: pos.lon });
+          } else {
+            return Promise.reject('NO INTERSECTION');
+          }
         }
       } else {
         return Promise.reject('NOT IN DATA BASE');
@@ -104,30 +120,38 @@ export class DefinePilotWptPage extends WT21FmcPage {
       const lla = this.latLongSub.get();
 
       if (ident !== null && lla !== null) {
-        const icao = ICAO.value('U', '', '', ident.substring(0, 5));
+        const icao = ICAO.value('U', '', WTLineFacilityUtils.USER_FACILITY_SCOPE, ident.substring(0, 5));
 
-        const userFacilities = this.fms.getUserFacilities();
+        const userFacilities = this.fms.getPilotDefinedWaypointsArray();
 
         if (userFacilities.length >= 100) {
           return Promise.reject('PILOT WPT LIST FULL');
         }
 
-        const existing = userFacilities.some((it) => ICAO.valueEquals(it.icaoStruct, icao));
+        // Prompt to replace waypoint if needed
+        if (this.fms.pilotDefinedWaypointExistsWithIdent(icao.ident)) {
+          try {
+            const replace = await this.wptAlreadyExistsPrompt.showPromptAndWaitForResponse();
 
-        if (existing) {
-          return Promise.reject('');
-        } else {
-          this.fms.addUserFacility(UserFacilityUtils.createFromLatLon(icao, lla.lat, lla.long));
-
-          this.identSub.set(null);
-          this.latLongSub.set(null);
-          this.pbdSub.set(null);
-          this.pbpbSub.set(null);
-
-          this.screen.navigateTo('/pilot-wpt-list');
-
-          return true;
+            if (!replace) {
+              return true;
+            }
+          } catch (e) {
+            // Do nothing if the page is navigated away from
+            return true;
+          }
         }
+
+        this.fms.addUserFacility(UserFacilityUtils.createFromLatLon(icao, lla.lat, lla.long));
+
+        this.identSub.set(null);
+        this.latLongSub.set(null);
+        this.pbdSub.set(null);
+        this.pbpbSub.set(null);
+
+        this.screen.navigateTo('/pilot-wpt-list');
+
+        return true;
       }
 
       return false;
@@ -136,8 +160,29 @@ export class DefinePilotWptPage extends WT21FmcPage {
 
   private readonly ReturnLink = PageLinkField.createLink(this, 'RETURN>', '/database');
 
+  private readonly WaypointAlreadyExistsReplaceField = this.wptAlreadyExistsPrompt.createReplaceComponent(this);
+
+  private readonly WaypointAlreadyExistsCancelField = this.wptAlreadyExistsPrompt.createCancelComponent(this);
+
+  /** @inheritDoc */
+  public init(): void {
+    super.init();
+
+    this.addBinding(this.wptAlreadyExistsPrompt.shown.sub(() => this.invalidate()));
+  }
+
   /** @inheritDoc */
   public render(): FmcRenderTemplate[] {
+    let L6: FmcRenderTemplateColumn = this.StoreWptField;
+    let R6: FmcRenderTemplateColumn = this.ReturnLink;
+
+    let footer = '------------------------[blue]';
+    if (this.wptAlreadyExistsPrompt.shown.get()) {
+      L6 = this.WaypointAlreadyExistsReplaceField;
+      R6 = this.WaypointAlreadyExistsCancelField;
+      footer = WaypointAlreadyExistsPrompt.CduFooter;
+    }
+
     return [
       [
         ['', '', 'DEFINE PILOT WPT[blue]'],
@@ -151,8 +196,8 @@ export class DefinePilotWptPage extends WT21FmcPage {
         [this.PlaceBearingDistanceField],
         ['PLACE BRG  /PLACE BRG[blue]'],
         [this.PlaceBearingPlaceBearingInputField],
-        ['', '', '------------------------[blue]'],
-        [this.StoreWptField, this.ReturnLink],
+        [footer],
+        [L6, R6],
       ],
     ];
   }

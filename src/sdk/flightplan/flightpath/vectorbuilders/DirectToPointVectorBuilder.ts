@@ -1,4 +1,4 @@
-import { GeoCircle } from '../../../geo/GeoCircle';
+import { GeoCircle, ReadonlyGeoCircle } from '../../../geo/GeoCircle';
 import { LatLonInterface } from '../../../geo/GeoInterfaces';
 import { GeoMath } from '../../../geo/GeoMath';
 import { GeoPoint } from '../../../geo/GeoPoint';
@@ -79,7 +79,7 @@ export class DirectToPointVectorBuilder {
     vectors: FlightPathVector[],
     index: number,
     start: ReadonlyFloat64Array | LatLonInterface,
-    startPath: GeoCircle,
+    startPath: ReadonlyGeoCircle,
     end: ReadonlyFloat64Array | LatLonInterface,
     desiredTurnRadius: number,
     desiredTurnDirection?: VectorTurnDirection,
@@ -94,7 +94,7 @@ export class DirectToPointVectorBuilder {
     vectors: FlightPathVector[],
     index: number,
     start: ReadonlyFloat64Array | LatLonInterface,
-    startPath: GeoCircle | number,
+    startPath: ReadonlyGeoCircle | number,
     end: ReadonlyFloat64Array | LatLonInterface,
     desiredTurnRadius: number,
     desiredTurnDirection?: VectorTurnDirection,

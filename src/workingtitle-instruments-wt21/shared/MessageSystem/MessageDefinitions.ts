@@ -1,42 +1,27 @@
+import { WTLineLegacyMessageIDs } from '@microsoft/msfs-wtlinesdk';
+
 import { MESSAGE_LEVEL, MESSAGE_TARGET, MessageDefinition } from './MessageDefinition';
 import { OperatingMessage } from './OperatingMessage';
 
-/** Enumeration for WT21 FMS Messages */
-export enum FMS_MESSAGE_ID {
-  RESET_INITIAL_POS,
-  INITIALIZE_POSITION,
-  NO_FLIGHT_PLAN,
-  FPLN_DISCONTINUITY,
-  DISCONTINUITY,
-  CHECK_SPEED,
-  CHK_ALT_SEL,
-  HOLD,
-  TOD,
-  OCEANIC,
-  TERM,
-  LV_TERM,
-  LPV_TERM,
-  APPR,
-  GPS_APPR,
-  LV_APPR,
-  LPV_APPR,
-  SEQ_INHB,
-  LOC_WILL_BE_TUNED,
-  CHECK_LOC_TUNING,
-  PATH_BELOW_AC,
-  NO_VPATH_VECTORS,
-  NO_VPATH_CONDITION,
-  NO_VPATH_PILOT_CMD,
-  NO_VPATH_TAE,
-  NO_VPATH_XTK,
-  NO_VPATH_THIS_LEG,
-  CHECK_FPLN_ALT,
-  DECELERATE,
-  UNABLE_NEXT_ALT,
-  KBINPUTACTIVE,
-  DLFPLNLOADED,
-  DLFPLNFAIL,
-}
+/**
+ * Enum implementation value for WT21 message IDs
+ *
+ * The original is in WTLineSDK because TypeScript won't consider the types mutually assignable if
+ * they are not literally the sam enum.
+ *
+ * This is to be replaced with a common generic message system down the road.
+ */
+export const FMS_MESSAGE_ID  = WTLineLegacyMessageIDs;
+
+/**
+ * Enum type for WT21 message IDs
+ *
+ * The original is in WTLineSDK because TypeScript won't consider the types mutually assignable if
+ * they are not literally the sam enum.
+ *
+ * This is to be replaced with a common generic message system down the road.
+ */
+export type FMS_MESSAGE_ID  = WTLineLegacyMessageIDs;
 
 /** A class that contains the WT21 message definitions */
 export class MessageDefinitions {

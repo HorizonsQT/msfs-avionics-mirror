@@ -8,7 +8,7 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "forceConsistentCasingInFileNames": true,
-    "outDir": "build/html_ui/Pages/VCockpit",
+    "outDir": "build/workingtitle-instruments-epic2-v2/html_ui/Pages/VCockpit",
     "declaration": true,
     "declarationMap": true,
     "removeComments": false,
@@ -23,17 +23,8 @@
     }
   },
   "exclude": [
-    "Gulpfile.ts",
     "**/node_modules",
     "**/build",
     "**/dist"
-  ],
-  "ts-node": {
-    "transpiler": "@sucrase/ts-node-plugin",
-    "transpileOnly": true,
-    "compilerOptions": {
-      "module": "commonjs"
-    },
-    "files": true
-  }
+  ]
 }

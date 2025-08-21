@@ -70,22 +70,37 @@ export class TrackToFixLegCalculator extends AbstractFlightPathLegCalculator {
       // If the leg starts in a discontinuity, then only build vectors if we are configured to calculate discontinuity
       // vectors.
       if (!state.isDiscontinuity || options.calculateDiscontinuityVectors) {
-        const flags = (state.isDiscontinuity ? FlightPathVectorFlags.Discontinuity : FlightPathVectorFlags.None);
+        const flags = (state.isDiscontinuity ? FlightPathVectorFlags.Discontinuity : FlightPathVectorFlags.None)
+          | (state.isFallback ? FlightPathVectorFlags.Fallback : FlightPathVectorFlags.None);
 
-        if ((state.isDiscontinuity || state.isFallback) && state.currentCourse !== undefined) {
+        // Build a direct-to path if...
+        const buildDirect
+          // ... the course at the start of the leg is defined...
+          = state.currentCourse !== undefined
+          // ... AND...
+          && (
+            // ... depending on whether the leg starts in a discontinuity, if...
+            state.isDiscontinuity
+              // ... (YES) we are not forced to build great-circle paths through discontinuities.
+              ? !options.useGreatCirclePathForDiscontinuity
+              // ... (NO) the leg starts in a fallback state.
+              : state.isFallback
+          );
+
+        if (buildDirect) {
           vectorIndex += this.directToPointVectorBuilder.build(
             vectors, vectorIndex,
-            state.currentPosition, state.currentCourse,
+            state.currentPosition, state.currentCourse!,
             terminatorPos,
             state.getDesiredTurnRadius(calculateIndex), undefined,
-            flags | (state.isFallback ? FlightPathVectorFlags.Fallback : FlightPathVectorFlags.None)
+            flags
           );
         } else {
           // Build vectors for a great-circle path from the start to the leg terminator.
           vectorIndex += this.circleVectorBuilder.buildGreatCircle(
             vectors, vectorIndex,
             state.currentPosition, terminatorPos,
-            state.currentCourse,
+            state.currentCourse ?? 0,
             flags
           );
         }
@@ -99,7 +114,7 @@ export class TrackToFixLegCalculator extends AbstractFlightPathLegCalculator {
     if (
       hasInvalidStart
       && leg.leg.type === LegType.IF
-      && ICAO.isFacility(leg.leg.fixIcao, FacilityType.RWY)
+      && ICAO.isValueFacility(leg.leg.fixIcaoStruct, FacilityType.RWY)
     ) {
       const facility = this.facilityCache.getFacility(leg.leg.fixIcaoStruct);
       if (facility && FacilityUtils.isFacilityType(facility, FacilityType.RWY)) {

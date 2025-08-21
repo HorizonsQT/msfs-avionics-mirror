@@ -23,18 +23,9 @@
     }
   },
   "exclude": [
-    "**/Gulpfile.ts",
     "**/build",
     "**/dist",
     "**/node_modules",
     "wtg3000common"
-  ],
-  "ts-node": {
-    "transpiler": "@sucrase/ts-node-plugin",
-    "transpileOnly": true,
-    "compilerOptions": {
-      "module": "commonjs"
-    },
-    "files": true
-  }
+  ]
 }

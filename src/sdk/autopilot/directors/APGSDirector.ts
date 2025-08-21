@@ -1,4 +1,4 @@
-/// <reference types="@microsoft/msfs-types/js/simvar" />
+/// <reference types="@microsoft/msfs-types/js/simvar" preserve="true" />
 
 import { ConsumerValue } from '../../data/ConsumerValue';
 import { EventBus } from '../../data/EventBus';
@@ -389,7 +389,7 @@ export class APGSDirector implements PlaneDirector {
       // glideslope angle, and glideslope error.
       const heightM = distanceM * Math.tan((gsAngle + gsError) * Avionics.Utils.DEG2RAD);
       const groundSpeedMps = SimVar.GetSimVarValue('GROUND VELOCITY', SimVarValueType.MetersPerSecond);
-      const vsMps = SimVar.GetSimVarValue('VERTICAL SPEED', SimVarValueType.MetersPerSecond);
+      const vsMps = SimVar.GetSimVarValue('VELOCITY WORLD Y', SimVarValueType.MetersPerSecond);
 
       const hypotSq = distanceM * distanceM + heightM * heightM;
       const heightTimesGs = heightM * groundSpeedMps;

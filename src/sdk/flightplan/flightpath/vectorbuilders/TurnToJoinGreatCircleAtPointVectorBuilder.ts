@@ -1,4 +1,4 @@
-import { GeoCircle } from '../../../geo/GeoCircle';
+import { GeoCircle, ReadonlyGeoCircle } from '../../../geo/GeoCircle';
 import { LatLonInterface } from '../../../geo/GeoInterfaces';
 import { GeoPoint } from '../../../geo/GeoPoint';
 import { UnitType } from '../../../math/NumberUnit';
@@ -45,11 +45,11 @@ export class TurnToJoinGreatCircleAtPointVectorBuilder {
     vectors: FlightPathVector[],
     index: number,
     start: ReadonlyFloat64Array | LatLonInterface,
-    startPath: GeoCircle,
+    startPath: ReadonlyGeoCircle,
     startTurnRadius: number,
     startTurnDirection: VectorTurnDirection,
     end: ReadonlyFloat64Array | LatLonInterface,
-    endPath: GeoCircle,
+    endPath: ReadonlyGeoCircle,
     endTurnRadius: number,
     endTurnDirection: VectorTurnDirection,
     startTurnVectorFlags = 0,

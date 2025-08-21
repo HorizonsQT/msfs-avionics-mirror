@@ -1,4 +1,4 @@
-/// <reference types="@microsoft/msfs-types/js/simvar" />
+/// <reference types="@microsoft/msfs-types/js/simvar" preserve="true" />
 
 import { SimVarValueType } from '../../data/SimVars';
 import { MathUtils } from '../../math/MathUtils';
@@ -67,7 +67,7 @@ export type APAltCapDirectorActivationFunc = (
  */
 export class APAltCapDirector implements PlaneDirector {
   private static readonly DEFAULT_TARGET_CHANGE_INHIBIT_MS = 500;
-  private static readonly EMPTY_FUNCTION = (): void => {};
+  private static readonly EMPTY_FUNCTION = (): void => { };
 
   private readonly targetChangeInhibitTimer?: DebounceTimer;
   private readonly targetChangeInhibitTime: number | null = APAltCapDirector.DEFAULT_TARGET_CHANGE_INHIBIT_MS;

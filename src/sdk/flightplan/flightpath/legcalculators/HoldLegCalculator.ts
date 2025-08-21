@@ -63,14 +63,14 @@ export class HoldLegCalculator extends AbstractFlightPathLegCalculator {
     const leg = legs[calculateIndex];
     const calcs = leg.calculated!;
     const vectors = calcs.flightPath;
-    const ingress = calcs.ingress;
+    const ingressBase = calcs.ingressBase;
 
     const holdPos = this.getTerminatorPosition(leg.leg, this.geoPointCache[0], leg.leg.fixIcaoStruct);
 
     if (!holdPos) {
       vectors.length = 0;
-      ingress.length = 0;
-      calcs.ingressJoinIndex = -1;
+      ingressBase.length = 0;
+      calcs.ingressBaseJoinIndex = -1;
       state.isFallback = false;
       return;
     }
@@ -93,26 +93,41 @@ export class HoldLegCalculator extends AbstractFlightPathLegCalculator {
       // build a path to the hold position and insert it into the ingress vectors.
 
       if (!state.currentPosition.equals(holdPos)) {
-        const startPath = state.currentCourse !== undefined
-          ? this.geoCircleCache[1].setAsGreatCircle(state.currentPosition, state.currentCourse)
-          : undefined;
+        if (options.useGreatCirclePathForDiscontinuity) {
+          // We are forced to build great-circle paths through discontinuities.
 
-        ingressVectorIndex += this.directToJoinGreatCircleToPointVectorBuilder.build(
-          ingress, ingressVectorIndex,
-          state.currentPosition, startPath,
-          holdPos, inboundPath,
-          desiredTurnRadius,
-          undefined,
-          FlightPathVectorFlags.Discontinuity, true
-        );
+          ingressVectorIndex += this.circleVectorBuilder.buildGreatCircle(
+            ingressBase, vectorIndex,
+            state.currentPosition, holdPos,
+            state.currentCourse ?? -course,
+            FlightPathVectorFlags.Discontinuity
+          );
+        } else {
+          // We are free to build non-great-circle paths. Therefore, attempt to build a path that ends at the hold
+          // position in the same direction as the inbound course.
+
+          const startPath = state.currentCourse !== undefined
+            ? this.geoCircleCache[1].setAsGreatCircle(state.currentPosition, state.currentCourse)
+            : undefined;
+
+          ingressVectorIndex += this.directToJoinGreatCircleToPointVectorBuilder.build(
+            ingressBase, ingressVectorIndex,
+            state.currentPosition, startPath,
+            holdPos, inboundPath,
+            desiredTurnRadius,
+            undefined,
+            FlightPathVectorFlags.Discontinuity, true
+          );
+        }
       }
 
       state.currentPosition.set(holdPos);
       state.currentCourse = course;
     } else {
       if (state.isDiscontinuity || !state.currentPosition.isValid()) {
-        // We are starting in a discontinuity or the current flight path position is not defined. We will set the
-        // current position to the hold fix and the current course to the hold (inbound) course.
+        // We are starting in a discontinuity (and we are not calculating discontinuity vectors - this would have been
+        // handled in the above case) or the current flight path position is not defined. We will set the current
+        // position to the hold fix and the current course to the hold (inbound) course.
         state.currentPosition.set(holdPos);
         state.currentCourse = course;
       } else {
@@ -122,13 +137,13 @@ export class HoldLegCalculator extends AbstractFlightPathLegCalculator {
           // vectors.
 
           ingressVectorIndex += this.circleVectorBuilder.buildGreatCircle(
-            ingress, ingressVectorIndex,
+            ingressBase, ingressVectorIndex,
             state.currentPosition, holdPos,
             state.currentCourse
           );
 
           if (ingressVectorIndex > 0) {
-            state.currentCourse = FlightPathUtils.getVectorFinalCourse(ingress[ingressVectorIndex - 1]);
+            state.currentCourse = FlightPathUtils.getVectorFinalCourse(ingressBase[ingressVectorIndex - 1]);
           } else {
             state.currentCourse = undefined;
           }
@@ -142,7 +157,7 @@ export class HoldLegCalculator extends AbstractFlightPathLegCalculator {
     state.currentCourse ??= course;
 
     let distanceRad = leg.leg.distanceMinutes
-      ? UnitType.NMILE.convertTo(leg.leg.distance * (state.planeSpeed.asUnit(UnitType.KNOT) / 60), UnitType.GA_RADIAN)
+      ? UnitType.NMILE.convertTo(leg.leg.distance * (state.getPlaneSpeed(calculateIndex) / 60), UnitType.GA_RADIAN)
       : UnitType.METER.convertTo(leg.leg.distance, UnitType.GA_RADIAN);
 
     const turnDirection = leg.leg.turnDirection === LegTurnDirection.Right ? 'right' : 'left';
@@ -240,7 +255,7 @@ export class HoldLegCalculator extends AbstractFlightPathLegCalculator {
         // the turn from the inbound to outbound leg.
 
         ingressVectorIndex += this.joinGreatCircleToPointVectorBuilder.build(
-          ingress, ingressVectorIndex,
+          ingressBase, ingressVectorIndex,
           state.currentPosition, this.geoCircleCache[4].setAsGreatCircle(state.currentPosition, state.currentCourse),
           outboundEndVec, outboundPath,
           turnDirection, turnRadiusMeters,
@@ -249,10 +264,10 @@ export class HoldLegCalculator extends AbstractFlightPathLegCalculator {
           FlightPathVectorFlags.HoldDirectEntry
         );
 
-        calcs.ingressJoinIndex = 1;
-      } else if (BitFlags.isAny(ingress[0]?.flags ?? 0, FlightPathVectorFlags.AnticipatedTurn)) {
+        calcs.ingressBaseJoinIndex = 1;
+      } else if (BitFlags.isAny(ingressBase[0]?.flags ?? 0, FlightPathVectorFlags.AnticipatedTurn)) {
         // Don't erase turn anticipation for direct entries
-        ingressVectorIndex = ingress.length;
+        ingressVectorIndex = ingressBase.length;
       }
     } else if (directionalEntryCourse > 110) {
       // ---- TEARDROP ENTRY ----
@@ -262,7 +277,7 @@ export class HoldLegCalculator extends AbstractFlightPathLegCalculator {
 
         const outboundCourse = course + 135 * turnDirectionSign;
         const numTurnVectorsAdded = this.circleVectorBuilder.buildTurnToCourse(
-          ingress, ingressVectorIndex,
+          ingressBase, ingressVectorIndex,
           holdPosVec,
           turnRadiusMeters, turnDirection === 'left' ? 'right' : 'left',
           state.currentCourse, outboundCourse,
@@ -271,14 +286,14 @@ export class HoldLegCalculator extends AbstractFlightPathLegCalculator {
 
         if (numTurnVectorsAdded > 0) {
           ingressVectorIndex += numTurnVectorsAdded;
-          const turnVector = ingress[ingressVectorIndex - 1];
+          const turnVector = ingressBase[ingressVectorIndex - 1];
           state.currentPosition.set(turnVector.endLat, turnVector.endLon);
           state.currentCourse = FlightPathUtils.getVectorFinalCourse(turnVector);
         }
       }
 
       ingressVectorIndex += this.joinGreatCircleToPointVectorBuilder.build(
-        ingress, ingressVectorIndex,
+        ingressBase, ingressVectorIndex,
         state.currentPosition, this.geoCircleCache[4].setAsGreatCircle(state.currentPosition, state.currentCourse),
         holdPos, inboundPath,
         turnDirection, turnRadiusMeters,
@@ -290,7 +305,7 @@ export class HoldLegCalculator extends AbstractFlightPathLegCalculator {
       if (skipRacetrack) {
         // If we skip the racetrack, then remove the part of the hold entry that is coincident with the inbound leg.
 
-        const lastEntryVector = ingress[ingressVectorIndex - 1];
+        const lastEntryVector = ingressBase[ingressVectorIndex - 1];
         if (lastEntryVector && FlightPathUtils.isVectorGreatCircle(lastEntryVector) && holdPos.equals(lastEntryVector.endLat, lastEntryVector.endLon)) {
           if (UnitType.METER.convertTo(lastEntryVector.distance, UnitType.GA_RADIAN) > distanceRad + GeoMath.ANGULAR_TOLERANCE) {
             const lastEntryVectorEnd = holdPos.offset(course + 180, distanceRad, this.geoPointCache[1]);
@@ -303,14 +318,14 @@ export class HoldLegCalculator extends AbstractFlightPathLegCalculator {
         }
       }
 
-      calcs.ingressJoinIndex = 0;
+      calcs.ingressBaseJoinIndex = 0;
     } else if (directionalEntryCourse < -70) {
       // ---- PARALLEL ENTRY ----
 
       // TODO: anticipate the turn onto the parallel course so that we don't overshoot the inbound path.
 
       const numTurnVectorsAdded = this.circleVectorBuilder.buildTurnToCourse(
-        ingress, ingressVectorIndex,
+        ingressBase, ingressVectorIndex,
         holdPosVec,
         turnRadiusMeters, turnDirection === 'left' ? 'right' : 'left',
         state.currentCourse, oppositeCourse,
@@ -319,13 +334,13 @@ export class HoldLegCalculator extends AbstractFlightPathLegCalculator {
 
       if (numTurnVectorsAdded > 0) {
         ingressVectorIndex += numTurnVectorsAdded;
-        const turnVector = ingress[ingressVectorIndex - 1];
+        const turnVector = ingressBase[ingressVectorIndex - 1];
         state.currentPosition.set(turnVector.endLat, turnVector.endLon);
         state.currentCourse = FlightPathUtils.getVectorFinalCourse(turnVector);
       }
 
       ingressVectorIndex += this.procTurnVectorBuilder.build(
-        ingress, ingressVectorIndex,
+        ingressBase, ingressVectorIndex,
         state.currentPosition, this.geoCircleCache[4].setAsGreatCircle(state.currentPosition, state.currentCourse),
         holdPos, inboundPath,
         course + 135 * turnDirectionSign,
@@ -334,12 +349,18 @@ export class HoldLegCalculator extends AbstractFlightPathLegCalculator {
         FlightPathVectorFlags.HoldParallelEntry
       );
 
-      calcs.ingressJoinIndex = 0;
+      calcs.ingressBaseJoinIndex = 0;
     }
 
-    ingress.length = ingressVectorIndex;
-    if (ingress.length === 0) {
+    ingressBase.length = ingressVectorIndex;
+    if (ingressBase.length === 0) {
+      calcs.ingressBaseJoinIndex = -1;
+      calcs.ingress.length = 0;
       calcs.ingressJoinIndex = -1;
+    } else {
+      FlightPathUtils.deepCopyVectorArray(ingressBase, calcs.ingress);
+      calcs.ingress.length = ingressBase.length;
+      calcs.ingressJoinIndex = calcs.ingressBaseJoinIndex;
     }
 
     if (!skipRacetrack) {

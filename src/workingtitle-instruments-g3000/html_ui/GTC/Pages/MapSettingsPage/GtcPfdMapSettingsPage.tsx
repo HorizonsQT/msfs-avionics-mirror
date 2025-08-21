@@ -1,7 +1,13 @@
-import { DisplayComponent, FSComponent, NodeReference, Subject, Subscribable, SubscribableSet, UserSettingValueFilter, VNode } from '@microsoft/msfs-sdk';
+import {
+  FSComponent, NodeReference, Subject, Subscribable, SubscribableSet, UserSettingValueFilter, VNode
+} from '@microsoft/msfs-sdk';
 
-import { MapTerrainSettingMode, MapUtils, TrafficSystemType, UnitsUserSettings } from '@microsoft/msfs-garminsdk';
-import { G3000MapUserSettingTypes, MapAliasedUserSettingManager, MapRangeSettingDisplay, PfdMapLayoutSettingMode, PfdUserSettings } from '@microsoft/msfs-wtg3000-common';
+import { MapTerrainSettingMode, MapUtils, TerrainSystemStateDataProvider, UnitsUserSettings } from '@microsoft/msfs-garminsdk';
+
+import {
+  AvionicsConfig, G3000MapUserSettingTypes, MapAliasedUserSettingManager, MapRangeSettingDisplay,
+  PfdMapLayoutSettingMode, PfdUserSettings
+} from '@microsoft/msfs-wtg3000-common';
 
 import { GtcList } from '../../Components/List/GtcList';
 import { GtcListItem } from '../../Components/List/GtcListItem';
@@ -13,9 +19,7 @@ import { GtcToggleTouchButton } from '../../Components/TouchButton/GtcToggleTouc
 import { GtcTouchButton } from '../../Components/TouchButton/GtcTouchButton';
 import { GtcValueTouchButton } from '../../Components/TouchButton/GtcValueTouchButton';
 import { SetValueTouchButton } from '../../Components/TouchButton/SetValueTouchButton';
-import { ToggleTouchButton } from '../../Components/TouchButton/ToggleTouchButton';
 import { TouchButton } from '../../Components/TouchButton/TouchButton';
-import { GtcGenericView } from '../../GtcService/GtcGenericView';
 import { GtcControlMode, GtcService, GtcViewLifecyclePolicy } from '../../GtcService/GtcService';
 import { GtcView, GtcViewProps } from '../../GtcService/GtcView';
 import { GtcViewKeys } from '../../GtcService/GtcViewKeys';
@@ -23,21 +27,22 @@ import { SidebarState } from '../../GtcService/Sidebar';
 import { GtcMapDetailSettingIcon } from './GtcMapDetailSettingIcon';
 import { GtcMapDetailSettingsPopup } from './GtcMapDetailSettingsPopup';
 import { GtcMapNexradSettingsPopup } from './GtcMapNexradSettingsPopup';
+import { GtcMapTerrainSettingsPopup } from './GtcMapTerrainSettingsPopup';
 import { GtcMapTrafficSettingsPopup } from './GtcMapTrafficSettingsPopup';
 
 import './GtcMapSettingsPage.css';
-import './GtcPfdMapSettingsPage.css';
 import './GtcMapSettingsPopups.css';
+import './GtcPfdMapSettingsPage.css';
 
 /**
  * Component props for GtcPfdMapSettingsPage.
  */
 export interface GtcPfdMapSettingsPageProps extends GtcViewProps {
-  /** The type of traffic system installed in the airplane. */
-  trafficSystemType: TrafficSystemType;
+  /** The general avionics configuration object. */
+  config: AvionicsConfig;
 
-  /** Whether the installed traffic system supports ADS-B in. */
-  adsb: boolean;
+  /** A provider of terrain system state data. */
+  terrainSystemStateDataProvider: TerrainSystemStateDataProvider;
 }
 
 /**
@@ -46,7 +51,6 @@ export interface GtcPfdMapSettingsPageProps extends GtcViewProps {
 enum GtcPfdMapSettingsPagePopupKeys {
   DetailSettings = 'PfdMapDetailSettings',
   TrafficSettings = 'PfdMapTrafficSettings',
-  TawsSettings = 'PfdMapTawsSettings',
   TerrainSettings = 'PfdMapTerrainSettings',
   NexradSettings = 'PfdMapNexradSettings'
 }
@@ -77,7 +81,6 @@ export class GtcPfdMapSettingsPage extends GtcView<GtcPfdMapSettingsPageProps> {
 
     this.props.gtcService.registerView(GtcViewLifecyclePolicy.Transient, GtcPfdMapSettingsPagePopupKeys.DetailSettings, 'PFD', this.renderDetailSettingsPopup.bind(this));
     this.props.gtcService.registerView(GtcViewLifecyclePolicy.Transient, GtcPfdMapSettingsPagePopupKeys.TrafficSettings, 'PFD', this.renderTrafficSettingsPopup.bind(this));
-    this.props.gtcService.registerView(GtcViewLifecyclePolicy.Transient, GtcPfdMapSettingsPagePopupKeys.TawsSettings, 'PFD', this.renderTawsSettingsPopup.bind(this));
     this.props.gtcService.registerView(GtcViewLifecyclePolicy.Transient, GtcPfdMapSettingsPagePopupKeys.TerrainSettings, 'PFD', this.renderTerrainSettingsPopup.bind(this));
     this.props.gtcService.registerView(GtcViewLifecyclePolicy.Transient, GtcPfdMapSettingsPagePopupKeys.NexradSettings, 'PFD', this.renderNexradSettingsPopup.bind(this));
   }
@@ -272,7 +275,7 @@ export class GtcPfdMapSettingsPage extends GtcView<GtcPfdMapSettingsPageProps> {
           <GtcTouchButton
             label='Settings'
             onPressed={(): void => {
-              this.props.gtcService.openPopup(GtcPfdMapSettingsPagePopupKeys.TawsSettings);
+              this.props.gtcService.openPopup(GtcPfdMapSettingsPagePopupKeys.TerrainSettings);
             }}
             isInList
             gtcOrientation={this.props.gtcService.orientation}
@@ -385,49 +388,10 @@ export class GtcPfdMapSettingsPage extends GtcView<GtcPfdMapSettingsPageProps> {
       <GtcMapTrafficSettingsPopup
         gtcService={gtcService}
         controlMode={controlMode}
-        trafficSystemType={this.props.trafficSystemType}
-        adsb={this.props.adsb}
+        trafficSystemType={this.props.config.traffic.type}
+        adsb={this.props.config.traffic.supportAdsb}
         mapReadSettingManager={this.mapSettingManager}
       />
-    );
-  }
-
-  /**
-   * Renders the TAWS settings popup.
-   * @param gtcService The GTC service.
-   * @param controlMode The control mode to which the popup belongs.
-   * @returns The TAWS settings popup, as a VNode.
-   */
-  private renderTawsSettingsPopup(gtcService: GtcService, controlMode: GtcControlMode): VNode {
-    const buttonRefs = Array.from({ length: 2 }, () => FSComponent.createRef<DisplayComponent<any>>());
-
-    return (
-      <GtcGenericView
-        gtcService={gtcService}
-        controlMode={controlMode}
-        title='TAWS Settings'
-        onDestroy={(): void => {
-          buttonRefs.forEach(ref => { ref.getOrDefault()?.destroy(); });
-        }}
-      >
-        <div class='map-settings-popup map-taws-settings'>
-          <ToggleTouchButton
-            ref={buttonRefs[0]}
-            state={Subject.create(false)}
-            label={'TAWS\nInhibit'}
-            isEnabled={false}
-            class='map-taws-settings-inhibit-button'
-          />
-          <TouchButton
-            ref={buttonRefs[1]}
-            label={'Map\nSettings'}
-            onPressed={(): void => {
-              this.props.gtcService.openPopup(GtcPfdMapSettingsPagePopupKeys.TerrainSettings);
-            }}
-            class='map-taws-settings-settings-button'
-          />
-        </div>
-      </GtcGenericView>
     );
   }
 
@@ -438,28 +402,15 @@ export class GtcPfdMapSettingsPage extends GtcView<GtcPfdMapSettingsPageProps> {
    * @returns The terrain settings popup, as a VNode.
    */
   private renderTerrainSettingsPopup(gtcService: GtcService, controlMode: GtcControlMode): VNode {
-    const buttonRefs = Array.from({ length: 2 }, () => FSComponent.createRef<DisplayComponent<any>>());
-
     return (
-      <GtcGenericView
+      <GtcMapTerrainSettingsPopup
         gtcService={gtcService}
         controlMode={controlMode}
-        title='Terrain Settings'
-        onDestroy={(): void => {
-          buttonRefs.forEach(ref => { ref.getOrDefault()?.destroy(); });
-        }}
-      >
-        <div class='map-settings-popup map-terrain-settings'>
-          {this.renderRangeSelectButton('mapTerrainRangeIndex', 9, 27, false, 'Terrain', 'Map Terrain Range', 'map-terrain-settings-button', undefined, buttonRefs[0]) /* 1 nm to 1000 nm */}
-          <ToggleTouchButton
-            ref={buttonRefs[1]}
-            state={Subject.create(false)}
-            label={'Absolute Terrain\nScale'}
-            isEnabled={false}
-            class='map-terrain-settings-button'
-          />
-        </div>
-      </GtcGenericView>
+        terrainConfig={this.props.config.terrain}
+        terrainSystemStateDataProvider={this.props.terrainSystemStateDataProvider}
+        mapReadSettingManager={this.mapSettingManager}
+        disableAbsoluteTerrainScaleButton
+      />
     );
   }
 

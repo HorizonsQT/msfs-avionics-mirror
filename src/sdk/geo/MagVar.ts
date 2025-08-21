@@ -1,4 +1,4 @@
-/// <reference types="@microsoft/msfs-types/coherent/facilities" />
+/// <reference types="@microsoft/msfs-types/coherent/facilities" preserve="true" />
 
 import { LatLonInterface } from './GeoInterfaces';
 import { NavMath } from './NavMath';
@@ -21,9 +21,9 @@ export class MagVar {
    * @param point The query point.
    * @returns The magnetic variation (magnetic declination) at the point.
    */
-  public static get(point: LatLonInterface): number;
+  public static get(point: Readonly<LatLonInterface>): number;
   // eslint-disable-next-line jsdoc/require-jsdoc
-  public static get(arg1: number | LatLonInterface, arg2?: number): number {
+  public static get(arg1: number | Readonly<LatLonInterface>, arg2?: number): number {
     return MagVar.getMagVar(arg1, arg2);
   }
 
@@ -41,7 +41,7 @@ export class MagVar {
    * @param point The query point.
    * @returns The true bearing equivalent of the given magnetic bearing at the specified point.
    */
-  public static magneticToTrue(bearing: number, point: LatLonInterface): number;
+  public static magneticToTrue(bearing: number, point: Readonly<LatLonInterface>): number;
   /**
    * Converts magnetic bearing to true bearing given a specific magnetic variation (magnetic declination).
    * @param bearing A magnetic bearing.
@@ -50,7 +50,7 @@ export class MagVar {
    */
   public static magneticToTrue(bearing: number, magVar: number): number;
   // eslint-disable-next-line jsdoc/require-jsdoc
-  public static magneticToTrue(bearing: number, arg1: number | LatLonInterface, arg2?: number): number {
+  public static magneticToTrue(bearing: number, arg1: number | Readonly<LatLonInterface>, arg2?: number): number {
     return NavMath.normalizeHeading(bearing + (typeof arg1 === 'number' && arg2 === undefined ? arg1 : MagVar.getMagVar(arg1, arg2)));
   }
 
@@ -77,7 +77,7 @@ export class MagVar {
    */
   public static trueToMagnetic(bearing: number, magVar: number): number;
   // eslint-disable-next-line jsdoc/require-jsdoc
-  public static trueToMagnetic(bearing: number, arg1: number | LatLonInterface, arg2?: number): number {
+  public static trueToMagnetic(bearing: number, arg1: number | Readonly<LatLonInterface>, arg2?: number): number {
     return NavMath.normalizeHeading(bearing - (typeof arg1 === 'number' && arg2 === undefined ? arg1 : MagVar.getMagVar(arg1, arg2)));
   }
 
@@ -87,7 +87,7 @@ export class MagVar {
    * @param arg2 The longitude of the query point.
    * @returns The magnetic variation (magnetic declination) at the point.
    */
-  private static getMagVar(arg1: number | LatLonInterface, arg2?: number): number {
+  private static getMagVar(arg1: number | Readonly<LatLonInterface>, arg2?: number): number {
     if (typeof Facilities === 'undefined') {
       // In case this code is executed before the Facilities class is created.
       return 0;

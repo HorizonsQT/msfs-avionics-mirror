@@ -33,7 +33,7 @@ export class VNAVSetupPage extends WT21FmcPage {
             break;
         }
 
-        return ` ${planInMod ? 'MOD' : 'ACT'} VNAV ${pageTitle}[blue];`;
+        return ` ${planInMod ? 'MOD' : 'ACT'} VNAV ${pageTitle}[blue]`;
       },
     },
   }).bind(MappedSubject.create(this.fms.planInMod, this.screen.currentSubpageIndex));

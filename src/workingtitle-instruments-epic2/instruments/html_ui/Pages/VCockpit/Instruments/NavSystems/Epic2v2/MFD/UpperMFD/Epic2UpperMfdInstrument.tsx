@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
-/// <reference types="@microsoft/msfs-types/Pages/VCockpit/Instruments/Shared/BaseInstrument" />
-/// <reference types="@microsoft/msfs-types/Pages/VCockpit/Core/VCockpit" />
-/// <reference types="@microsoft/msfs-types/js/simvar" />
-/// <reference types="@microsoft/msfs-types/js/netbingmap" />
-/// <reference types="@microsoft/msfs-types/js/common" />
-/// <reference types="@microsoft/msfs-types/js/avionics" />
+/// <reference types="@microsoft/msfs-types/pages/vcockpit/instruments/shared/baseinstrument" preserve="true" />
+/// <reference types="@microsoft/msfs-types/pages/vcockpit/core/vcockpit" preserve="true" />
+/// <reference types="@microsoft/msfs-types/js/simvar" preserve="true" />
+/// <reference types="@microsoft/msfs-types/js/netbingmap" preserve="true" />
+/// <reference types="@microsoft/msfs-types/js/common" preserve="true" />
+/// <reference types="@microsoft/msfs-types/js/avionics" preserve="true" />
 
 import {
   APRadioNavInstrument, ArrayUtils, AutothrottleOptions, AutothrottleThrottleIndex, AvionicsSystemState, ClockEvents, ConsumerSubject, EngineType,

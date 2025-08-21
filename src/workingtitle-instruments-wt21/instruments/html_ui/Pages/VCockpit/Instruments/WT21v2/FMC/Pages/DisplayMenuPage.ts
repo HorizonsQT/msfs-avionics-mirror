@@ -351,7 +351,7 @@ export class DisplayMenu extends WT21FmcPage {
         ],
         [
           [title, '2/2 [blue]', ''],
-          ['', '', `${display} MAP DISPLAY[blue]`],
+          ['', '', display],
           [this.missedAppr, ''],
           ['', ''],
           [this.ndbs, ''],

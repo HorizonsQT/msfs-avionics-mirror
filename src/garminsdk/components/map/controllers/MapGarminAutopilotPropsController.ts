@@ -1,9 +1,12 @@
-import { EventSubscriber, MapSystemContext, MapSystemController, MapSystemKeys, Subscribable, SubscribableUtils, Subscription, UnitType } from '@microsoft/msfs-sdk';
+import {
+  MapModulePropsController, MapModulePropsControllerBinding, MapModulePropsControllerPropKey, MapSystemContext,
+  MapSystemKeys, Subscribable, UnitType
+} from '@microsoft/msfs-sdk';
 
 import { MapGarminAutopilotPropsModule } from '../modules/MapGarminAutopilotPropsModule';
 
 /**
- * Modules required for MapGarminAutopilotPropsController.
+ * Modules required for {@link MapGarminAutopilotPropsController}.
  */
 export interface MapGarminAutopilotPropsControllerModules {
   /** Autopilot properties. */
@@ -11,12 +14,14 @@ export interface MapGarminAutopilotPropsControllerModules {
 }
 
 /**
- * A key for a property in {@link MapGarminAutopilotPropsModule}.
+ * A key for a property in {@link MapGarminAutopilotPropsModule} that can be bound by
+ * {@link MapOwnAirplanePropsController}.
  */
-export type MapGarminAutopilotPropsKey = Extract<keyof MapGarminAutopilotPropsModule, string>;
+export type MapGarminAutopilotPropsKey = MapModulePropsControllerPropKey<MapGarminAutopilotPropsModule>;
 
 /**
  * A definition of a binding between a property in {@link MapGarminAutopilotPropsModule} and an event bus topic.
+ * @deprecated
  */
 export type MapGarminAutopilotPropsBinding = {
   /** The key of the property to bind. */
@@ -27,112 +32,86 @@ export type MapGarminAutopilotPropsBinding = {
 };
 
 /**
+ * A definition of a binding between a property in {@link MapGarminAutopilotPropsModule} and an external data source.
+ */
+export type MapGarminAutopilotPropsControllerBinding = MapModulePropsControllerBinding<MapGarminAutopilotPropsModule>;
+
+/**
  * Binds the properties in a {@link MapGarminAutopilotPropsModule} to event bus topics.
  */
-export class MapGarminAutopilotPropsController extends MapSystemController<MapGarminAutopilotPropsControllerModules> {
-  private readonly module = this.context.model.getModule(MapSystemKeys.AutopilotProps);
-
-  private readonly updateFreq?: Subscribable<number>;
-
-  private readonly subs: Subscription[] = [];
-
-  private updateFreqSub?: Subscription;
-
+export class MapGarminAutopilotPropsController extends MapModulePropsController<typeof MapSystemKeys.AutopilotProps, MapGarminAutopilotPropsModule> {
   /**
-   * Constructor.
+   * Creates a new instance of MapGarminAutopilotPropsController.
    * @param context This controller's map context.
-   * @param properties The properties to update on the module.
-   * @param updateFreq The update frequency, in hertz. If not defined, the properties will be updated every frame.
+   * @param bindings An iterable containing definitions of the bindings to create between module properties and
+   * external data sources.
+   * @param updateFreq The default frequency, in hertz, at which to update the module props from their bound data
+   * sources. This frequency, if defined, is applied to all bindings that do not explicitly define their own update
+   * frequencies. If the frequency is `null`, then updates will not be throttled by frequency - each property will be
+   * updated as soon as the value of its data source changes. If the frequency is not `null`, then each property will
+   * only be updated when the controller's `onBeforeUpdated()` method is called, and the frequency of updates will not
+   * exceed `updateFreq`. Ignored if `bindings` is undefined.
    */
-  constructor(
+  public constructor(
     context: MapSystemContext<MapGarminAutopilotPropsControllerModules>,
-    private readonly properties: Iterable<MapGarminAutopilotPropsKey | MapGarminAutopilotPropsBinding>,
-    updateFreq?: number | Subscribable<number>
+    bindings: Iterable<MapGarminAutopilotPropsKey | MapGarminAutopilotPropsControllerBinding>,
+    updateFreq?: number | null | Subscribable<number | null>
   ) {
-    super(context);
+    super(
+      context,
+      MapSystemKeys.AutopilotProps,
+      Array.from(bindings).map(binding => {
+        const mappedBinding = typeof binding === 'string'
+          ? MapGarminAutopilotPropsController.getDefaultBinding(binding)
+          : binding;
 
-    this.updateFreq = updateFreq === undefined ? undefined : SubscribableUtils.toSubscribable(updateFreq, true);
-  }
-
-  /** @inheritdoc */
-  public onAfterMapRender(): void {
-    const sub = this.context.bus.getSubscriber<any>();
-
-    if (this.updateFreq) {
-      this.updateFreqSub = this.updateFreq.sub(freq => {
-        for (const subscription of this.subs) {
-          subscription.destroy();
+        if (mappedBinding.updateFreq === undefined && updateFreq !== undefined) {
+          return { ...mappedBinding, updateFreq };
+        } else {
+          return mappedBinding;
         }
-
-        this.subs.length = 0;
-
-        for (const property of this.properties) {
-          this.subs.push(this.bindProperty(sub, property, freq));
-        }
-      }, true);
-    } else {
-      for (const property of this.properties) {
-        this.subs.push(this.bindProperty(sub, property));
-      }
-    }
+      })
+    );
   }
 
   /**
-   * Binds a module property to data received through the event bus.
-   * @param sub The event bus subscriber.
-   * @param property The property to bind.
-   * @param updateFreq The data update frequency.
-   * @returns The subscription created by the binding.
-   * @throws Error if the property is invalid.
+   * Gets the default binding for a property key.
+   * @param key The property key for which to get a default binding.
+   * @returns The default binding for the specified property key.
+   * @throws Error if the specified property key is invalid.
    */
-  private bindProperty(sub: EventSubscriber<any>, property: MapGarminAutopilotPropsKey | MapGarminAutopilotPropsBinding, updateFreq?: number): Subscription {
-    let key: string;
-    let topic: string | undefined = undefined;
-
-    if (typeof property === 'string') {
-      key = property;
-    } else {
-      key = property.key;
-      topic = property.topic;
-    }
-
+  private static getDefaultBinding(key: MapGarminAutopilotPropsKey): MapGarminAutopilotPropsControllerBinding {
     switch (key) {
       case 'selectedAltitude':
-        topic ??= 'ap_altitude_selected';
-        return (updateFreq === undefined ? sub.on(topic) : sub.on(topic).atFrequency(updateFreq))
-          .handle(alt => { this.module.selectedAltitude.set(alt, UnitType.FOOT); });
+        return {
+          key,
+          topic: 'ap_altitude_selected',
+          handler: (prop: MapGarminAutopilotPropsModule['selectedAltitude'], alt: number) => { prop.set(alt, UnitType.FOOT); },
+        };
       case 'selectedHeading':
-        topic ??= 'ap_heading_selected';
-        return (updateFreq === undefined ? sub.on(topic) : sub.on(topic).atFrequency(updateFreq))
-          .handle(hdg => { this.module.selectedHeading.set(hdg); });
+        return {
+          key,
+          topic: 'ap_heading_selected',
+        };
       case 'isTurnHdgAdjustActive':
-        topic ??= 'hdg_sync_turn_adjust_active';
-        return (updateFreq === undefined ? sub.on(topic) : sub.on(topic).atFrequency(updateFreq))
-          .handle(active => { this.module.isTurnHdgAdjustActive.set(active); });
+        return {
+          key,
+          topic: 'hdg_sync_turn_adjust_active',
+        };
       case 'isHdgSyncModeActive':
-        topic ??= 'hdg_sync_mode_active';
-        return (updateFreq === undefined ? sub.on(topic) : sub.on(topic).atFrequency(updateFreq))
-          .handle(active => { this.module.isHdgSyncModeActive.set(active); });
+        return {
+          key,
+          topic: 'hdg_sync_mode_active',
+        };
       case 'manualHeadingSelect':
-        topic ??= 'hdg_sync_manual_select';
-        return sub.on(topic).handle(() => { this.module.manualHeadingSelect.notify(); });
+        return {
+          key,
+          topic: 'hdg_sync_manual_select',
+          handler: (prop: MapGarminAutopilotPropsModule['manualHeadingSelect']) => { prop.notify(); },
+          updateFreq: null,
+        };
       default:
         throw new Error(`MapGarminAutopilotPropsController: invalid property key: ${key}`);
     }
-  }
-
-  /** @inheritdoc */
-  public onMapDestroyed(): void {
-    this.destroy();
-  }
-
-  /** @inheritdoc */
-  public destroy(): void {
-    this.updateFreqSub?.destroy();
-    for (const sub of this.subs) {
-      sub.destroy();
-    }
-
-    super.destroy();
   }
 }

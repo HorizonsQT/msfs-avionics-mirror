@@ -1,6 +1,7 @@
 import {
-  Consumer, DefaultUserSettingManager, EventBus, MappedUserSettingManager, UserSetting, UserSettingDefinition, UserSettingManager,
-  UserSettingMap, UserSettingRecord, UserSettingValue
+  DefaultUserSettingManager, EventBus, MappedUserSettingManager, OptionalUserSettingFromManager, UserSetting,
+  UserSettingConsumerFromManager, UserSettingDefinition, UserSettingFromManager, UserSettingManager, UserSettingMap,
+  UserSettingRecord, UserSettingValue
 } from '@microsoft/msfs-sdk';
 
 import {
@@ -101,7 +102,7 @@ export class WeatherMapUserSettings {
     const map: UserSettingMap<WeatherMapUserSettingTypes, WeatherMapDisplayPaneUserSettingTypes<Index>> = {};
 
     for (const name of WeatherMapUserSettingsUtils.SETTING_NAMES) {
-      map[name] = `${name}_${index}`;
+      map[name] = `${name}_${index}` as const;
     }
 
     return map;
@@ -223,7 +224,7 @@ export class ConnextMapUserSettings {
     const map: UserSettingMap<ConnextMapUserSettingTypes, ConnextMapDisplayPaneUserSettingTypes<Index>> = {};
 
     for (const name of WeatherMapUserSettingsUtils.CONNEXT_SETTING_NAMES) {
-      map[name] = `${name}_${index}`;
+      map[name] = `${name}_${index}` as const;
     }
 
     return map;
@@ -283,32 +284,32 @@ class ConnextMapCombinedSettingManager implements UserSettingManager<ConnextMapC
   }
 
   /** @inheritdoc */
-  public tryGetSetting<K extends string>(name: K): K extends keyof ConnextMapCombinedUserSettingTypes ? UserSetting<ConnextMapCombinedUserSettingTypes[K]> : undefined {
+  public tryGetSetting<K extends string>(name: K): OptionalUserSettingFromManager<ConnextMapCombinedUserSettingTypes, K> {
     return this.mapSettingManager.tryGetSetting(name)
       ?? this.weatherMapSettingManager.tryGetSetting(name)
       ?? this.connextMapSettingManager.tryGetSetting(name) as any;
   }
 
   /** @inheritdoc */
-  public getSetting<K extends keyof ConnextMapCombinedUserSettingTypes & string>(name: K): UserSetting<NonNullable<ConnextMapCombinedUserSettingTypes[K]>> {
+  public getSetting<K extends keyof ConnextMapCombinedUserSettingTypes & string>(name: K): UserSettingFromManager<ConnextMapCombinedUserSettingTypes, K> {
     const setting = this.tryGetSetting(name);
     if (!setting) {
       throw new Error(`ConnextMapCombinedSettingManager: Could not find setting with name ${name}`);
     }
 
-    return setting as UserSetting<NonNullable<ConnextMapCombinedUserSettingTypes[K]>>;
+    return setting as UserSettingFromManager<ConnextMapCombinedUserSettingTypes, K>;
   }
 
   /** @inheritdoc */
-  public whenSettingChanged<K extends keyof ConnextMapCombinedUserSettingTypes & string>(name: K): Consumer<NonNullable<ConnextMapCombinedUserSettingTypes[K]>> {
+  public whenSettingChanged<K extends keyof ConnextMapCombinedUserSettingTypes & string>(name: K): UserSettingConsumerFromManager<ConnextMapCombinedUserSettingTypes, K> {
     if (this.mapSettingManager.tryGetSetting(name)) {
-      return this.mapSettingManager.whenSettingChanged(name as keyof MapUserSettingTypes) as Consumer<NonNullable<ConnextMapCombinedUserSettingTypes[K]>>;
+      return this.mapSettingManager.whenSettingChanged(name as keyof MapUserSettingTypes) as any;
     }
     if (this.weatherMapSettingManager.tryGetSetting(name)) {
-      return this.weatherMapSettingManager.whenSettingChanged(name as keyof WeatherMapUserSettingTypes) as Consumer<NonNullable<ConnextMapCombinedUserSettingTypes[K]>>;
+      return this.weatherMapSettingManager.whenSettingChanged(name as keyof WeatherMapUserSettingTypes) as any;
     }
     if (this.connextMapSettingManager.tryGetSetting(name)) {
-      return this.connextMapSettingManager.whenSettingChanged(name as keyof ConnextMapUserSettingTypes) as Consumer<NonNullable<ConnextMapCombinedUserSettingTypes[K]>>;
+      return this.connextMapSettingManager.whenSettingChanged(name as keyof ConnextMapUserSettingTypes) as any;
     }
 
     throw new Error(`ConnextMapCombinedSettingManager: Could not find setting with name ${name}`);

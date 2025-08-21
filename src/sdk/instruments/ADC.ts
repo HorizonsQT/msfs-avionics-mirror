@@ -85,6 +85,9 @@ export interface BaseAdcEvents {
   /** The angle of attack, in degrees. */
   aoa: number;
 
+  /** The sideslip angle, in degrees. */
+  sideslip_angle: number;
+
   /** The stall angle of attack of the current aircraft configuration, in degrees. */
   stall_aoa: number;
 
@@ -263,6 +266,7 @@ export class AdcPublisher extends SimVarPublisher<AdcEvents> {
       ['ambient_wind_direction', { name: 'AMBIENT WIND DIRECTION', type: SimVarValueType.Degree }],
       ['on_ground', { name: 'SIM ON GROUND', type: SimVarValueType.Bool }],
       ['aoa', { name: 'INCIDENCE ALPHA', type: SimVarValueType.Degree }],
+      ['sideslip_angle', { name: 'INCIDENCE BETA', type: SimVarValueType.Degree }],
       ['stall_aoa', { name: 'STALL ALPHA', type: SimVarValueType.Degree }],
       ['zero_lift_aoa', { name: 'ZERO LIFT ALPHA', type: SimVarValueType.Degree }],
       ['density_alt', { name: 'DENSITY ALTITUDE', type: SimVarValueType.Feet }],

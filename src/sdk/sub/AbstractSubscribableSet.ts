@@ -230,8 +230,10 @@ export abstract class AbstractSubscribableSet<T> implements SubscribableSet<T>, 
    * @param map The function to use to transform inputs.
    * @param paused Whether the new subscription should be initialized as paused. Defaults to `false`.
    * @returns The new subscription.
+   * @template OI The input type of the mutable subscribable to which to pipe.
+   * @template OV The value type of the mutable subscribable to which to pipe.
    */
-  public pipe<M>(to: MutableSubscribable<any, M>, map: (fromVal: ReadonlySet<T>, toVal: M) => M, paused?: boolean): Subscription;
+  public pipe<OI, OV = unknown>(to: MutableSubscribable<any, OI>, map: (fromVal: ReadonlySet<T>, toVal: OV) => OI, paused?: boolean): Subscription;
   /**
    * Subscribes to and pipes this set's state to a mutable subscribable set. Whenever a key added or removed event is
    * received through the subscription, the same key will be added to or removed from the other set.
@@ -250,21 +252,22 @@ export abstract class AbstractSubscribableSet<T> implements SubscribableSet<T>, 
    * @param map The function to use to transform keys.
    * @param paused Whether the new subscription should be initialized as paused. Defaults to `false`.
    * @returns The new subscription.
+   * @template OT The element type of the set to which to pipe.
    */
-  public pipe<M>(to: MutableSubscribableSet<M>, map: (fromKey: T) => M, paused?: boolean): Subscription;
+  public pipe<OT>(to: MutableSubscribableSet<OT>, map: (fromKey: T) => OT, paused?: boolean): Subscription;
   // eslint-disable-next-line jsdoc/require-jsdoc
-  public pipe<M>(
-    to: MutableSubscribable<any, ReadonlySet<T>> | MutableSubscribable<any, M> | MutableSubscribableSet<T> | MutableSubscribableSet<M>,
-    arg2?: ((fromVal: ReadonlySet<T>, toVal: M) => M) | ((fromKey: T) => M) | boolean,
+  public pipe<OI, OV, OT>(
+    to: MutableSubscribable<any, ReadonlySet<T>> | MutableSubscribable<OV, OI> | MutableSubscribableSet<T> | MutableSubscribableSet<OT>,
+    arg2?: ((fromVal: ReadonlySet<T>, toVal: OV) => OI) | ((fromKey: T) => OT) | boolean,
     arg3?: boolean
   ): Subscription {
     let sub;
     let paused;
     if (typeof arg2 === 'function') {
       if ('isSubscribableSet' in to) {
-        sub = new SubscribableSetPipe(this, to as MutableSubscribableSet<M>, arg2 as (fromKey: T) => M, this.onSubDestroyedFunc);
+        sub = new SubscribableSetPipe(this, to as MutableSubscribableSet<OT>, arg2 as (fromKey: T) => OT, this.onSubDestroyedFunc);
       } else {
-        sub = new SubscribablePipe(this, to as MutableSubscribable<any, M>, arg2 as (fromVal: ReadonlySet<T>, toVal: M) => M, this.onSubDestroyedFunc);
+        sub = new SubscribablePipe(this, to as MutableSubscribable<OV, OI>, arg2 as (fromVal: ReadonlySet<T>, toVal: OV) => OI, this.onSubDestroyedFunc);
       }
 
       paused = arg3 ?? false;

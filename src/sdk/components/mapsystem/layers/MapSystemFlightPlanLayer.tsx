@@ -1,7 +1,10 @@
 import { EventBus } from '../../../data';
 import { LegDefinition } from '../../../flightplan';
-import { ClippedPathStream, NullPathStream } from '../../../graphics/path';
-import { VecNSubject } from '../../../math';
+import { GeoProjection } from '../../../geo/GeoProjection';
+import { ClippedPathStream } from '../../../graphics/path/ClippedPathStream';
+import { GeoCylindricalClippedPathStream } from '../../../graphics/path/GeoCylindricalClippedPathStream';
+import { NullPathStream } from '../../../graphics/path/PathStream';
+import { VecNSubject } from '../../../math/VectorSubject';
 import { DefaultFacilityWaypointCache, Facility, FacilityLoader, FacilityRepository, FlightPathWaypoint, ICAO, LegType, Waypoint } from '../../../navigation';
 import { FSComponent, VNode } from '../../FSComponent';
 import { GeoProjectionPathStreamStack } from '../../map/GeoProjectionPathStreamStack';
@@ -45,6 +48,18 @@ export interface MapSystemFlightPlanLayerProps extends MapLayerProps<MapSystemFl
 
   /** The flight plan index to display. */
   planIndex: number;
+
+  /**
+   * The angular gap on each side of the anti-meridian within which rendered flight paths will be clipped. Defaults to
+   * 0.1 degrees.
+   */
+  geoClipAntiMeridianGap?: number;
+
+  /**
+   * The absolute latitude value, in degrees, above which rendered flight paths will be clipped. Defaults to 89
+   * degrees.
+   */
+  geoClipLatitude?: number;
 }
 
 /**
@@ -53,6 +68,12 @@ export interface MapSystemFlightPlanLayerProps extends MapLayerProps<MapSystemFl
 export class MapSystemFlightPlanLayer extends MapLayer<MapSystemFlightPlanLayerProps> {
   private static readonly WAYPOINT_PREFIX = 'MapSystemFplLayer';
 
+  /** The default amount to offset the pre-projection longitude clipping boundaries from the anti-meridian, in degrees. */
+  private static readonly DEFAULT_GEO_CLIP_ANTI_MERIDIAN_GAP = 0.1;
+  /** The default pre-projection latitude clipping boundary, in degrees. */
+  private static readonly DEFAULT_GEO_CLIP_LATITUDE = 89;
+
+  /** The distance from each edge of the canvas to extend the post-projection clipping bounds, in pixels. */
   private static readonly CLIP_BOUNDS_BUFFER = 10;
 
   private static instanceId = 0;
@@ -73,6 +94,10 @@ export class MapSystemFlightPlanLayer extends MapLayer<MapSystemFlightPlanLayerP
   protected readonly facLoader = this.props.facilityLoader ?? new FacilityLoader(FacilityRepository.getRepository(this.props.bus));
   protected readonly facWaypointCache = DefaultFacilityWaypointCache.getCache(this.props.bus);
 
+  protected readonly geoClipAntiMeridianBuffer = Math.max(this.props.geoClipAntiMeridianGap ?? MapSystemFlightPlanLayer.DEFAULT_GEO_CLIP_ANTI_MERIDIAN_GAP, 1e-6);
+  protected readonly geoClipLatitude = Math.max(this.props.geoClipLatitude ?? MapSystemFlightPlanLayer.DEFAULT_GEO_CLIP_LATITUDE, 0);
+  protected readonly geoClipBounds = VecNSubject.create(new Float64Array(4));
+  protected readonly geoClippedPathStream = new GeoCylindricalClippedPathStream(NullPathStream.INSTANCE, this.geoClipBounds);
   protected readonly clipBounds = VecNSubject.create(new Float64Array(4));
   protected readonly clippedPathStream = new ClippedPathStream(NullPathStream.INSTANCE, this.clipBounds);
   protected readonly pathStreamStack = new GeoProjectionPathStreamStack(NullPathStream.INSTANCE, this.props.mapProjection.getGeoProjection(), Math.PI / 12, 0.25, 8);
@@ -84,6 +109,7 @@ export class MapSystemFlightPlanLayer extends MapLayer<MapSystemFlightPlanLayerP
     this.flightPathLayerRef.instance.onAttached();
     this.waypointLayerRef.instance.onAttached();
 
+    this.pathStreamStack.pushPreProjected(this.geoClippedPathStream);
     this.pathStreamStack.pushPostProjected(this.clippedPathStream);
     this.pathStreamStack.setConsumer(this.flightPathLayerRef.instance.display.context);
 
@@ -145,6 +171,7 @@ export class MapSystemFlightPlanLayer extends MapLayer<MapSystemFlightPlanLayerP
 
         const plan = this.planModule.getPlanSubjects(this.props.planIndex).flightPlan.get();
         if (plan !== undefined) {
+          this.updateGeoClipBounds(display.geoProjection);
           this.pathStreamStack.setProjection(display.geoProjection);
           this.props.flightPathRenderer.render(plan, undefined, undefined, context, this.pathStreamStack);
         }
@@ -152,6 +179,22 @@ export class MapSystemFlightPlanLayer extends MapLayer<MapSystemFlightPlanLayerP
         this.updateScheduled = false;
       }
     }
+  }
+
+  /**
+   * Updates this layer's pre-projection clipping bounds.
+   * @param projection The projection used to draw the flight plan.
+   */
+  private updateGeoClipBounds(projection: GeoProjection): void {
+    const centralMeridian = -projection.getPreRotation()[0] * Avionics.Utils.RAD2DEG;
+    const antiMeridian = centralMeridian + 180;
+
+    this.geoClipBounds.set(
+      antiMeridian + this.geoClipAntiMeridianBuffer,
+      -this.geoClipLatitude,
+      antiMeridian - this.geoClipAntiMeridianBuffer,
+      this.geoClipLatitude
+    );
   }
 
   /** @inheritdoc */

@@ -27,13 +27,13 @@ import { MapAirspaceModule, MapAirspaceShowTypes } from '../map/modules/MapAirsp
 import { MapAutopilotPropsModule } from '../map/modules/MapAutopilotPropsModule';
 import { MapOwnAirplaneIconModule, MapOwnAirplaneIconOrientation } from '../map/modules/MapOwnAirplaneIconModule';
 import { MapOwnAirplanePropsModule } from '../map/modules/MapOwnAirplanePropsModule';
-import { MapAutopilotPropsController, MapAutopilotPropsControllerModules, MapAutopilotPropsKey } from './controllers/MapAutopilotPropsController';
+import { MapAutopilotPropsController, MapAutopilotPropsControllerBinding, MapAutopilotPropsControllerModules, MapAutopilotPropsKey } from './controllers/MapAutopilotPropsController';
 import { MapBinding, MapBindingsController } from './controllers/MapBindingsController';
 import { MapClockUpdateController, MapClockUpdateControllerContext } from './controllers/MapClockUpdateController';
 import { MapFlightPlanController, MapFlightPlanControllerContext, MapFlightPlanControllerModules } from './controllers/MapFlightPlanController';
 import { MapFollowAirplaneController, MapFollowAirplaneControllerContext, MapFollowAirplaneControllerModules } from './controllers/MapFollowAirplaneController';
 import { MapOwnAirplaneIconOrientationController, MapOwnAirplaneIconOrientationControllerModules } from './controllers/MapOwnAirplaneIconOrientationController';
-import { MapOwnAirplanePropsController, MapOwnAirplanePropsControllerModules, MapOwnAirplanePropsKey } from './controllers/MapOwnAirplanePropsController';
+import { MapOwnAirplanePropsController, MapOwnAirplanePropsControllerBinding, MapOwnAirplanePropsControllerModules, MapOwnAirplanePropsKey } from './controllers/MapOwnAirplanePropsController';
 import { MapRotationController, MapRotationControllerContext, MapRotationControllerModules } from './controllers/MapRotationController';
 import { FlightPlanDisplayBuilder } from './FlightPlanDisplayBuilder';
 import { MapSystemFlightPlanLayer, MapSystemFlightPlanLayerModules } from './layers/MapSystemFlightPlanLayer';
@@ -714,19 +714,23 @@ export class MapSystemBuilder<
   }
 
   /**
-   * Configures this builder to bind properties in an added {@link MapOwnAirplanePropsModule} to data derived from
-   * event bus events.
+   * Configures this builder to bind properties in an added {@link MapOwnAirplanePropsModule} to external data.
    *
    * Requires the module `[MapSystemKeys.OwnAirplaneProps]: MapOwnAirplanePropsModule`.
    *
    * Adds the controller `[MapSystemKeys.OwnAirplaneProps]: MapOwnAirplanePropsController`.
-   * @param properties The properties to bind.
-   * @param updateFreq The update frequency, in hertz, or a subscribable which provides it.
+   * @param bindings An iterable containing definitions of the bindings to create.
+   * @param updateFreq The default frequency, in hertz, at which to update the module props from their bound data
+   * sources. This frequency, if defined, is applied to all bindings that do not explicitly define their own update
+   * frequencies. If the frequency is `null`, then updates will not be throttled by frequency - each property will be
+   * updated as soon as the value of its data source changes. If the frequency is not `null`, then each property will
+   * only be updated when the controller's `onBeforeUpdated()` method is called, and the frequency of updates will not
+   * exceed `updateFreq`.
    * @returns This builder, after it has been configured.
    */
   public withOwnAirplanePropBindings<UseModules = any>(
-    properties: Iterable<MapOwnAirplanePropsKey>,
-    updateFreq: number | Subscribable<number>
+    bindings: Iterable<MapOwnAirplanePropsKey | MapOwnAirplanePropsControllerBinding>,
+    updateFreq?: number | null | Subscribable<number | null>
   ): ConditionalReturn<
     DefaultIfAny<UseModules, Modules>,
     MapOwnAirplanePropsControllerModules,
@@ -736,13 +740,13 @@ export class MapSystemBuilder<
   > {
     return this.withController<MapOwnAirplanePropsController, MapOwnAirplanePropsControllerModules>(
       MapSystemKeys.OwnAirplaneProps,
-      context => new MapOwnAirplanePropsController(context, properties, typeof updateFreq === 'number' ? Subject.create(updateFreq) : updateFreq)
+      context => new MapOwnAirplanePropsController(context, bindings, updateFreq)
     ) as any;
   }
 
   /**
    * Configures this builder to add a module describing the player airplane's autopilot properties, and optionally
-   * binds the module's properties to data received over the event bus.
+   * binds the module's properties to external data.
    *
    * Adds the following...
    *
@@ -751,23 +755,28 @@ export class MapSystemBuilder<
    *
    * Controllers:
    * * `[MapSystemKeys.AutopilotProps]: MapAutopilotPropsController` (optional)
-   * @param propertiesToBind Properties on the autopilot module to bind to data received over the event bus.
-   * @param updateFreq The update frequency, in hertz, of the data bindings, or a subscribable which provides it. If
-   * not defined, the data bindings will update every frame. Ignored if `propertiesToBind` is undefined.
+   * @param bindings An iterable containing definitions of the bindings to create between the autopilot module's
+   * properties and external data. If not defined, then no bindings will be created.
+   * @param updateFreq The default frequency, in hertz, at which to update the module props from their bound data
+   * sources. This frequency, if defined, is applied to all bindings that do not explicitly define their own update
+   * frequencies. If the frequency is `null`, then updates will not be throttled by frequency - each property will be
+   * updated as soon as the value of its data source changes. If the frequency is not `null`, then each property will
+   * only be updated when the controller's `onBeforeUpdated()` method is called, and the frequency of updates will not
+   * exceed `updateFreq`. Ignored if `bindings` is undefined.
    * @returns This builder, after it has been configured.
    */
   public withAutopilotProps(
-    propertiesToBind?: Iterable<MapAutopilotPropsKey>,
-    updateFreq?: number | Subscribable<number>
+    bindings?: Iterable<MapAutopilotPropsKey | MapAutopilotPropsControllerBinding>,
+    updateFreq?: number | null | Subscribable<number | null>
   ): this {
     this.withModule(MapSystemKeys.AutopilotProps, () => new MapAutopilotPropsModule());
 
-    if (propertiesToBind !== undefined) {
+    if (bindings !== undefined) {
       this.withController<MapAutopilotPropsController, MapAutopilotPropsControllerModules>(
         MapSystemKeys.AutopilotProps,
         context => new MapAutopilotPropsController(
           context,
-          propertiesToBind,
+          bindings,
           updateFreq
         )
       );

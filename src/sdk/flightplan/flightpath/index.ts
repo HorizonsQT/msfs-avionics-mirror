@@ -7,6 +7,7 @@ export * from './FlightPathCalculator';
 export * from './FlightPathCalculatorControlEvents';
 export * from './FlightPathCalculatorDataProvider';
 export * from './FlightPathCalculatorFacilityCache';
+export * from './FlightPathCircleToCircleTurn';
 export * from './FlightPathLegCalculator';
 export * from './FlightPathLegToLegCalculator';
 export * from './FlightPathState';

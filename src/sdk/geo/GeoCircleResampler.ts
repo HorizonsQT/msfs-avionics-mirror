@@ -1,6 +1,6 @@
 import { MathUtils } from '../math/MathUtils';
 import { ReadonlyFloat64Array, Vec2Math, Vec3Math } from '../math/VecMath';
-import { GeoCircle } from './GeoCircle';
+import { GeoCircle, ReadonlyGeoCircle } from './GeoCircle';
 import { LatLonInterface } from './GeoInterfaces';
 import { GeoPoint, GeoPointInterface } from './GeoPoint';
 import { GeoProjection } from './GeoProjection';
@@ -175,9 +175,9 @@ export class GeoCircleResampler {
    */
   public resample(
     projection: GeoProjection,
-    circle: GeoCircle,
-    start: LatLonInterface | ReadonlyFloat64Array,
-    end: LatLonInterface | ReadonlyFloat64Array,
+    circle: ReadonlyGeoCircle,
+    start: Readonly<LatLonInterface> | ReadonlyFloat64Array,
+    end: Readonly<LatLonInterface> | ReadonlyFloat64Array,
     handler: GeoCircleResamplerHandler
   ): void {
     let startPoint, startVec, endPoint, endVec;
@@ -186,15 +186,15 @@ export class GeoCircleResampler {
       startPoint = this.geoPointCache[0].setFromCartesian(start);
       startVec = start;
     } else {
-      startPoint = start as LatLonInterface;
-      startVec = GeoPoint.sphericalToCartesian(start as LatLonInterface, this.vec3Cache[0]);
+      startPoint = start as Readonly<LatLonInterface>;
+      startVec = GeoPoint.sphericalToCartesian(startPoint, this.vec3Cache[0]);
     }
     if (end instanceof Float64Array) {
       endPoint = this.geoPointCache[0].setFromCartesian(end);
       endVec = end;
     } else {
-      endPoint = end as LatLonInterface;
-      endVec = GeoPoint.sphericalToCartesian(end as LatLonInterface, this.vec3Cache[1]);
+      endPoint = end as Readonly<LatLonInterface>;
+      endVec = GeoPoint.sphericalToCartesian(endPoint, this.vec3Cache[1]);
     }
 
     const startLat = startPoint.lat;
@@ -264,7 +264,7 @@ export class GeoCircleResampler {
    */
   private resampleHelper(
     projection: GeoProjection,
-    circle: GeoCircle,
+    circle: ReadonlyGeoCircle,
     lat1: number, lon1: number, x1: number, y1: number, z1: number, projX1: number, projY1: number,
     lat2: number, lon2: number, x2: number, y2: number, z2: number, projX2: number, projY2: number,
     handler: GeoCircleResamplerHandler,

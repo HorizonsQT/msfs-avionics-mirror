@@ -1,6 +1,6 @@
 import {
-  ApproachIdentifier, ChartArea, ChartIndex, ChartMetadata, ChartUrl, GeoReferencedChartArea, RunwayIdentifier,
-  Subscribable
+  ApproachIdentifier, ChartArea, ChartImageSupplier, ChartIndex, ChartMetadata, ChartService, ChartUrl,
+  GeoReferencedChartArea, RunwayIdentifier, Subscribable
 } from '@microsoft/msfs-sdk';
 
 import { G3000ChartsPageData } from './G3000ChartsTypes';
@@ -18,7 +18,6 @@ export enum G3000ChartsSourceStatus {
 
 /**
  * A definition describing a display-able section of a chart page that can be selected by the user.
- * @experimental
  */
 export interface G3000ChartsSourcePageSectionDefinition {
   /** The ID that unique identifies this section definition. Cannot be the empty string. */
@@ -38,7 +37,6 @@ export interface G3000ChartsSourcePageSectionDefinition {
 
 /**
  * A source of electronic chart data for the G3000.
- * @experimental
  */
 export interface G3000ChartsSource {
   /** The ID that uniquely identifies this source. Cannot be the empty string. */
@@ -58,6 +56,18 @@ export interface G3000ChartsSource {
 
   /** An array of section definitions supported by this source. */
   readonly pageSectionDefinitions: readonly G3000ChartsSourcePageSectionDefinition[];
+
+  /**
+   * Gets a chart service from which to retrieve this source's chart data.
+   * @returns A chart service from which to retrieve this source's chart data.
+   */
+  getChartService(): ChartService;
+
+  /**
+   * Creates a new instance of a chart image supplier that can supply images for this source's charts.
+   * @returns A new instance of a chart image supplier that can supply images for this source's charts.
+   */
+  createChartImageSupplier(): ChartImageSupplier;
 
   /**
    * Gets an array of airport information charts for an airport.
@@ -178,7 +188,6 @@ export interface G3000ChartsSource {
 
 /**
  * A factory that creates an electronic charts source.
- * @experimental
  */
 export interface G3000ChartsSourceFactory {
   /** The ID of the source created by this factory. */

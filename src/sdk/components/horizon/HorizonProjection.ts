@@ -13,7 +13,7 @@ import { Subscription } from '../../sub/Subscription';
  */
 export type HorizonProjectionParameters = {
   /** The position of the airplane. */
-  readonly position?: LatLonInterface;
+  readonly position?: Readonly<LatLonInterface>;
 
   /** The altitude of the airplane, in meters above mean sea level. */
   readonly altitude?: number;
@@ -536,7 +536,7 @@ export class HorizonProjection {
    * @param out The 2D vector to which to write the result.
    * @returns The projected point, as `[x, y]` in pixels.
    */
-  public project(position: LatLonInterface, altitude: number, out: Float64Array): Float64Array {
+  public project(position: Readonly<LatLonInterface>, altitude: number, out: Float64Array): Float64Array {
     const vec = GeoPoint.sphericalToCartesian(position, HorizonProjection.vec3Cache[0]);
     Vec3Math.multScalar(vec, UnitType.GA_RADIAN.convertTo(1, UnitType.METER) + altitude, vec);
 
@@ -869,7 +869,7 @@ export class HorizonProjection {
    * bounds of the projected window.
    * @returns Whether the point falls within the projected bounds.
    */
-  public isInProjectedBounds(point: LatLonInterface, altitude: number, bounds?: ReadonlyFloat64Array): boolean;
+  public isInProjectedBounds(point: Readonly<LatLonInterface>, altitude: number, bounds?: ReadonlyFloat64Array): boolean;
   /**
    * Checks whether a projected point falls within certain projected bounds.
    * @param point The projected point to check, as `[x, y]` in pixels.
@@ -880,7 +880,7 @@ export class HorizonProjection {
   public isInProjectedBounds(point: ReadonlyFloat64Array, bounds?: ReadonlyFloat64Array): boolean;
   // eslint-disable-next-line jsdoc/require-jsdoc
   public isInProjectedBounds(
-    point: LatLonInterface | ReadonlyFloat64Array,
+    point: Readonly<LatLonInterface> | ReadonlyFloat64Array,
     arg2?: number | ReadonlyFloat64Array,
     arg3?: ReadonlyFloat64Array
   ): boolean {
@@ -889,7 +889,7 @@ export class HorizonProjection {
     if (point instanceof Float64Array) {
       bounds = arg2 as ReadonlyFloat64Array | undefined;
     } else {
-      point = this.project(point as LatLonInterface, arg2 as number, HorizonProjection.vec2Cache[0]);
+      point = this.project(point as Readonly<LatLonInterface>, arg2 as number, HorizonProjection.vec2Cache[0]);
       bounds = arg3;
     }
 

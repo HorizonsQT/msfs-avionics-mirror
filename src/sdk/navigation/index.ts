@@ -6,6 +6,7 @@ export * from './ApproachUtils';
 export * from './AutopilotListener';
 export * from './DefaultFacilityWaypointCache';
 export * from './DefaultLodBoundaryCache';
+export * from './ExistingUserWaypointsArray';
 export * from './Facilities';
 export * from './FacilityClient';
 export * from './FacilityLoader';

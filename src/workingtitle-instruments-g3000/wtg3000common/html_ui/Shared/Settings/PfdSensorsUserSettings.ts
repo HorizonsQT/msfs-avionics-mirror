@@ -1,6 +1,7 @@
 import {
-  Consumer, DefaultUserSettingManager, EventBus, UserSetting, UserSettingDefinition, UserSettingManager,
-  UserSettingMap, UserSettingRecord, UserSettingValue
+  DefaultUserSettingManager, EventBus, OptionalUserSettingFromManager, UserSetting, UserSettingConsumerFromManager,
+  UserSettingDefinition, UserSettingFromManager, UserSettingManager, UserSettingMap, UserSettingRecord,
+  UserSettingValue
 } from '@microsoft/msfs-sdk';
 
 import { GduDefsConfig } from '../AvionicsConfig/GduDefsConfig';
@@ -75,17 +76,17 @@ export class PfdSensorsUserSettingManager implements UserSettingManager<PfdSenso
   }
 
   /** @inheritdoc */
-  public tryGetSetting<K extends string>(name: K): K extends keyof PfdSensorsAllUserSettingTypes ? UserSetting<PfdSensorsAllUserSettingTypes[K]> : undefined {
+  public tryGetSetting<K extends string>(name: K): OptionalUserSettingFromManager<PfdSensorsAllUserSettingTypes, K> {
     return this.manager.tryGetSetting(name) as any;
   }
 
   /** @inheritdoc */
-  public getSetting<K extends keyof PfdSensorsAllUserSettingTypes & string>(name: K): UserSetting<NonNullable<PfdSensorsAllUserSettingTypes[K]>> {
+  public getSetting<K extends keyof PfdSensorsAllUserSettingTypes & string>(name: K): UserSettingFromManager<PfdSensorsAllUserSettingTypes, K> {
     return this.manager.getSetting(name);
   }
 
   /** @inheritdoc */
-  public whenSettingChanged<K extends keyof PfdSensorsAllUserSettingTypes & string>(name: K): Consumer<NonNullable<PfdSensorsAllUserSettingTypes[K]>> {
+  public whenSettingChanged<K extends keyof PfdSensorsAllUserSettingTypes & string>(name: K): UserSettingConsumerFromManager<PfdSensorsAllUserSettingTypes, K> {
     return this.manager.whenSettingChanged(name);
   }
 

@@ -2,9 +2,9 @@ import {
   ClockEvents, ConsumerSubject, EventBus, FlightPlan, FlightPlannerEvents, LNavEvents, ObjectSubject, UnitType, VNavEvents, Wait
 } from '@microsoft/msfs-sdk';
 
-import { DesAdvisoryDetails, WT21FmsUtils, WT21VNavDataEvents, WT21VnavUtils } from '@microsoft/msfs-wt21-shared';
-
-import { WT21Fms } from '../FlightPlan/WT21Fms';
+import {
+  DesAdvisoryDetails, WT21Fms, WT21FmsUtils, WT21VNavDataEvents, WT21VnavUtils
+} from '@microsoft/msfs-wt21-shared';
 
 /**
  * WT21 Descent Advisory Manager

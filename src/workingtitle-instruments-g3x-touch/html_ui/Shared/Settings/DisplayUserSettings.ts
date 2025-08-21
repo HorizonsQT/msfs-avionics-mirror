@@ -1,4 +1,8 @@
-import { Consumer, DefaultUserSettingManager, EventBus, UserSetting, UserSettingDefinition, UserSettingManager, UserSettingMap, UserSettingRecord, UserSettingValue } from '@microsoft/msfs-sdk';
+import {
+  DefaultUserSettingManager, EventBus, OptionalUserSettingFromManager, UserSetting, UserSettingConsumerFromManager,
+  UserSettingDefinition, UserSettingFromManager, UserSettingManager, UserSettingMap, UserSettingRecord,
+  UserSettingValue
+} from '@microsoft/msfs-sdk';
 
 import { UiViewKeys } from '../UiSystem/UiViewKeys';
 
@@ -128,17 +132,17 @@ export class DisplayUserSettingManager implements UserSettingManager<DisplayAllU
   }
 
   /** @inheritDoc */
-  public tryGetSetting<K extends string>(name: K): K extends keyof DisplayAllUserSettingTypes ? UserSetting<DisplayAllUserSettingTypes[K]> : undefined {
-    return this.manager.tryGetSetting(name) as any;
+  public tryGetSetting<K extends string>(name: K): OptionalUserSettingFromManager<DisplayAllUserSettingTypes, K> {
+    return this.manager.tryGetSetting(name);
   }
 
   /** @inheritDoc */
-  public getSetting<K extends keyof DisplayAllUserSettingTypes & string>(name: K): UserSetting<NonNullable<DisplayAllUserSettingTypes[K]>> {
+  public getSetting<K extends keyof DisplayAllUserSettingTypes & string>(name: K): UserSettingFromManager<DisplayAllUserSettingTypes, K> {
     return this.manager.getSetting(name);
   }
 
   /** @inheritDoc */
-  public whenSettingChanged<K extends keyof DisplayAllUserSettingTypes & string>(name: K): Consumer<NonNullable<DisplayAllUserSettingTypes[K]>> {
+  public whenSettingChanged<K extends keyof DisplayAllUserSettingTypes & string>(name: K): UserSettingConsumerFromManager<DisplayAllUserSettingTypes, K> {
     return this.manager.whenSettingChanged(name);
   }
 

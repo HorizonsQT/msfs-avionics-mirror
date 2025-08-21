@@ -6,11 +6,11 @@ import {
 } from '@microsoft/msfs-sdk';
 
 import {
-  MapSettingsMfdAliased, MFDSettingsAliased, PerformancePlanProxy, WT21_PFD_MFD_Colors, WT21FlightPlanPredictorConfiguration, WT21FmsUtils,
+  BasePerformanceDataManager,
+  MapSettingsMfdAliased, MFDSettingsAliased, PerformancePlanProxy, WT21_PFD_MFD_Colors,
+  WT21FlightPlanPredictorConfiguration, WT21FmsUtils,
   WT21LegDefinitionFlags, WT21LNavDataEvents, WT21UnitsUtils, WT21VNavDataEvents
 } from '@microsoft/msfs-wt21-shared';
-
-import { BasePerformanceDataManager } from '../../../FMC/PerformanceCalculators/BasePerformanceDataManager';
 
 import './FMSText.css';
 

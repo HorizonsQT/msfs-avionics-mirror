@@ -1,5 +1,5 @@
 import {
-  AhrsEvents, APEvents, ClockEvents, DefaultUserSettingManager, DisplayComponent, EventBus, FSComponent, LinearServo, MathUtils, Subscription, VNode,
+  AhrsEvents, APEvents, ClockEvents, DisplayComponent, EventBus, FSComponent, LinearServo, MathUtils, Subscription, UserSettingManager, VNode,
 } from '@microsoft/msfs-sdk';
 
 import { PFDSettings, PFDUserSettings, WT21ControlEvents } from '@microsoft/msfs-wt21-shared';
@@ -38,7 +38,7 @@ export class FlightDirector extends DisplayComponent<FlightDirectorProps> {
   private readonly pxPerDegY = AdiProjectionUtils.getPxPerDegY();
 
   private fdVisible = false;
-  private pfdSettingsManager!: DefaultUserSettingManager<PFDSettings>;
+  private pfdSettingsManager!: UserSettingManager<PFDSettings>;
 
   private readonly fdPitchHandler = (fdPitch: number): void => {
     this.fdRawPitch = fdPitch;

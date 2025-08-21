@@ -1,4 +1,4 @@
-import { GeoCircle } from '../../../geo/GeoCircle';
+import { GeoCircle, ReadonlyGeoCircle } from '../../../geo/GeoCircle';
 import { LatLonInterface } from '../../../geo/GeoInterfaces';
 import { GeoMath } from '../../../geo/GeoMath';
 import { GeoPoint } from '../../../geo/GeoPoint';
@@ -57,9 +57,9 @@ export class DirectToJoinGreatCircleAtPointVectorBuilder {
     vectors: FlightPathVector[],
     index: number,
     start: ReadonlyFloat64Array | LatLonInterface,
-    startPath: GeoCircle | undefined,
+    startPath: ReadonlyGeoCircle | undefined,
     end: ReadonlyFloat64Array | LatLonInterface,
-    endPath: GeoCircle,
+    endPath: ReadonlyGeoCircle,
     turnRadius: number,
     startTurnDirection: VectorTurnDirection | undefined,
     flags = 0,
@@ -96,7 +96,7 @@ export class DirectToJoinGreatCircleAtPointVectorBuilder {
       // We can choose the start path and the start point lies on the end path. We will choose a direction for the
       // start path that is the shortest path from the start point to the end point.
 
-      startPath = DirectToJoinGreatCircleAtPointVectorBuilder.geoCircleCache[0];
+      const startPathToUse = DirectToJoinGreatCircleAtPointVectorBuilder.geoCircleCache[0];
 
       const startToEndDistance = endPath.angleAlong(start, end, Math.PI, GeoMath.ANGULAR_TOLERANCE);
       if (startToEndDistance === 0) {
@@ -104,14 +104,16 @@ export class DirectToJoinGreatCircleAtPointVectorBuilder {
         // immediately.
         return 0;
       } else if (startToEndDistance <= Math.PI) {
-        startPath.set(endPath.center, endPath.radius);
+        startPathToUse.set(endPath.center, endPath.radius);
         startPathEndPathAngleDiff = 0;
         startToEndOffset = startToEndDistance;
       } else {
-        startPath.set(endPath.center, endPath.radius).reverse();
+        startPathToUse.set(endPath.center, endPath.radius).reverse();
         startPathEndPathAngleDiff = Math.PI;
         startToEndOffset = startToEndDistance;
       }
+
+      startPath = startPathToUse;
     }
 
     if (startPath) {
@@ -179,13 +181,13 @@ export class DirectToJoinGreatCircleAtPointVectorBuilder {
         // We can choose the start path and the start point does not lie on the end path. We will attempt to choose a
         // direction for the start path such that the start path is tangent with the end turn.
 
-        startPath = DirectToJoinGreatCircleAtPointVectorBuilder.geoCircleCache[0];
+        const startPathToUse = DirectToJoinGreatCircleAtPointVectorBuilder.geoCircleCache[0];
 
         const endTurnCenter = FlightPathUtils.getTurnCenterFromCircle(endTurnCircle, DirectToJoinGreatCircleAtPointVectorBuilder.vec3Cache[2]);
         const startToEndTurnCenterDistance = Vec3Math.unitAngle(endTurnCenter, start);
         if (Math.abs(startToEndTurnCenterDistance - turnRadiusRad) <= GeoMath.ANGULAR_TOLERANCE) {
           // The start point lies on the end turn circle.
-          startPath.setAsGreatCircle(start, endTurnCircle);
+          startPathToUse.setAsGreatCircle(start, endTurnCircle);
 
           endTurnCircleIncludesStart = true;
           isStartPathTangentToEndCircle = true;
@@ -194,10 +196,10 @@ export class DirectToJoinGreatCircleAtPointVectorBuilder {
           // great-circle paths that are tangent to the end turn circle and include the start point.
           const alpha = Math.asin(MathUtils.clamp(Math.sin(turnRadiusRad) / Math.sin(startToEndTurnCenterDistance), -1, 1));
 
-          startPath.setAsGreatCircle(start, endTurnCenter);
+          startPathToUse.setAsGreatCircle(start, endTurnCenter);
           // Choose the great-circle tangent that proceeds in the direction from the start point to the tangent point
           // with the end turn circle.
-          startPath.rotate(start, alpha * (endTurnDirection === 'left' ? 1 : -1), Math.PI);
+          startPathToUse.rotate(start, alpha * (endTurnDirection === 'left' ? 1 : -1), Math.PI);
 
           endTurnCircleIncludesStart = false;
           isStartPathTangentToEndCircle = true;
@@ -210,14 +212,16 @@ export class DirectToJoinGreatCircleAtPointVectorBuilder {
           // antipode of the turn center, then the start path is directed toward the turn center.
 
           if (startToEndTurnCenterDistance < turnRadiusRad) {
-            startPath.setAsGreatCircle(endTurnCenter, start);
+            startPathToUse.setAsGreatCircle(endTurnCenter, start);
           } else {
-            startPath.setAsGreatCircle(start, endTurnCenter);
+            startPathToUse.setAsGreatCircle(start, endTurnCenter);
           }
 
           endTurnCircleIncludesStart = false;
           isStartPathTangentToEndCircle = false;
         }
+
+        startPath = startPathToUse;
       }
 
       endTurnCircleIncludesStart ??= endTurnCircle.includes(start);

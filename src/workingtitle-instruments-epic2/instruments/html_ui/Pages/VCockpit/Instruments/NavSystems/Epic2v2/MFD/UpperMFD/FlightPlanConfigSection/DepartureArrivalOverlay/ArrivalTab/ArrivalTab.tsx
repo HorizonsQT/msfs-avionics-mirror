@@ -517,7 +517,7 @@ export class ArrivalTab extends TabContent<ArrivalTabProps> {
                 variant="bar"
                 label="Insert"
                 isEnabled={this.selectedRunway.map(x => !!x)}
-                onPressed={() => {
+                onPressed={async () => {
                   const selectedAirport = this.selectedAirport.get();
                   const selectedArrival = this.selectedArrival.get();
                   const selectedApproach = this.selectedApproach.get();
@@ -528,7 +528,7 @@ export class ArrivalTab extends TabContent<ArrivalTabProps> {
 
                   if (selectedAirport) {
                     if (selectedArrival) {
-                      this.props.fms.insertArrival(
+                      await this.props.fms.loadArrival(
                         selectedAirport,
                         this.selectedArrivalIndex.get(),
                         this.selectedRunwayTransitionIndex.get(),
@@ -540,7 +540,7 @@ export class ArrivalTab extends TabContent<ArrivalTabProps> {
                     }
 
                     if (selectedApproach) {
-                      this.props.fms.insertApproach({
+                      await this.props.fms.insertApproach({
                         facility: selectedAirport,
                         approachIndex: selectedApproach.index,
                         approachTransitionIndex: selectedApproachTransition ? selectedApproachTransition.transitionIndex : -1,

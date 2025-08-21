@@ -36,7 +36,12 @@ export interface SelectedSpeedProps extends ComponentProps {
 export class SelectedSpeed extends DisplayComponent<SelectedSpeedProps> {
   private readonly afcsBugRef = FSComponent.createRef<AfcsSpeedBug>();
 
-  private readonly isHidden = this.props.autopilotDataProvider.verticalActive.map(apMode => apMode !== Epic2ApVerticalMode.FlightLevelChange && this.noAutoThrottle);
+  private readonly isHidden = this.props.autopilotDataProvider.hasFmsSpeedMode
+    ? Subject.create(false)
+    : this.props.autopilotDataProvider.verticalActive.map((v) =>
+      v != Epic2ApVerticalMode.FlightLevelChange && v != Epic2ApVerticalMode.Speed
+      && v != Epic2ApVerticalMode.VnavSpeed && v != Epic2ApVerticalMode.VnavFlightLevelChange
+    );
 
   private readonly isAfcsBugHidden = Subject.create(true);
   private readonly isFmsBugHidden = this.props.autopilotDataProvider.isFmsModeSelected.map((v) => v !== null ? !v : false);
@@ -81,8 +86,6 @@ export class SelectedSpeed extends DisplayComponent<SelectedSpeedProps> {
     this.props.autopilotDataProvider.verticalActive,
   );
 
-  private noAutoThrottle = false;
-
   /** @inheritdoc */
   public onAfterRender(): void {
     const afcsBug = this.afcsBugRef.getOrDefault();
@@ -124,13 +127,15 @@ export class SelectedSpeed extends DisplayComponent<SelectedSpeedProps> {
                 />
               </div>
             }
-            <div class={{ 'hidden': this.isFmsBugHidden }}>
-              <FmsSpeedBug
-                altitudeDataProvider={this.props.altitudeDataProvider}
-                autopilotDataProvider={this.props.autopilotDataProvider}
-                autothrottleDataProvider={this.props.autothrottleDataProvider}
-              />
-            </div>
+            { this.props.autopilotDataProvider.hasFmsSpeedMode &&
+              <div class={{ 'hidden': this.isFmsBugHidden }}>
+                <FmsSpeedBug
+                  altitudeDataProvider={this.props.altitudeDataProvider}
+                  autopilotDataProvider={this.props.autopilotDataProvider}
+                  autothrottleDataProvider={this.props.autothrottleDataProvider}
+                />
+              </div>
+            }
           </div>
         }
         <span

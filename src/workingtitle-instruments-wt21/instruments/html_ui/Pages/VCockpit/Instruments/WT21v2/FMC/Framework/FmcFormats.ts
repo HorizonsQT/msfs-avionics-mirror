@@ -3,11 +3,10 @@ import {
   WindEntry
 } from '@microsoft/msfs-sdk';
 
-import { VorTuningMode, WT21UnitsUtils } from '@microsoft/msfs-wt21-shared';
-
-import { WT21Fms } from '../FlightPlan/WT21Fms';
-import { WT21CoordinatesUtils } from '../Navigation/WT21CoordinatesUtils';
-import { PlaceBearingDistanceInput, PlaceBearingPlaceBearingInput, WT21PilotWaypointUtils } from '../Navigation/WT21PilotWaypointUtils';
+import {
+  WT21Fms, VorTuningMode, WT21UnitsUtils, PlaceBearingDistanceInput, PlaceBearingPlaceBearingInput,
+  WT21CoordinatesUtils, WT21PilotWaypointUtils,
+} from '@microsoft/msfs-wt21-shared';
 
 const pad = (value: number): string => value.toString().padStart(2, '0');
 

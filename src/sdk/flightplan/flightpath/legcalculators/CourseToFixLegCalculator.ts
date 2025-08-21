@@ -80,18 +80,31 @@ export class CourseToFixLegCalculator extends AbstractFlightPathLegCalculator {
 
     let vectorIndex = 0;
 
+    const endCourse = leg.leg.trueDegrees ? leg.leg.course : MagVar.magneticToTrue(leg.leg.course, leg.calculated!.courseMagVar);
+
     const minTurnRadius = state.getDesiredTurnRadius(calculateIndex);
 
-    if (state.isFallback && !state.isDiscontinuity && state.currentPosition.isValid() && state.currentCourse !== undefined) {
-      // We are in a fallback state -> create a direct path to the end point.
+    if (state.isFallback && !state.isDiscontinuity && state.currentPosition.isValid()) {
+      // We are in a fallback state.
 
-      vectorIndex += this.directToPointVectorBuilder.build(
-        vectors, vectorIndex,
-        state.currentPosition, state.currentCourse,
-        terminatorPos,
-        minTurnRadius, undefined,
-        FlightPathVectorFlags.Fallback
-      );
+      // If the course at the start of the leg is not defined, then build a great-circle path to the terminator.
+      // Otherwise, build a direct-to path to the terminator.
+      if (state.currentCourse === undefined) {
+        vectorIndex += this.circleVectorBuilder.buildGreatCircle(
+          vectors, vectorIndex,
+          state.currentPosition, terminatorPos,
+          -endCourse,
+          FlightPathVectorFlags.Fallback
+        );
+      } else {
+        vectorIndex += this.directToPointVectorBuilder.build(
+          vectors, vectorIndex,
+          state.currentPosition, state.currentCourse,
+          terminatorPos,
+          minTurnRadius, undefined,
+          FlightPathVectorFlags.Fallback
+        );
+      }
 
       state.isFallback = false;
     } else {
@@ -99,7 +112,6 @@ export class CourseToFixLegCalculator extends AbstractFlightPathLegCalculator {
 
       const prevLeg: LegDefinition | undefined = legs[calculateIndex - 1];
 
-      const endCourse = leg.leg.trueDegrees ? leg.leg.course : MagVar.magneticToTrue(leg.leg.course, leg.calculated!.courseMagVar);
       const endVec = terminatorPos.toCartesian(this.vec3Cache[1]);
       const endPath = this.geoCircleCache[0].setAsGreatCircle(terminatorPos, endCourse);
 
@@ -113,18 +125,32 @@ export class CourseToFixLegCalculator extends AbstractFlightPathLegCalculator {
         if (options.calculateDiscontinuityVectors && state.currentPosition.isValid()) {
           // We are configured to calculate discontinuity vectors. Build a path to the start point.
 
-          const startPath = state.currentCourse !== undefined
-            ? this.geoCircleCache[1].setAsGreatCircle(state.currentPosition, state.currentCourse)
-            : undefined;
+          if (options.useGreatCirclePathForDiscontinuity) {
+            // Build a great-circle path to the start point.
 
-          vectorIndex += this.directToJoinGreatCircleToPointVectorBuilder.build(
-            vectors, vectorIndex,
-            state.currentPosition, startPath,
-            startVec, endPath,
-            minTurnRadius,
-            undefined,
-            FlightPathVectorFlags.Discontinuity, true
-          );
+            vectorIndex += this.circleVectorBuilder.buildGreatCircle(
+              vectors, vectorIndex,
+              state.currentPosition, startVec,
+              state.currentCourse ?? 0,
+              FlightPathVectorFlags.Discontinuity
+            );
+          } else {
+            // Build a path that turns from the start of the leg toward the start point before turning to end at the
+            // start point parallel to the defined leg course at the start point.
+
+            const startPath = state.currentCourse !== undefined
+              ? this.geoCircleCache[1].setAsGreatCircle(state.currentPosition, state.currentCourse)
+              : undefined;
+
+            vectorIndex += this.directToJoinGreatCircleToPointVectorBuilder.build(
+              vectors, vectorIndex,
+              state.currentPosition, startPath,
+              startVec, endPath,
+              minTurnRadius,
+              undefined,
+              FlightPathVectorFlags.Discontinuity, true
+            );
+          }
         }
 
         vectorIndex += this.circleVectorBuilder.buildGreatCircle(vectors, vectorIndex, startVec, terminatorPos);

@@ -1,4 +1,4 @@
-import { Subscription, UserSetting, UserSettingManager, UserSettingRecord, UserSettingValueFilter } from '@microsoft/msfs-sdk';
+import { PropertyTypeOf, Subscription, ToNonNullable, UserSetting, UserSettingManager, UserSettingRecord, UserSettingValueFilter } from '@microsoft/msfs-sdk';
 
 import { SoftKeyMenu } from './SoftKeyMenu';
 
@@ -70,7 +70,7 @@ export class SoftKeyBooleanUserSettingController<T extends UserSettingRecord, K 
 export class SoftKeyEnumUserSettingController<T extends UserSettingRecord, K extends keyof T & string> {
   private readonly setting = this.settingManager.getSetting(this.settingName);
 
-  private readonly settingHandler = (value: NonNullable<T[K]>): void => {
+  private readonly settingHandler = (value: ToNonNullable<PropertyTypeOf<T, K>>): void => {
     this.softkeyMenu.getItem(this.softkeyIndex).value.set(this.textMap(value));
   };
 
@@ -94,8 +94,8 @@ export class SoftKeyEnumUserSettingController<T extends UserSettingRecord, K ext
     private readonly softkeyLabel: string,
     private readonly settingManager: UserSettingManager<T>,
     private readonly settingName: K,
-    private readonly textMap: (value: NonNullable<T[K]>) => string,
-    private readonly nextFunc: (currentValue: NonNullable<T[K]>) => NonNullable<T[K]>
+    private readonly textMap: (value: ToNonNullable<PropertyTypeOf<T, K>>) => string,
+    private readonly nextFunc: (currentValue: ToNonNullable<PropertyTypeOf<T, K>>) => ToNonNullable<PropertyTypeOf<T, K>>
   ) {
   }
 
@@ -171,7 +171,7 @@ export class MultipleSoftKeyUserSettingController<T extends UserSettingRecord, K
     private readonly softkeyMenu: SoftKeyMenu,
     private readonly settingManager: UserSettingManager<T>,
     private readonly settingName: K,
-    private readonly softkeyDefs: MultipleSoftkeyUserSettingDef<NonNullable<T[K]>>[]
+    private readonly softkeyDefs: MultipleSoftkeyUserSettingDef<ToNonNullable<PropertyTypeOf<T, K>>>[]
   ) {
   }
 

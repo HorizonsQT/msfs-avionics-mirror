@@ -1,10 +1,10 @@
 import { ClockEvents, ConsumerSubject, EventBus, Facility, MagVar, MathUtils, NavMath, Subject, Subscription, UnitType } from '@microsoft/msfs-sdk';
 
+import { WT21FixInfoEvents, WT21Fms } from '@microsoft/msfs-wt21-shared';
+
 import { WT21FmcPage } from '../../WT21FmcPage';
 import { WT21FmcScreen } from '../../WT21FmcScreen';
 import { FixInfoRef, WT21FixInfoPageStore } from './FixInfoPageStore';
-import { WT21Fms } from '../../FlightPlan/WT21Fms';
-import { WT21FixInfoEvents } from '@microsoft/msfs-wt21-shared';
 
 /** Fix Info page controller */
 export class WT21FixInfoPageController {
@@ -168,11 +168,16 @@ export class WT21FixInfoPageController {
    */
   public async getFix(input: string): Promise<Facility | null> {
     const selectedFacility = await this.screen.selectWptFromIdent(input, this.fms.ppos);
-    if (selectedFacility !== null) {
-      return selectedFacility;
+
+    if (selectedFacility === null) {
+      return Promise.reject('FACILITY NOT FOUND');
     }
 
-    return Promise.reject('FACILITY NOT FOUND');
+    if (Math.abs(selectedFacility.lat) > 80) {
+      return Promise.reject('N/A IN POLAR REGION');
+    }
+
+    return selectedFacility;
   }
 
   /**

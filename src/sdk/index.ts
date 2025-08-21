@@ -21,6 +21,7 @@ export * from './sub';
 export * from './system';
 export * from './traffic';
 export * from './utils';
+export * from './weather';
 
 export * from './components/FSComponent';
 export * from './components/CollectionComponent';

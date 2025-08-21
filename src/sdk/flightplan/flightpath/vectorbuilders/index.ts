@@ -2,6 +2,7 @@ export * from './CircleInterceptVectorBuilder';
 export * from './CircleVectorBuilder';
 export * from './ConnectCirclesVectorBuilder';
 export * from './DirectToPointVectorBuilder';
+export * from './InterceptCircleToPointVectorBuilder';
 export * from './InterceptGreatCircleToPointVectorBuilder';
 export * from './JoinGreatCircleToPointVectorBuilder';
 export * from './ProcedureTurnVectorBuilder';

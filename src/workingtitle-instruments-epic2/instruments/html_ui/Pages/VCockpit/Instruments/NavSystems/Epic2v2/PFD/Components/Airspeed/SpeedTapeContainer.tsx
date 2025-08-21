@@ -106,11 +106,14 @@ export class SpeedTapeContainer extends DisplayComponent<SpeedTapeContainerProps
         {...Array.from(this.combinedConfigBugs.values()).map((limits: ConfigurationLimit[]) =>
           <ConfigurationLimitBug airspeedDataProvider={this.props.airspeedDataProvider} airspeed={limits[0].airspeed} labels={this.getConfigLimitLabels(limits)} />)
         }
-        <FmsSpeedBug
-          altitudeDataProvider={this.props.altitudeDataProvider}
-          autopilotDataProvider={this.props.autopilotDataProvider}
-          autothrottleDataProvider={this.props.autothrottleDataProvider}
-        />
+        {
+          this.props.autopilotDataProvider.hasFmsSpeedMode &&
+          <FmsSpeedBug
+            altitudeDataProvider={this.props.altitudeDataProvider}
+            autopilotDataProvider={this.props.autopilotDataProvider}
+            autothrottleDataProvider={this.props.autothrottleDataProvider}
+          />
+        }
         <SelectedSpeedBug altitudeDataProvider={this.props.altitudeDataProvider} autopilotDataProvider={this.props.autopilotDataProvider}
           autothrottleDataProvider={this.props.autothrottleDataProvider} />
         <MaxSpeedBug airspeedDataProvider={this.props.airspeedDataProvider} />

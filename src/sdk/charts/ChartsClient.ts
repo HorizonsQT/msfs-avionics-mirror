@@ -2,13 +2,35 @@ import { IcaoValue } from '../navigation/Icao';
 import { Subject } from '../sub/Subject';
 import { SubscribableMapFunctions } from '../sub/SubscribableMapFunctions';
 import { AtomicSequenceUtils } from '../utils/atomic/AtomicSequence';
-import { DebounceTimer } from '../utils/time/DebounceTimer';
 import { Wait } from '../utils/time/Wait';
-import { ChartIndex, ChartPages } from './ChartTypes';
 import { ChartView } from './ChartView';
+import { SimChartIndex, SimChartPages } from './SimChartTypes';
 
 /**
- * Utilities for interacting with charts
+ * Error codes that can be reported by {@link ChartsClient}.
+ */
+export enum ChartsClientErrorCode {
+  /** No error. */
+  None = 0,
+
+  /** The requested data was not found. */
+  NotFound,
+
+  /** An unknown chart provider was specified. */
+  UnknownProvider,
+
+  /** An unspecified network error occurred. The request can be retried. */
+  NetworkError,
+
+  /** An unspecified internal error occurred. The request should not be retried. */
+  InternalError,
+
+  /** An unexpected conflict with another request was encountered. */
+  RequestIdConflict = 256,
+}
+
+/**
+ * A class used for retrieving chart data from the sim.
  */
 export class ChartsClient {
   private static listener: ViewListener.ViewListener | null = null;
@@ -19,13 +41,10 @@ export class ChartsClient {
     number,
     {
       /** A function to call to resolve the request. */
-      resolve: (data: ChartIndex<string>) => void;
+      resolve: (data: SimChartIndex<string>) => void;
 
       /** A function to call to reject the request. */
       reject: (reason?: any) => void;
-
-      /** A timer that executes an action when the request times out. */
-      timeout: DebounceTimer;
     }
   >();
 
@@ -33,7 +52,7 @@ export class ChartsClient {
     number,
     {
       /** A function to call to resolve the request. */
-      resolve: (data: ChartPages) => void;
+      resolve: (data: SimChartPages) => void;
 
       /** A function to call to reject the request. */
       reject: (reason?: any) => void;
@@ -50,30 +69,25 @@ export class ChartsClient {
   public static async getIndexForAirport<T extends string>(
     airportIcao: IcaoValue,
     provider: string
-  ): Promise<ChartIndex<T>> {
+  ): Promise<SimChartIndex<T>> {
     await ChartsClient.ensureViewListenerReady();
 
     const requestId = (await AtomicSequenceUtils.getInstance()).getNext();
 
     const existing = ChartsClient.indexRequestMap.get(requestId);
     if (existing) {
-      existing.timeout.clear();
-      existing.reject(`ChartsClient.getIndexForAirport(): request with ID ${requestId} was overridden before it was resolved`);
+      // This should never happen since request IDs from AtomicSequence should always be unique (unless they've
+      // overflowed Number.MAX_SAFE_INTEGER).
+      console.error(`ChartsClient: unexpected request ID conflict encountered using ID ${requestId} from AtomicSequence`);
+      throw ChartsClientErrorCode.RequestIdConflict;
     }
 
-    return new Promise<ChartIndex<T>>((resolve, reject) => {
-      const timeout = new DebounceTimer();
-      timeout.schedule(() => {
-        ChartsClient.indexRequestMap.delete(requestId);
-        resolve({ airportIcao, charts: [] });
-      }, 5000);
-
+    return new Promise<SimChartIndex<T>>((resolve, reject) => {
       ChartsClient.indexRequestMap.set(
         requestId,
         {
-          resolve: resolve as (data: ChartIndex<string>) => void,
+          resolve: resolve as (data: SimChartIndex<string>) => void,
           reject,
-          timeout,
         }
       );
 
@@ -86,17 +100,20 @@ export class ChartsClient {
    * @param chartGuid The GUID of the chart for which to obtain page information.
    * @returns A Promise which is fulfilled with the requested chart page information when it has been retrieved.
    */
-  public static async getChartPages(chartGuid: string): Promise<ChartPages> {
+  public static async getChartPages(chartGuid: string): Promise<SimChartPages> {
     await ChartsClient.ensureViewListenerReady();
 
     const requestId = (await AtomicSequenceUtils.getInstance()).getNext();
 
     const existing = ChartsClient.pagesRequestMap.get(requestId);
     if (existing) {
-      existing.reject(`ChartsClient.getChartPages(): request with ID ${requestId} was overridden before it was resolved`);
+      // This should never happen since request IDs from AtomicSequence should always be unique (unless they've
+      // overflowed Number.MAX_SAFE_INTEGER).
+      console.error(`ChartsClient: unexpected request ID conflict encountered using ID ${requestId} from AtomicSequence`);
+      throw ChartsClientErrorCode.RequestIdConflict;
     }
 
-    return new Promise<ChartPages>((resolve, reject) => {
+    return new Promise<SimChartPages>((resolve, reject) => {
       ChartsClient.pagesRequestMap.set(
         requestId,
         {
@@ -128,8 +145,10 @@ export class ChartsClient {
 
     await Wait.awaitSubscribable(ChartsClient.ready, SubscribableMapFunctions.identity(), false, 10_000);
 
-    ChartsClient.listener.on('SendChartIndex', ChartsClient.onChartIndexReceived.bind(ChartsClient));
-    ChartsClient.listener.on('SendChartPages', ChartsClient.onChartPagesReceived.bind(ChartsClient));
+    ChartsClient.listener.on('SendChartIndex', ChartsClient.onChartIndexReceived);
+    ChartsClient.listener.on('SendChartIndexError', ChartsClient.onChartIndexErrorReceived);
+    ChartsClient.listener.on('SendChartPages', ChartsClient.onChartPagesReceived);
+    ChartsClient.listener.on('SendChartPagesError', ChartsClient.onChartPagesErrorReceived);
   }
 
   /**
@@ -145,31 +164,58 @@ export class ChartsClient {
   }
 
   /**
-   * Callback that handles when a chart index is received from the simulator
-   * @param requestID the request ID
-   * @param index the index object
+   * Responds to when a chart index response is received from the simulator.
+   * @param requestID The request ID to which the response applies.
+   * @param index The chart index for the request.
    */
-  private static onChartIndexReceived(requestID: number, index: ChartIndex<string>): void {
+  private static onChartIndexReceived(requestID: number, index: SimChartIndex<string>): void {
     const request = ChartsClient.indexRequestMap.get(requestID);
 
     if (request) {
       ChartsClient.indexRequestMap.delete(requestID);
-      request.timeout.clear();
       request.resolve(index);
     }
   }
 
   /**
-   * Callback that handles when a chart pages object is received from the simulator
-   * @param requestID the request ID
-   * @param pages the pages object
+   * Responds to when a chart index error is received from the simulator.
+   * @param requestID The request ID to which the error applies.
+   * @param errorCode An error code describing the error.
    */
-  private static onChartPagesReceived(requestID: number, pages: ChartPages): void {
+  private static onChartIndexErrorReceived(requestID: number, errorCode: number): void {
+    const request = ChartsClient.indexRequestMap.get(requestID);
+
+    if (request) {
+      ChartsClient.indexRequestMap.delete(requestID);
+      request.reject(errorCode);
+    }
+  }
+
+  /**
+   * Responds to when a chart pages response is received from the simulator.
+   * @param requestID The request ID to which the response applies.
+   * @param pages The chart pages for the request.
+   */
+  private static onChartPagesReceived(requestID: number, pages: SimChartPages): void {
     const request = ChartsClient.pagesRequestMap.get(requestID);
 
     if (request) {
       ChartsClient.pagesRequestMap.delete(requestID);
       request.resolve(pages);
+    }
+  }
+
+  /**
+   * Responds to when a chart pages error is received from the simulator.
+   * @param requestID The request ID to which the error applies.
+   * @param errorCode An error code describing the error.
+   */
+  private static onChartPagesErrorReceived(requestID: number, errorCode: number): void {
+    const request = ChartsClient.pagesRequestMap.get(requestID);
+
+    if (request) {
+      ChartsClient.pagesRequestMap.delete(requestID);
+      request.reject(errorCode);
     }
   }
 }

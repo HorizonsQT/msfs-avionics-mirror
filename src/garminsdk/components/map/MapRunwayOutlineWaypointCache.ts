@@ -39,7 +39,7 @@ export class MapRunwayOutlineWaypointCache {
   private addToCache(waypoint: MapRunwayOutlineWaypoint): void {
     this.cache.set(waypoint.uid, waypoint);
     if (this.cache.size > this.size) {
-      this.cache.delete(this.cache.keys().next().value);
+      this.cache.delete(this.cache.keys().next().value!);
     }
   }
 

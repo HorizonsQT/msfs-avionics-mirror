@@ -268,63 +268,34 @@ SimVar.SetSimVarValue = (name: string, unit: string, value: any, dataSource = de
 };
 
 /**
- * A mapping from non-numeric SimVar unit types to Typescript types.
- * 
- * Note that this mapping is not complete (all SimVarUnit types are supposed to be case-insensitive). Only the most
- * common capitalization schemes are included.
+ * A mapping from non-numeric SimVar unit types with lowercase capitalization to Typescript types.
  */
 type SimVarUnitTypeMap = {
   /** LatLongAlt. */
   ['latlongalt']: LatLongAlt;
-  /** LatLongAlt. */
-  ['Latlongalt']: LatLongAlt;
-  /** LatLongAlt. */
-  ['LatLongAlt']: LatLongAlt;
 
   /** LatLongAltPBH. */
   ['latlongaltpbh']: LatLongAltPBH;
-  /** LatLongAltPBH. */
-  ['Latlongaltpbh']: LatLongAltPBH;
-  /** LatLongAltPBH. */
-  ['LatlongaltPbh']: LatLongAltPBH;
-  /** LatLongAltPBH. */
-  ['LatlongaltPBH']: LatLongAltPBH;
-  /** LatLongAltPBH. */
-  ['LatLongAltPbh']: LatLongAltPBH;
-  /** LatLongAltPBH. */
-  ['LatLongAltPBH']: LatLongAltPBH;
 
   /** PBH. */
   ['pbh']: PitchBankHeading;
-  /** PBH. */
-  ['Pbh']: PitchBankHeading;
-  /** PBH. */
-  ['PBH']: PitchBankHeading;
 
   /** PID_STRUCT. */
   ['pid_struct']: PID_STRUCT;
-  /** PID_STRUCT. */
-  ['Pid_Struct']: PID_STRUCT;
-  /** PID_STRUCT. */
-  ['PID_Struct']: PID_STRUCT;
 
   /** string. */
   ['string']: string;
-  /** string. */
-  ['String']: string;
 
   /** XYZ. */
   ['xyz']: XYZ;
-  /** XYZ. */
-  ['Xyz']: XYZ;
-  /** XYZ. */
-  ['XYZ']: XYZ;
 };
 
 /**
  * Maps a SimVar unit type to its corresponding Typescript type.
  */
-export type SimVarUnitToType<Unit extends string> = Unit extends keyof SimVarUnitTypeMap ? SimVarUnitTypeMap[Unit] : number;
+export type SimVarUnitToType<Unit extends string> = Unit extends string
+  ? Lowercase<Unit> extends keyof SimVarUnitTypeMap ? SimVarUnitTypeMap[Lowercase<Unit>] : number
+  : never;
 
 /**
  * A registered SimVar.
@@ -524,21 +495,21 @@ export class RegisteredSimVarUtils {
     name: string,
     unit: U,
     dataSource = ''
-  ): RegisteredSimVar<T extends undefined ? SimVarUnitToType<U> : T> {
+  ): T extends undefined ? (U extends string ? RegisteredSimVar<SimVarUnitToType<U>> : never) : RegisteredSimVar<NoInfer<T>> {
     if (stringRegex.test(unit)) {
-      return new RegisteredStringSimVar(name, unit, dataSource) as unknown as RegisteredSimVar<T extends undefined ? SimVarUnitToType<U> : T>;
+      return new RegisteredStringSimVar(name, unit, dataSource) as any;
     } else if (latlonaltRegEx.test(unit)) {
-      return new RegisteredLlaSimVar(name, unit, dataSource) as unknown as RegisteredSimVar<T extends undefined ? SimVarUnitToType<U> : T>;
+      return new RegisteredLlaSimVar(name, unit, dataSource) as any;
     } else if (latlonaltpbhRegex.test(unit)) {
-      return new RegisteredLlaPbhSimVar(name, unit, dataSource) as unknown as RegisteredSimVar<T extends undefined ? SimVarUnitToType<U> : T>;
+      return new RegisteredLlaPbhSimVar(name, unit, dataSource) as any;
     } else if (pbhRegex.test(unit)) {
-      return new RegisteredPbhSimVar(name, unit, dataSource) as unknown as RegisteredSimVar<T extends undefined ? SimVarUnitToType<U> : T>;
+      return new RegisteredPbhSimVar(name, unit, dataSource) as any;
     } else if (pid_structRegex.test(unit)) {
-      return new RegisteredPidStructSimVar(name, unit, dataSource) as unknown as RegisteredSimVar<T extends undefined ? SimVarUnitToType<U> : T>;
+      return new RegisteredPidStructSimVar(name, unit, dataSource) as any;
     } else if (xyzRegex.test(unit)) {
-      return new RegisteredXyzSimVar(name, unit, dataSource) as unknown as RegisteredSimVar<T extends undefined ? SimVarUnitToType<U> : T>;
+      return new RegisteredXyzSimVar(name, unit, dataSource) as any;
     } else {
-      return new RegisteredNumberSimVar(name, unit, dataSource) as unknown as RegisteredSimVar<T extends undefined ? SimVarUnitToType<U> : T>;
+      return new RegisteredNumberSimVar(name, unit, dataSource) as any;
     }
   }
 

@@ -1,8 +1,9 @@
 import {
   BitFlags, ClippedPathStream, EventBus, FlightPlan, FlightPlanSegmentType, FSComponent, GeoCircleResampler,
-  GeoProjectionPathStreamStack, MapCachedCanvasLayer, MapLayer, MapLayerProps, MapProjection, MapProjectionChangeType,
-  MapSharedCachedCanvasLayer, MapSharedCachedCanvasSubLayer, MapSharedCachedCanvasSubLayerProps, NullPathStream,
-  Subscribable, Subscription, UnitType, VecNSubject, VNavState, VNavWaypoint, VNode
+  GeoCylindricalClippedPathStream, GeoProjection, GeoProjectionPathStreamStack, MapCachedCanvasLayer, MapLayer,
+  MapLayerProps, MapProjection, MapProjectionChangeType, MapSharedCachedCanvasLayer, MapSharedCachedCanvasSubLayer,
+  MapSharedCachedCanvasSubLayerProps, NullPathStream, Subscribable, Subscription, UnitType, VecNSubject, VNavState,
+  VNavWaypoint, VNode
 } from '@microsoft/msfs-sdk';
 
 import { FmsUtils } from '../../../flightplan/FmsUtils';
@@ -118,14 +119,23 @@ interface MapSharedFlightPlanSubLayerProps extends MapSharedCachedCanvasSubLayer
  * A sublayer of {@link MapSharedFlightPlanLayer} that draws a single flight plan.
  */
 class MapSharedFlightPlanSubLayer extends MapSharedCachedCanvasSubLayer<MapSharedFlightPlanSubLayerProps> {
-  private static readonly CLIP_BOUNDS_BUFFER = 10; // number of pixels from edge of canvas to extend the clipping bounds, in pixels
+  /** The amount to offset the pre-projection longitude clipping boundaries from the anti-meridian, in degrees. */
+  private static readonly GEO_CLIP_ANTI_MERIDIAN_GAP = 0.1;
+  /** The pre-projection latitude clipping boundary, in degrees. */
+  private static readonly GEO_CLIP_LATITUDE = 89;
+
+  /** The distance from each edge of the canvas to extend the post-projection clipping bounds, in pixels. */
+  private static readonly CLIP_BOUNDS_BUFFER = 10;
 
   private static vnavWaypointUidSource = 0;
 
   private readonly resampler = new GeoCircleResampler(Math.PI / 12, 0.25, 8);
 
-  private readonly clipBoundsSub = VecNSubject.create(new Float64Array(4));
-  private readonly clippedPathStream = new ClippedPathStream(NullPathStream.INSTANCE, this.clipBoundsSub);
+  private readonly geoClipBounds = VecNSubject.create(new Float64Array(4));
+  private readonly geoClippedPathStream = new GeoCylindricalClippedPathStream(NullPathStream.INSTANCE, this.geoClipBounds);
+
+  private readonly clipBounds = VecNSubject.create(new Float64Array(4));
+  private readonly clippedPathStream = new ClippedPathStream(NullPathStream.INSTANCE, this.clipBounds);
 
   private pathStreamStack!: GeoProjectionPathStreamStack;
 
@@ -150,6 +160,7 @@ class MapSharedFlightPlanSubLayer extends MapSharedCachedCanvasSubLayer<MapShare
   public onAttached(): void {
     this.pathStreamStack = new GeoProjectionPathStreamStack(NullPathStream.INSTANCE, this.projection.getGeoProjection(), this.resampler);
 
+    this.pathStreamStack.pushPreProjected(this.geoClippedPathStream);
     this.pathStreamStack.pushPostProjected(this.clippedPathStream);
     this.pathStreamStack.setConsumer(this.display.context);
 
@@ -204,11 +215,11 @@ class MapSharedFlightPlanSubLayer extends MapSharedCachedCanvasSubLayer<MapShare
   }
 
   /**
-   * Updates this sublayer's canvas clipping bounds.
+   * Updates this sublayer's post-projection clipping bounds.
    */
   private updateClipBounds(): void {
     const size = this.display.size;
-    this.clipBoundsSub.set(
+    this.clipBounds.set(
       -MapSharedFlightPlanSubLayer.CLIP_BOUNDS_BUFFER,
       -MapSharedFlightPlanSubLayer.CLIP_BOUNDS_BUFFER,
       size + MapSharedFlightPlanSubLayer.CLIP_BOUNDS_BUFFER,
@@ -241,6 +252,7 @@ class MapSharedFlightPlanSubLayer extends MapSharedCachedCanvasSubLayer<MapShare
 
     const plan = this.props.dataProvider.plan.get();
     if (plan) {
+      this.updateGeoClipBounds(display.geoProjection);
       this.pathStreamStack.setProjection(display.geoProjection);
       this.props.pathRenderer.render(
         plan,
@@ -251,6 +263,22 @@ class MapSharedFlightPlanSubLayer extends MapSharedCachedCanvasSubLayer<MapShare
         this.isObsActive ? this.obsCourse : undefined
       );
     }
+  }
+
+  /**
+   * Updates this sublayer's pre-projection clipping bounds.
+   * @param projection The projection used to draw the flight plan.
+   */
+  private updateGeoClipBounds(projection: GeoProjection): void {
+    const centralMeridian = -projection.getPreRotation()[0] * Avionics.Utils.RAD2DEG;
+    const antiMeridian = centralMeridian + 180;
+
+    this.geoClipBounds.set(
+      antiMeridian + MapSharedFlightPlanSubLayer.GEO_CLIP_ANTI_MERIDIAN_GAP,
+      -MapSharedFlightPlanSubLayer.GEO_CLIP_LATITUDE,
+      antiMeridian - MapSharedFlightPlanSubLayer.GEO_CLIP_ANTI_MERIDIAN_GAP,
+      MapSharedFlightPlanSubLayer.GEO_CLIP_LATITUDE
+    );
   }
 
   /**

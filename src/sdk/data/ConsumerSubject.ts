@@ -1,4 +1,5 @@
 import { AbstractSubscribable } from '../sub/AbstractSubscribable';
+import { ReadonlyLifecycle } from '../sub/Lifecycle';
 import { Subscription } from '../sub/Subscription';
 import { Consumer } from './Consumer';
 
@@ -186,7 +187,7 @@ export class ConsumerSubject<T> extends AbstractSubscribable<T> implements Subsc
   /**
    * Resets this subject to an initial value and optionally sets a new consumer from which this subject will derive its
    * value. If the consumer is null, then this subject's value will not be updated until a non-null consumer is set.
-   * 
+   *
    * The reset is treated as an atomic operation. If a non-null consumer is set and a consumed value immediately
    * replaces the initial value, then subscribers to this subject will only be notified of the change to the consumed
    * value instead of to both the change to the initial value and then to the consumed value.
@@ -262,5 +263,11 @@ export class ConsumerSubject<T> extends AbstractSubscribable<T> implements Subsc
   public destroy(): void {
     this._isAlive = false;
     this.consumerSub?.destroy();
+  }
+
+  /** @inheritdoc */
+  public withLifecycle(lifecycle: ReadonlyLifecycle): this {
+    lifecycle.register(this);
+    return this;
   }
 }

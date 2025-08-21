@@ -1,4 +1,4 @@
-/// <reference types="@microsoft/msfs-types/js/avionics" />
+/// <reference types="@microsoft/msfs-types/js/avionics" preserve="true" />
 
 import {
   BasicNavAngleUnit, BitFlags, EventBus, FSComponent, MapCanvasLayer, MapLayer, MapLayerProps, MappedSubject, MapProjection, MapProjectionChangeType,

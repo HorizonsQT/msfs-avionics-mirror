@@ -46,8 +46,13 @@ export type TrafficMapOptions = {
   /** The traffic system from which to retrieve intruder data. */
   trafficSystem: TrafficSystem;
 
-  /** The frequency, in hertz, with which the player airplane's properties are updated from event bus data. */
-  dataUpdateFreq: number | Subscribable<number>;
+  /**
+   * The default frequency, in hertz, at which to update player airplane and autopilot properties from their bound data
+   * sources. If the frequency is `null`, then updates will not be throttled by frequency - each property will be
+   * updated as soon as the value of its data source changes. If the frequency is not `null`, then each property will
+   * only be updated when the map is updated, and the frequency of updates will not exceed `updateFreq`.
+   */
+  dataUpdateFreq: number | null | Subscribable<number | null>;
 
   /**
    * The nominal projected target offset of the map, as `[x, y]`, where each component is expressed relative to the

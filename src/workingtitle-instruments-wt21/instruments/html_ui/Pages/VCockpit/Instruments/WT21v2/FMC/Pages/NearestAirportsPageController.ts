@@ -2,7 +2,8 @@ import {
   AirportFacility, EventBus, FacilitySearchType, FacilityType, GeoPoint, ICAO, MagVar, NavMath, NearestAirportSearchSession, NearestIcaoSearchSessionDataType, RunwayUtils, UnitType
 } from '@microsoft/msfs-sdk';
 
-import { WT21Fms } from '../FlightPlan/WT21Fms';
+import { WT21Fms } from '@microsoft/msfs-wt21-shared';
+
 import { NearestAirportsPageStore } from './NearestAirportsPageStore';
 
 /**

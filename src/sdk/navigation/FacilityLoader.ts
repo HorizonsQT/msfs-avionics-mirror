@@ -1,5 +1,5 @@
-/// <reference types="@microsoft/msfs-types/js/common" />
-/// <reference types="@microsoft/msfs-types/js/simplane" />
+/// <reference types="@microsoft/msfs-types/js/common" preserve="true" />
+/// <reference types="@microsoft/msfs-types/js/simplane" preserve="true" />
 
 import { SharedGlobal } from '../data/SharedGlobal';
 import { SimVarValueType } from '../data/SimVars';

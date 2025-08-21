@@ -53,6 +53,9 @@ export enum FlightPathVectorFlags {
 
   /** The constant-heading vector in a fly-heading leg. */
   ConstantHeading = 1 << 14,
+
+  /** A fallback path for a turn from one leg to another. */
+  LegToLegFallback = 1 << 15,
 }
 
 /**

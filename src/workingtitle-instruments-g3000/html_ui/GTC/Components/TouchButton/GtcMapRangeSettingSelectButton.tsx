@@ -1,4 +1,7 @@
-import { DisplayComponent, FSComponent, UserSetting, UserSettingManager, UserSettingValueFilter, VNode } from '@microsoft/msfs-sdk';
+import {
+  DisplayComponent, FSComponent, PropertyTypeOf, ToNonNullable, UserSetting, UserSettingManager,
+  UserSettingValueFilter, VNode
+} from '@microsoft/msfs-sdk';
 
 import { MapUtils, UnitsUserSettingManager } from '@microsoft/msfs-garminsdk';
 import { G3000MapUserSettingTypes, MapRangeSettingDisplay } from '@microsoft/msfs-wtg3000-common';
@@ -35,7 +38,7 @@ export interface GtcMapRangeSettingSelectButtonProps
    * A function which writes the selected value to the setting. If not defined, selected values will be written to
    * the setting retrieved from `mapReadSettingManager`.
    */
-  writeToSetting?: <K extends keyof G3000MapUserSettingTypes & string>(settingName: K, value: NonNullable<G3000MapUserSettingTypes[K]>) => void;
+  writeToSetting?: <K extends keyof G3000MapUserSettingTypes & string>(settingName: K, value: ToNonNullable<PropertyTypeOf<G3000MapUserSettingTypes, K>>) => void;
 
   /** The title of the selection list dialog. */
   title?: string;
@@ -52,7 +55,7 @@ export class GtcMapRangeSettingSelectButton extends DisplayComponent<GtcMapRange
   private readonly buttonRef = FSComponent.createRef<GtcListSelectTouchButton<UserSetting<number>>>();
 
   private readonly writeToSetting = this.props.writeToSetting ?? (
-    <K extends keyof G3000MapUserSettingTypes & string>(settingName: K, value: NonNullable<G3000MapUserSettingTypes[K]>): void => {
+    <K extends keyof G3000MapUserSettingTypes & string>(settingName: K, value: ToNonNullable<PropertyTypeOf<G3000MapUserSettingTypes, K>>): void => {
       this.props.mapReadSettingManager.getSetting(settingName).value = value;
     }
   );

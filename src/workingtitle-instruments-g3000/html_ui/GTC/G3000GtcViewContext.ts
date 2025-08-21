@@ -1,6 +1,6 @@
 import { FacilityWaypoint, IntersectionFacility, MutableSubscribable, NdbFacility, SubscribableArray, UserFacility, VorFacility } from '@microsoft/msfs-sdk';
 
-import { MinimumsDataProvider, ObsSuspDataProvider, VNavDataProvider } from '@microsoft/msfs-garminsdk';
+import { MinimumsDataProvider, ObsSuspDataProvider, TerrainSystemStateDataProvider, VNavDataProvider } from '@microsoft/msfs-garminsdk';
 
 import { FlightPlanListManager, FmsSpeedTargetDataProvider, G3000ChartsSource } from '@microsoft/msfs-wtg3000-common';
 
@@ -28,6 +28,9 @@ export type G3000GtcViewContext = {
 
   /** A provider of FMS speed target data. */
   fmsSpeedTargetDataProvider: FmsSpeedTargetDataProvider | undefined;
+
+  /** A provider of terrain system state data. */
+  terrainSystemStateDataProvider: TerrainSystemStateDataProvider;
 
   /** A manager which maintains a flat list representation of flight plan segments and legs. */
   flightPlanListManager: FlightPlanListManager | undefined;

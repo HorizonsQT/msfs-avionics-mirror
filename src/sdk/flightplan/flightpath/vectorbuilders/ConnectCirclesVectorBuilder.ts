@@ -1,4 +1,4 @@
-import { GeoCircle } from '../../../geo/GeoCircle';
+import { GeoCircle, ReadonlyGeoCircle } from '../../../geo/GeoCircle';
 import { LatLonInterface } from '../../../geo/GeoInterfaces';
 import { GeoMath } from '../../../geo/GeoMath';
 import { GeoPoint } from '../../../geo/GeoPoint';
@@ -46,8 +46,8 @@ export class ConnectCirclesVectorBuilder {
   public build(
     vectors: FlightPathVector[],
     index: number,
-    fromCircle: GeoCircle,
-    toCircle: GeoCircle,
+    fromCircle: ReadonlyGeoCircle,
+    toCircle: ReadonlyGeoCircle,
     radius?: number,
     from?: ReadonlyFloat64Array | LatLonInterface,
     to?: ReadonlyFloat64Array | LatLonInterface,
@@ -142,21 +142,19 @@ export class ConnectCirclesVectorBuilder {
    * @returns a GeoCircle which connects the two circles, or null if one could not be found.
    */
   private findCircleToJoinCircles(
-    fromCircle: GeoCircle,
-    toCircle: GeoCircle,
+    fromCircle: ReadonlyGeoCircle,
+    toCircle: ReadonlyGeoCircle,
     radius: number,
     out: GeoCircle,
     from?: ReadonlyFloat64Array,
     to?: ReadonlyFloat64Array
   ): GeoCircle | null {
-    /*
-     * Theory: the locus of all centers of circle of radius r tangent to circle with center C and radius R is
-     * equivalent to the set of circles S(C) with center C and positive radius |r +/- R|. If we further restrict the
-     * set of tangent circles to those where both the original and tangent circle run in the same direction at the
-     * tangent point, the locus of centers can be further reduced to the single circle Sd(C) with center C and
-     * positive radius |r - R|. Therefore, to find the centers of the circles of radius r connecting the circles C1 and
-     * C2, we need only find the intersections of Sd(C1) and Sd(C2).
-     */
+    // Theory: the locus of the centers of all circles of radius r that are tangent to a circle with center C and
+    // radius R is equivalent to the set of circles S(C) with center C and positive radius |r +/- R|. If we further
+    // restrict the set of tangent circles to those where both the original and tangent circle run in the same
+    // direction at the tangent point, then the locus of centers can be further reduced to the single circle Sd(C) with
+    // center C and positive radius |r - R|. Therefore, to find the centers of the circles of radius r connecting the
+    // circles C1 and C2, we need only find the intersections of Sd(C1) and Sd(C2).
 
     const solutions: GeoCircle[] = [];
     const intersections = ConnectCirclesVectorBuilder.intersectionCache;
@@ -223,9 +221,9 @@ export class ConnectCirclesVectorBuilder {
    * @returns the total distance along the joining path, in great-arc radians.
    */
   private calculateJoinCirclesPathDistance(
-    fromCircle: GeoCircle,
-    toCircle: GeoCircle,
-    joinCircle: GeoCircle,
+    fromCircle: ReadonlyGeoCircle,
+    toCircle: ReadonlyGeoCircle,
+    joinCircle: ReadonlyGeoCircle,
     from?: ReadonlyFloat64Array,
     to?: ReadonlyFloat64Array
   ): number {

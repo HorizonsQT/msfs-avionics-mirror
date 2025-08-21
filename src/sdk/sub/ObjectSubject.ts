@@ -270,14 +270,16 @@ export class ObjectSubject<T extends Record<string, any>> implements MutableSubs
    * @param map The function to use to transform inputs.
    * @param paused Whether the new subscription should be initialized as paused. Defaults to `false`.
    * @returns The new subscription.
+   * @template OI The input type of the mutable subscribable to which to pipe.
+   * @template OV The value type of the mutable subscribable to which to pipe.
    */
-  public pipe<M>(to: MutableSubscribable<any, M>, map: (fromVal: T, toVal: M) => M, paused?: boolean): Subscription;
+  public pipe<OI, OV = unknown>(to: MutableSubscribable<OV, OI>, map: (fromVal: T, toVal: OV) => OI, paused?: boolean): Subscription;
   // eslint-disable-next-line jsdoc/require-jsdoc
-  public pipe<M>(to: MutableSubscribable<any, T> | MutableSubscribable<any, M>, arg2?: ((fromVal: T, toVal: M) => M) | boolean, arg3?: boolean): Subscription {
+  public pipe<OI, OV>(to: MutableSubscribable<any, T> | MutableSubscribable<OV, OI>, arg2?: ((fromVal: T, toVal: OV) => OI) | boolean, arg3?: boolean): Subscription {
     let sub;
     let paused;
     if (typeof arg2 === 'function') {
-      sub = new SubscribablePipe(this, to as MutableSubscribable<any, M>, arg2, this.onSubDestroyedFunc);
+      sub = new SubscribablePipe(this, to as MutableSubscribable<OV, OI>, arg2, this.onSubDestroyedFunc);
       paused = arg3 ?? false;
     } else {
       sub = new SubscribablePipe(this, to as MutableSubscribable<any, T>, this.onSubDestroyedFunc);

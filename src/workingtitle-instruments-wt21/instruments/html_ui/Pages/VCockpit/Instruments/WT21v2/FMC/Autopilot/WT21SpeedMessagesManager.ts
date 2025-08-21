@@ -1,8 +1,7 @@
 import { AdcEvents, ClockEvents, ConsumerSubject, EventBus, SpeedUnit, VNavPathCalculator } from '@microsoft/msfs-sdk';
 
-import { FMS_MESSAGE_ID, MessageService, WT21FmsUtils, WT21LNavDataEvents } from '@microsoft/msfs-wt21-shared';
+import { FMS_MESSAGE_ID, MessageService, WT21Fms, WT21FmsUtils, WT21LNavDataEvents } from '@microsoft/msfs-wt21-shared';
 
-import { WT21Fms } from '../FlightPlan/WT21Fms';
 import { WT21SpeedConstraintStore } from './WT21SpeedConstraintStore';
 
 const CHECK_SPEED_IAS_TOLERANCE = 20;

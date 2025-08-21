@@ -1,7 +1,8 @@
 import { ComponentProps, ComputedSubject, DisplayComponent, EventBus, FSComponent, NavSourceType, Subject, VNode } from '@microsoft/msfs-sdk';
 
+import { WTLineNavIndicators, WTLineNavSource } from '@microsoft/msfs-wtlinesdk';
+
 import { NavIndicatorContext } from '../../Navigation/NavIndicators/NavIndicatorContext';
-import { WT21NavIndicators, WT21NavSource } from '../../Navigation/WT21NavIndicators';
 
 import './BearingPointerDataFields.css';
 
@@ -39,7 +40,7 @@ interface BearingPointerDataFieldProps extends ComponentProps {
 }
 
 /** Info for a specific bearing pointer. */
-class BearingPointerDataField extends DisplayComponent<BearingPointerDataFieldProps, [WT21NavIndicators]> {
+class BearingPointerDataField extends DisplayComponent<BearingPointerDataFieldProps, [WTLineNavIndicators]> {
   public readonly contextType = [NavIndicatorContext] as const;
   private readonly dataFieldRef = FSComponent.createRef<HTMLDivElement>();
   private readonly distanceRef = FSComponent.createRef<HTMLDivElement>();
@@ -76,7 +77,7 @@ class BearingPointerDataField extends DisplayComponent<BearingPointerDataFieldPr
     this.dataFieldRef.instance.classList.toggle('isLocalizer', !!isLocalizer);
   };
 
-  private readonly handleNewSource = (source: WT21NavSource | null): void => {
+  private readonly handleNewSource = (source: WTLineNavSource | null): void => {
     if (!source) {
       this.dataFieldRef.instance.classList.toggle('visibility-hidden', true);
     } else {

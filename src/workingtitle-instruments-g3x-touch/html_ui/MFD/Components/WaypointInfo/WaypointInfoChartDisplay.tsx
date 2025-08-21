@@ -1,7 +1,7 @@
 import {
-  BitFlags, ComponentProps, DisplayComponent, FilteredMapSubject, FSComponent, MappedSubject, MutableSubscribable,
-  ReadonlyFloat64Array, Subject, Subscribable, SubscribableMap, Subscription, UserSettingManager, Vec2Math,
-  Vec2Subject, VecNMath, VecNSubject, VNode
+  BitFlags, ChartImage, ChartImageSupplier, ComponentProps, DisplayComponent, FilteredMapSubject, FSComponent,
+  MappedSubject, MutableSubscribable, ReadonlyFloat64Array, Subject, Subscribable, SubscribableMap, Subscription,
+  UserSettingManager, Vec2Math, Vec2Subject, VecNMath, VecNSubject, VNode
 } from '@microsoft/msfs-sdk';
 
 import {
@@ -10,6 +10,7 @@ import {
 } from '@microsoft/msfs-garminsdk';
 
 import { G3XChartsConfig } from '../../../Shared/Charts/G3XChartsConfig';
+import { G3XChartsSource } from '../../../Shared/Charts/G3XChartsSource';
 import { G3XChartsDisplayColorMode } from '../../../Shared/Charts/G3XChartsTypes';
 import { G3XLoadingIcon } from '../../../Shared/Components/Common/G3XLoadingIcon';
 import { G3XTouchFilePaths } from '../../../Shared/G3XTouchFilePaths';
@@ -57,6 +58,8 @@ export class WaypointInfoChartDisplay extends DisplayComponent<WaypointInfoChart
     [UiKnobId.RightInner, 'Zoom Chart'],
     [UiKnobId.RightOuter, 'Zoom Chart']
   ];
+
+  private readonly chartImageSupplier = new ChartDisplayChartImageSupplier();
 
   private readonly rootRef = FSComponent.createRef<HTMLDivElement>();
 
@@ -251,6 +254,10 @@ export class WaypointInfoChartDisplay extends DisplayComponent<WaypointInfoChart
           area: null,
           geoReferencedArea: chartsSource.getGeoReferencedArea(pageSelection.pageData) ?? null
         };
+
+        // Ensure the chart image supplier is set to the correct source before changing the chart display selection so
+        // that the supplier can forward the chart image request to the supplier defined by the source.
+        this.chartImageSupplier.setChartsSource(chartsSource);
       }
     }
 
@@ -365,6 +372,7 @@ export class WaypointInfoChartDisplay extends DisplayComponent<WaypointInfoChart
         >
           <GarminChartDisplay
             ref={this.chartDisplayRef}
+            createChartImageSupplier={() => this.chartImageSupplier}
             size={this.chartDisplaySize}
             selectedChart={this.chartDisplaySelection}
             displayMode={this.props.dataProvider.colorMode}
@@ -539,5 +547,69 @@ export class WaypointInfoChartDisplay extends DisplayComponent<WaypointInfoChart
     }
 
     super.destroy();
+  }
+}
+
+/**
+ * An entry describing a chart image supplier defined by a charts source used by {@link ChartDisplayChartImageSupplier}.
+ */
+type ChartsPaneViewChartViewSourceEntry = {
+  /** The source chart image supplier instance. */
+  supplier: ChartImageSupplier;
+
+  /** A pipe from the source chart image supplier's image subscribable to the outer supplier's image subject. */
+  imagePipe: Subscription;
+};
+
+/**
+ * A chart image supplier that delegates to other chart image suppliers defined by individual charts sources.
+ */
+class ChartDisplayChartImageSupplier implements ChartImageSupplier {
+
+  private readonly _image = Subject.create<ChartImage>({ imageUrl: '', chartUrl: '', errorCode: 0 });
+  /** @inheritDoc */
+  public readonly image = this._image as Subscribable<ChartImage>;
+
+  private readonly sourceEntries = new Map<string, ChartsPaneViewChartViewSourceEntry>();
+
+  private activeEntry: ChartsPaneViewChartViewSourceEntry | undefined = undefined;
+
+  /**
+   * Sets this supplier's active charts source. This view delegates chart image requests to the chart image supplier
+   * defined by the active charts source.
+   * @param source The charts source to set.
+   */
+  public setChartsSource(source: G3XChartsSource): void {
+    let entry = this.sourceEntries.get(source.uid);
+    if (!entry) {
+      const view = source.createChartImageSupplier();
+      entry = {
+        supplier: view,
+        imagePipe: view.image.pipe(this._image, true),
+      };
+      this.sourceEntries.set(source.uid, entry);
+    }
+
+    if (this.activeEntry !== entry) {
+      if (this.activeEntry) {
+        this.activeEntry.imagePipe.pause();
+        this.activeEntry.supplier.showChartImage('');
+      }
+
+      this.activeEntry = entry;
+      this.activeEntry.imagePipe.resume(true);
+    }
+  }
+
+  /** @inheritDoc */
+  public showChartImage(chartUrl: string): void {
+    this.activeEntry?.supplier.showChartImage(chartUrl);
+  }
+
+  /** @inheritDoc */
+  public destroy(): void {
+    for (const entry of this.sourceEntries.values()) {
+      entry.supplier.destroy();
+    }
   }
 }

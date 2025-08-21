@@ -3,9 +3,10 @@ import {
   ResourceConsumer, ResourceModerator, UserSettingManager, VNavUtils
 } from '@microsoft/msfs-sdk';
 
+import { WTLineFmsUtils } from '@microsoft/msfs-wtlinesdk';
+
 import { InstrumentConfig, WT21InstrumentType } from '../Config';
 import { WT21NavigationUserSettings } from '../Navigation/WT21NavigationUserSettings';
-import { WT21FmsUtils } from '../Systems/FMS/WT21FmsUtils';
 import { MapFacilitySelectModule } from './MapFacilitySelectModule';
 import { PlanMapEvents } from './MapSystemConfig';
 import { HSIFormat, MapSettingsMfdAliased, MapSettingsPfdAliased, MapWaypointsDisplay } from './MapUserSettings';
@@ -203,7 +204,7 @@ export class PlanFormatController extends MapSystemController<PlanFormatControll
    * @returns True if there is a valid flightplan, false otherwise.
    */
   private hasValidFlightPlan(): boolean {
-    return (this.flightPlanner.hasActiveFlightPlan() && this.flightPlanner.getFlightPlan(WT21FmsUtils.PRIMARY_ACT_PLAN_INDEX).length > 0);
+    return (this.flightPlanner.hasActiveFlightPlan() && this.flightPlanner.getFlightPlan(WTLineFmsUtils.PRIMARY_ACT_PLAN_INDEX).length > 0);
   }
 
   /**

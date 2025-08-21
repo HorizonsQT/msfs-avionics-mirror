@@ -145,13 +145,17 @@ export class Epic2FlightPlanRouteLoader {
           );
 
           if (departureIndexes.procedureIndex >= 0) {
-            this.fms.insertDeparture(
+            await this.fms.loadDeparture(
               origin.airport,
               departureIndexes.procedureIndex,
               departureIndexes.runwayTransitionIndex,
               departureIndexes.enrouteTransitionIndex,
               origin.runway
             );
+
+            if (opId !== this.loadOpId) {
+              return false;
+            }
           } else {
             this.fms.setOrigin(origin.airport, origin.runway);
           }
@@ -181,13 +185,17 @@ export class Epic2FlightPlanRouteLoader {
           );
 
           if (arrivalIndexes.procedureIndex >= 0) {
-            this.fms.insertArrival(
+            await this.fms.loadArrival(
               destination.airport,
               arrivalIndexes.procedureIndex,
               arrivalIndexes.runwayTransitionIndex,
               arrivalIndexes.enrouteTransitionIndex,
               destination.runway
             );
+
+            if (opId !== this.loadOpId) {
+              return false;
+            }
           }
 
           const approachIndexes = this.retrieveApproachIndexes(
@@ -197,13 +205,15 @@ export class Epic2FlightPlanRouteLoader {
           );
 
           if (approachIndexes.approachIndex >= 0) {
-            // { facility: destination, approachIndex, approachTransitionIndex }
             await this.fms.insertApproach({
               facility: destination.airport,
               approachIndex: approachIndexes.approachIndex,
               approachTransitionIndex: approachIndexes.transitionIndex
+            });
+
+            if (opId !== this.loadOpId) {
+              return false;
             }
-            );
           }
 
           if (plan.procedureDetails.arrivalIndex < 0 && plan.procedureDetails.approachIndex < 0) {

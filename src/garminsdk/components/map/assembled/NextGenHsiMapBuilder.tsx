@@ -47,8 +47,13 @@ export type NextGenHsiMapOptions = {
   /** The amount of time, in milliseconds, to delay binding the map's Bing Map instance. Defaults to 0. */
   bingDelay?: number;
 
-  /** The frequency, in hertz, with which player airplane and autopilot properties are updated from event bus data. */
-  dataUpdateFreq: number | Subscribable<number>;
+  /**
+   * The default frequency, in hertz, at which to update player airplane and autopilot properties from their bound data
+   * sources. If the frequency is `null`, then updates will not be throttled by frequency - each property will be
+   * updated as soon as the value of its data source changes. If the frequency is not `null`, then each property will
+   * only be updated when the map is updated, and the frequency of updates will not exceed `updateFreq`.
+   */
+  dataUpdateFreq: number | null | Subscribable<number | null>;
 
   /** The image cache from which to retrieve waypoint icon images. */
   waypointIconImageCache: WaypointIconImageCache;

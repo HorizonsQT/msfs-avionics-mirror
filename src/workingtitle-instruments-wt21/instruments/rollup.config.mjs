@@ -14,10 +14,11 @@ export default [
       name: 'mfd',
       globals: {
         '@microsoft/msfs-sdk': 'msfssdk',
-        '@microsoft/msfs-wt21-shared': 'msfs-wt21-shared'
+        '@microsoft/msfs-wtlinesdk': 'wtlinesdk',
+        '@microsoft/msfs-wt21-shared': 'msfs-wt21-shared',
       }
     },
-    external: ['@microsoft/msfs-sdk', '@microsoft/msfs-wt21-shared'],
+    external: ['@microsoft/msfs-sdk', '@microsoft/msfs-wtlinesdk', '@microsoft/msfs-wt21-shared'],
     plugins: [image(), css({ output: 'MFD.css' }), resolve()]
   },
   {
@@ -29,9 +30,10 @@ export default [
       name: 'pfd',
       globals: {
         '@microsoft/msfs-sdk': 'msfssdk',
+        '@microsoft/msfs-wtlinesdk': 'wtlinesdk',
         '@microsoft/msfs-wt21-shared': 'msfs-wt21-shared'
       }    },
-    external: ['@microsoft/msfs-sdk', '@microsoft/msfs-wt21-shared'],
+    external: ['@microsoft/msfs-sdk', '@microsoft/msfs-wtlinesdk', '@microsoft/msfs-wt21-shared'],
     plugins: [image(), css({ output: 'PFD.css' }), resolve()]
   },
   {
@@ -43,9 +45,10 @@ export default [
       name: 'fmc',
       globals: {
         '@microsoft/msfs-sdk': 'msfssdk',
+        '@microsoft/msfs-wtlinesdk': 'wtlinesdk',
         '@microsoft/msfs-wt21-shared': 'msfs-wt21-shared'
       }    },
-    external: ['@microsoft/msfs-sdk', '@microsoft/msfs-wt21-shared'],
+    external: ['@microsoft/msfs-sdk', '@microsoft/msfs-wtlinesdk', '@microsoft/msfs-wt21-shared'],
     plugins: [image(), css({ output: 'FMC.css' }), resolve()]
-  }
-]
+  },
+];

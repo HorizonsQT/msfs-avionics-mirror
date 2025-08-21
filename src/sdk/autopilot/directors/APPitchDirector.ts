@@ -1,4 +1,4 @@
-/// <reference types="@microsoft/msfs-types/js/simvar" />
+/// <reference types="@microsoft/msfs-types/js/simvar" preserve="true" />
 
 import { EventBus, KeyEventData, KeyEvents, KeyEventManager, SimVarValueType } from '../../data';
 import { MathUtils } from '../../math';

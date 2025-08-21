@@ -3,6 +3,8 @@ import {
   SearchTypeMap, SimpleFmcRenderer, SimpleFmcRendererOptions
 } from '@microsoft/msfs-sdk';
 
+import { PilotWaypointResult, WT21Fms } from '@microsoft/msfs-wt21-shared';
+
 import { FmcMsgLine } from './Framework/Components/FmcMsgLine';
 import { FmcBtnEvents } from './Framework/FmcEventPublisher';
 import { FmcSelectWptPopup } from './Framework/FmcSelectWptPage';
@@ -10,7 +12,6 @@ import { WT21_FMC_Instrument } from './WT21_FMC_Instrument';
 import { WT21FmcEvents } from './WT21FmcEvents';
 import { WT21FmcPage } from './WT21FmcPage';
 import { WT21FmcPageFactory } from './WT21FmcPageFactory';
-import { WT21Fms } from './FlightPlan/WT21Fms';
 import { FmcMsgInfo } from './Data/FmcMsgInfo';
 
 const ScratchpadBrackets = {
@@ -138,20 +139,35 @@ export class WT21FmcScreen extends FmcScreen<WT21FmcPage<any>, WT21FmcEvents> {
 
       if (foundFacilities.length > 1) {
         foundFacilities.sort((a, b) => referencePos.distance(a) - referencePos.distance(b));
-        selectedFacility = await this.showSelectWptPopup<SearchTypeMap[F]>(foundFacilities);
+        selectedFacility = await this.showSelectWptPopup('WPT', foundFacilities) as SearchTypeMap[F];
       } else if (foundFacilities.length === 1) {
         selectedFacility = foundFacilities[0];
       }
     }
+
     return Promise.resolve(selectedFacility);
   }
 
   /**
+   * Runs the flow to select a pilot waypoint entry based on the given entries.
+   * @param entries The entries to choose from.
+   * @returns The selected entry or null.
+   */
+  public async selectPilotWaypointEntry(entries: PilotWaypointResult[]): Promise<PilotWaypointResult | null> {
+    const selectedFacility = await this.showSelectWptPopup('DEF', entries) as PilotWaypointResult | null;
+
+    // TODO handle rejection
+
+    return selectedFacility;
+  }
+
+  /**
    * Displays the SELECT WPT popup
+   * @param entryType The entry type to show at the top of the page
    * @param data The facility data to display
    * @returns The selected facility or null.
    */
-  private async showSelectWptPopup<F extends Facility>(data: F[]): Promise<F | null> {
+  private async showSelectWptPopup(entryType: 'WPT' | 'DEF', data: (Facility | PilotWaypointResult)[]): Promise<Facility | PilotWaypointResult | null> {
     const oldRoute = this.currentRoute.get();
     const oldSubPageIndex = this.currentSubpageIndex.get();
 
@@ -163,17 +179,18 @@ export class WT21FmcScreen extends FmcScreen<WT21FmcPage<any>, WT21FmcEvents> {
 
     const page = this.currentlyDisplayedPage as FmcSelectWptPopup;
 
-    page.facilities.set(data);
+    page.items.set(data);
+    page.facilityType = entryType;
 
     return new Promise((resolve) => {
-      page.selectedFacility.set(null);
+      page.selectedItem.set(null);
       page.addBinding(
-        page.selectedFacility.sub(
+        page.selectedItem.sub(
           (value) => {
             if (value !== undefined && value !== null) {
               this.navigateTo(`${oldRoute}#${oldSubPageIndex}`);
               // TODO what happens all around when someone just moves away from this page? is the caller stuck?
-              resolve(value as F);
+              resolve(value);
             }
           }
         ));

@@ -13,13 +13,13 @@ export interface MapLineLayerProps extends MapLayerProps<any> {
    * A subscribable which provides the start point of the line, as a set of lat/lon coordinates or a 2D vector in
    * projected coordinates. If the start point is `null`, a line will not be drawn.
    */
-  start: Subscribable<LatLonInterface | ReadonlyFloat64Array | null>;
+  start: Subscribable<Readonly<LatLonInterface> | ReadonlyFloat64Array | null>;
 
   /**
    * A subscribable which provides the end point of the line, as a set of lat/lon coordinates or a 2D vector in
    * projected coordinates. If the end point is `null`, a line will not be drawn.
    */
-  end: Subscribable<LatLonInterface | ReadonlyFloat64Array | null>;
+  end: Subscribable<Readonly<LatLonInterface> | ReadonlyFloat64Array | null>;
 
   /** The width of the line stroke, in pixels. Defaults to 2 pixels. */
   strokeWidth?: number;
@@ -97,8 +97,8 @@ export class MapLineLayer extends MapSyncedCanvasLayer<MapLineLayerProps> {
       const end = this.props.end.get();
 
       if (start !== null && end !== null) {
-        const [x1, y1] = start instanceof Float64Array ? start : this.props.mapProjection.project(start as LatLonInterface, this.vec);
-        const [x2, y2] = end instanceof Float64Array ? end : this.props.mapProjection.project(end as LatLonInterface, this.vec);
+        const [x1, y1] = start instanceof Float64Array ? start : this.props.mapProjection.project(start as Readonly<LatLonInterface>, this.vec);
+        const [x2, y2] = end instanceof Float64Array ? end : this.props.mapProjection.project(end as Readonly<LatLonInterface>, this.vec);
 
         this.drawLine(x1, y1, x2, y2);
       }

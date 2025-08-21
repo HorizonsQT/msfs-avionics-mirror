@@ -3,9 +3,8 @@ import {
   FmcRenderTemplateColumn, FmcRenderTemplateRow, ICAO, OneWayRunway, PageLinkField, SimVarValueType, Subject, Subscription, TextInputField, UnitType
 } from '@microsoft/msfs-sdk';
 
-import { TransitionListItem } from '@microsoft/msfs-wt21-shared';
+import { WT21Fms, TransitionListItem } from '@microsoft/msfs-wt21-shared';
 
-import { WT21Fms } from '../FlightPlan/WT21Fms';
 import { NumberAndUnitFormat, RawFormatter } from '../Framework/FmcFormats';
 import { WT21FmcPage } from '../WT21FmcPage';
 import { DepArrPageStore, ProcedureListItem } from './DepArrPageStore';
@@ -763,14 +762,14 @@ export class DepArrPageController {
   /**
    * Sets the currently selected departure procedure in the plan.
    */
-  private setPlanDeparture(): void {
+  private async setPlanDeparture(): Promise<void> {
     const departure = this.store.selectedDeparture.get();
     const facility = this.store.selectedFacility.get();
     const runway = this.store.selectedDepartureRunway.get();
     if (facility && departure) {
       const transition = this.store.selectedDepartureTransition.get();
 
-      this.fms.insertDeparture(facility, departure.index,
+      await this.fms.loadDeparture(facility, departure.index,
         this.store.selectedDepartureRunwayTransitionIndex.get(),
         transition ? transition.transitionIndex : -1,
         runway);
@@ -791,12 +790,12 @@ export class DepArrPageController {
   /**
    * Sets the currently selected arrival procedure in the plan.
    */
-  private setPlanArrival(): void {
+  private async setPlanArrival(): Promise<void> {
     const arrival = this.store.selectedArrival.get();
     const facility = this.store.selectedFacility.get();
     if (facility && arrival) {
       const transition = this.store.selectedArrivalTransition.get();
-      this.fms.insertArrival(facility, arrival.index,
+      await this.fms.loadArrival(facility, arrival.index,
         this.store.selectedArrivalRunwayTransitionIndex.get(),
         transition ? transition.transitionIndex : -1);
     }
@@ -818,7 +817,7 @@ export class DepArrPageController {
     if (facility && approach) {
       const transition = this.store.selectedApproachTransition.get();
       const proc = approach.procedure as ApproachProcedure;
-      this.setPlanArrival();
+      await this.setPlanArrival();
       await this.fms.insertApproach(facility, approach.index,
         transition ? transition.transitionIndex : -1,
         approach.isVisualApproach ? proc.runwayNumber : undefined,

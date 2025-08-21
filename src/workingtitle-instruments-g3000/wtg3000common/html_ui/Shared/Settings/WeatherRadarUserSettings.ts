@@ -114,7 +114,7 @@ export class WeatherRadarUserSettings {
     const map: UserSettingMap<WeatherRadarUserSettingTypes, WeatherRadarDisplayPaneUserSettingTypes<Index>> = {};
 
     for (const name of WeatherRadarUserSettings.INDEXED_SETTING_NAMES) {
-      map[name] = `${name}_${index}`;
+      map[name] = `${name}_${index}` as keyof WeatherRadarDisplayPaneUserSettingTypes<Index>;
     }
 
     return map;

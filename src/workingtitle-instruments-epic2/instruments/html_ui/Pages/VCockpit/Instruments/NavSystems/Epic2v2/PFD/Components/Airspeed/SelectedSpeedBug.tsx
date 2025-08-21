@@ -50,6 +50,13 @@ export class SelectedSpeedBug extends DisplayComponent<SelectedSpeedBugProps> im
     this.props.autopilotDataProvider.verticalActive,
   );
 
+  private readonly isHidden = this.props.autopilotDataProvider.hasFmsSpeedMode
+    ? this.props.autopilotDataProvider.isFmsModeSelected.map((fmsModeOn) => !!fmsModeOn)
+    : this.props.autopilotDataProvider.verticalActive.map((v) =>
+      v != Epic2ApVerticalMode.FlightLevelChange && v != Epic2ApVerticalMode.Speed
+      && v != Epic2ApVerticalMode.VnavSpeed && v != Epic2ApVerticalMode.VnavFlightLevelChange
+    );
+
   /** @inheritdoc */
   public onAfterRender(): void {
     this.props.autopilotDataProvider.targetSpeedIsMach.sub((isMach) => {
@@ -70,7 +77,7 @@ export class SelectedSpeedBug extends DisplayComponent<SelectedSpeedBugProps> im
     return <svg
       class={{
         'selected-speed-bug': true,
-        'hidden': this.props.autopilotDataProvider.isFmsModeSelected.map((fmsModeOn) => !!fmsModeOn),
+        'hidden': this.isHidden,
         'magenta': this.isMagenta
       }}
       viewBox="2 -18 24 36"

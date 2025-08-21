@@ -60,15 +60,14 @@ export class UserSettingSaveManager {
   /**
    * Creates a new instance of UserSettingSaveManager.
    * @param settings This manager's managed settings.
-   * @param bus The event bus.
+   * @param bus This parameter is **deprecated** and should not be used.
    */
   public constructor(
     settings: readonly (UserSetting<UserSettingValue> | UserSettingSaveManagerSettingDef<UserSettingValue>)[],
-    bus: EventBus
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    bus?: EventBus
   ) {
-    const subscriber = bus.getSubscriber<any>();
-
-    this.entries = Array.from(settings, settingOrDef => {
+    this.entries = Array.from(settings, (settingOrDef): UserSettingSaveManagerEntry<UserSettingValue> => {
       let setting: UserSetting<UserSettingValue>;
       let loadValidator: ((loadValue: unknown, setting: UserSetting<UserSettingValue>) => UserSettingValue) | undefined;
 
@@ -82,7 +81,7 @@ export class UserSettingSaveManager {
       const autoSaveDataStoreKeys: string[] = [];
       return {
         setting,
-        subscription: subscriber.on(setting.definition.name).whenChanged().handle(this.onSettingChanged.bind(this, autoSaveDataStoreKeys), true),
+        subscription: setting.sub(this.onSettingChanged.bind(this, autoSaveDataStoreKeys), false, true),
         autoSaveDataStoreKeys,
         loadValidator
       };
@@ -152,6 +151,8 @@ export class UserSettingSaveManager {
       return;
     }
 
+    this.autoSaveKeys.add(key);
+
     for (let i = 0; i < this.entries.length; i++) {
       const entry = this.entries[i];
       entry.autoSaveDataStoreKeys.push(UserSettingSaveManager.getDataStoreKey(entry.setting, key));
@@ -171,7 +172,7 @@ export class UserSettingSaveManager {
       throw new Error('UserSettingSaveManager: cannot stop autosave using a destroyed manager.');
     }
 
-    if (!this.autoSaveKeys.has(key)) {
+    if (!this.autoSaveKeys.delete(key)) {
       return;
     }
 

@@ -1,12 +1,12 @@
 import {
-  ApproachIdentifier, ChartIndex, ChartMetadata, ChartUrl, GeoReferencedChartArea, RunwayIdentifier
+  ApproachIdentifier, ChartImageSupplier, ChartIndex, ChartMetadata, ChartService, ChartUrl, GeoReferencedChartArea,
+  RunwayIdentifier
 } from '@microsoft/msfs-sdk';
 
 import { G3XChartsPageData } from './G3XChartsTypes';
 
 /**
  * A source of electronic chart data for the G3X Touch.
- * @experimental
  */
 export interface G3XChartsSource {
   /** The ID that uniquely identifies this source. Cannot be the empty string. */
@@ -20,6 +20,18 @@ export interface G3XChartsSource {
 
   /** Whether this source supports night mode charts. */
   readonly supportsNightMode: boolean;
+
+  /**
+   * Gets a chart service from which to retrieve this source's chart data.
+   * @returns A chart service from which to retrieve this source's chart data.
+   */
+  getChartService(): ChartService;
+
+  /**
+   * Creates a new instance of a chart image supplier that can supply images for this source's charts.
+   * @returns A new instance of a chart image supplier that can supply images for this source's charts.
+   */
+  createChartImageSupplier(): ChartImageSupplier;
 
   /**
    * Gets an array of airport diagram charts for an airport.
@@ -145,7 +157,6 @@ export interface G3XChartsSource {
 
 /**
  * A factory that creates an electronic charts source.
- * @experimental
  */
 export interface G3XChartsSourceFactory {
   /** The ID of the source created by this factory. */

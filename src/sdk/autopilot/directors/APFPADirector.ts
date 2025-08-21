@@ -1,4 +1,4 @@
-/// <reference types="@microsoft/msfs-types/js/simvar" />
+/// <reference types="@microsoft/msfs-types/js/simvar" preserve="true" />
 
 import { DirectorState, PlaneDirector } from './PlaneDirector';
 import { SimVarValueType } from '../../data/SimVars';

@@ -4,6 +4,8 @@ import {
   UserSettingManager, VNode
 } from '@microsoft/msfs-sdk';
 
+import { PerformancePlan, WTLineFixInfoManager } from '@microsoft/msfs-wtlinesdk';
+
 import { InstrumentConfig, WT21InstrumentType } from '../../Config';
 import { MapAltitudeArcController } from '../../Map/MapAltitudeArcController';
 import { MapFacilitySelectModule } from '../../Map/MapFacilitySelectModule';
@@ -22,10 +24,8 @@ import { WaypointDisplayController } from '../../Map/WaypointDisplayController';
 import { WT21MapKeys } from '../../Map/WT21MapKeys';
 import { WT21MapStylesModule } from '../../Map/WT21MapStylesModule';
 import { WT21_PFD_MsgInfo } from '../../MessageSystem/PfdMsgInfo';
-import { PerformancePlan } from '../../Performance/PerformancePlan';
 import { AhrsSystemSelectorEvents } from '../../Systems';
 import { AhrsSystemEvents } from '../../Systems/AHRSSystem';
-import { WT21FixInfoManager } from '../../Systems/FixInfo/WT21FixInfoManager';
 import { WT21TCAS } from '../../Traffic/WT21TCAS';
 import { WaypointAlerter } from '../WaypointAlerter';
 import { HSIArc } from './HSIArc';
@@ -60,7 +60,7 @@ interface HSIContainerProps extends ComponentProps {
   waypointAlerter: WaypointAlerter;
 
   /** The fix info manager. */
-  fixInfo?: WT21FixInfoManager;
+  fixInfo?: WTLineFixInfoManager;
 
   /** The active performance plan */
   performancePlan: PerformancePlan;

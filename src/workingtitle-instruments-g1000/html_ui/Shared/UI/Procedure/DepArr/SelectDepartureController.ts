@@ -33,7 +33,7 @@ export class SelectDepartureController<S extends SelectDepArrStore<DepartureProc
     if (selectedFacility && selectedProc) {
       const rwyTransIndex = this.store.selectedRwyTransIndex.get();
 
-      this.fms.insertDeparture(
+      this.fms.loadDeparture(
         selectedFacility,
         this.store.selectedProcIndex.get(),
         rwyTransIndex,

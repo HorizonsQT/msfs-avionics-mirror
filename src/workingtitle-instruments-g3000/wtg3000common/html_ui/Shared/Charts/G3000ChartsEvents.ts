@@ -3,7 +3,6 @@ import { G3000ChartsAirportSelectionData, G3000ChartsPageSelectionData } from '.
 
 /**
  * Base events related to G3000 electronic charts.
- * @experimental
  */
 export interface BaseG3000ChartsEvents {
   /** The current charts airport selection. */
@@ -31,6 +30,5 @@ type IndexedEvents<Index extends ControllableDisplayPaneIndex> = {
 
 /**
  * Events related to G3000 electronic charts.
- * @experimental
  */
 export type G3000ChartsEvents = IndexedEvents<ControllableDisplayPaneIndex>;

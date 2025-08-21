@@ -39,7 +39,7 @@ export class MFDSelectDepartureController extends MFDSelectDepArrController<Depa
     if (selectedFacility && selectedProc) {
       const rwyTransIndex = this.store.selectedRwyTransIndex.get();
 
-      this.fms.insertDeparture(
+      this.fms.loadDeparture(
         selectedFacility,
         this.store.selectedProcIndex.get(),
         rwyTransIndex,

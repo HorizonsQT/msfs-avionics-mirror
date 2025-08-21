@@ -1,4 +1,4 @@
-import { DisplayComponent, FSComponent, UserSettingManager, VNode } from '@microsoft/msfs-sdk';
+import { DisplayComponent, FSComponent, PropertyTypeOf, ToNonNullable, UserSettingManager, VNode } from '@microsoft/msfs-sdk';
 
 import { TrafficSystemType, TrafficUserSettings, UnitsUserSettings } from '@microsoft/msfs-garminsdk';
 import { G3000MapUserSettingTypes } from '@microsoft/msfs-wtg3000-common';
@@ -38,7 +38,7 @@ export interface GtcMapTrafficSettingsPopupProps extends GtcViewProps {
    * A function which writes selected setting values. If not defined, selected values will be written to settings
    * retrieved from `mapReadSettingManager`.
    */
-  writeToSetting?: <K extends keyof G3000MapUserSettingTypes & string>(settingName: K, value: NonNullable<G3000MapUserSettingTypes[K]>) => void;
+  writeToSetting?: <K extends keyof G3000MapUserSettingTypes & string>(settingName: K, value: ToNonNullable<PropertyTypeOf<G3000MapUserSettingTypes, K>>) => void;
 }
 
 /**

@@ -1,17 +1,17 @@
 import {
-  AdcEvents, APEvents, APLateralModes, APValues, APVerticalModes, BitFlags, ClockEvents, ConsumerSubject, EventBus, FlightPlan, FlightPlanner,
-  FlightPlannerEvents, GeoPoint, GlidePathCalculator, GNSSEvents, LegDefinition, LegDefinitionFlags, LegType, LNavEvents, MathUtils, NavMath, ObjectSubject,
-  RnavTypeFlags, SimVarValueType, SmoothingPathCalculator, Subject, TodBodDetails, UnitType, VerticalFlightPhase, VerticalFlightPlan, VNavAltCaptureType,
-  VNavAvailability, VNavConstraint, VNavControlEvents, VNavDataEvents, VNavEvents, VNavManager, VNavPathCalculator, VNavPathMode, VNavState, VNavUtils,
+  AdcEvents, APEvents, APLateralModes, APValues, APVerticalModes, BitFlags, ClockEvents, ConsumerSubject, EventBus,
+  FlightPlan, FlightPlanner, FlightPlannerEvents, GeoPoint, GlidePathCalculator, GNSSEvents, LegDefinition, LegDefinitionFlags,
+  LegType,  LNavEvents, MathUtils, NavMath, ObjectSubject, RnavTypeFlags, SimVarValueType, SmoothingPathCalculator, Subject,
+  TodBodDetails, UnitType, VerticalFlightPhase, VerticalFlightPlan, VNavAltCaptureType, VNavAvailability, VNavConstraint,
+  VNavControlEvents, VNavDataEvents, VNavEvents, VNavManager, VNavPathCalculator, VNavPathMode, VNavState, VNavUtils,
   VNavVars, Wait
 } from '@microsoft/msfs-sdk';
 
-import { FMS_MESSAGE_ID } from '../MessageSystem/MessageDefinitions';
+import {
+  ApproachDetails, CDIScaleLabel, WTLineLNavDataEvents, WTLineControlEvents, PerformancePlan,
+} from '@microsoft/msfs-wtlinesdk';
 import { MessageService } from '../MessageSystem/MessageService';
-import { PerformancePlan } from '../Performance/PerformancePlan';
-import { CDIScaleLabel, WT21LNavDataEvents } from '../Systems/Autopilot/WT21LNavDataEvents';
-import { ApproachDetails } from '../Systems/FMS/WT21FmsTypes';
-import { WT21ControlEvents } from '../WT21ControlEvents';
+import { FMS_MESSAGE_ID } from '../MessageSystem/MessageDefinitions';
 
 /**
  * A WT21 VNav Manager.
@@ -33,7 +33,7 @@ export class WT21VNavManager implements VNavManager {
   private currentVS = 0;
   private trueTrack = 0;
 
-  private readonly approachDetails = ConsumerSubject.create<Readonly<ApproachDetails>>(this.bus.getSubscriber<WT21ControlEvents>().on('approach_details_set'), {
+  private readonly approachDetails = ConsumerSubject.create<Readonly<ApproachDetails>>(this.bus.getSubscriber<WTLineControlEvents>().on('approach_details_set'), {
     approachLoaded: false,
     approachType: ApproachType.APPROACH_TYPE_UNKNOWN,
     approachRnavType: RnavTypeFlags.None,
@@ -182,7 +182,7 @@ export class WT21VNavManager implements VNavManager {
     this.lnavXtk = ConsumerSubject.create(lnav.on('lnav_xtk'), 0);
     this.lnavDtk = ConsumerSubject.create(lnav.on('lnav_dtk'), 0);
 
-    const lnavData = this.bus.getSubscriber<WT21LNavDataEvents>();
+    const lnavData = this.bus.getSubscriber<WTLineLNavDataEvents>();
     this.lnavDataCdiScaleLabel = ConsumerSubject.create(lnavData.on('lnavdata_cdi_scale_label'), 4);
     this.lnavDataDestinationDistanceDirect = ConsumerSubject.create(lnavData.on('lnavdata_destination_distance_direct'), Number.MAX_SAFE_INTEGER);
     this.lnavDataDistanceToFaf = ConsumerSubject.create(lnavData.on('lnavdata_distance_to_faf'), Number.MAX_SAFE_INTEGER);

@@ -4,9 +4,8 @@ import {
   TextInputField, UnitType
 } from '@microsoft/msfs-sdk';
 
-import { WT21FmsUtils } from '@microsoft/msfs-wt21-shared';
+import { WT21Fms, WT21FmsUtils } from '@microsoft/msfs-wt21-shared';
 
-import { WT21Fms } from '../FlightPlan/WT21Fms';
 import { SimpleStringFormat } from '../Framework/FmcFormats';
 import { WT21FmcPage } from '../WT21FmcPage';
 

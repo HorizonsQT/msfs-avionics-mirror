@@ -209,6 +209,45 @@ export class GarminAPUtils {
   }
 
   /**
+   * Gets the desired vertical speed target to track a glideslope.
+   * @param gsAngleError The glideslope angle error, in degrees, defined as the difference between the angle from the
+   * glideslope antenna to the airplane and the glideslope angle. Positive values indicate deviation of the airplane
+   * above the glideslope.
+   * @param gsAngle The glideslope angle, in degrees.
+   * @param currentAngleRate The current rate of change of glideslope angle error, in degrees per second.
+   * @param distance The lateral distance from the airplane to the glideslope antenna, in meters.
+   * @param height The height of the airplane above the glideslope antenna, in meters.
+   * @param groundSpeed The airplane's current ground speed, in meters per second.
+   * @returns The desired vertical speed to target, in feet per minute.
+   */
+  public static glideslopeVsTarget(
+    gsAngleError: number,
+    gsAngle: number,
+    currentAngleRate: number,
+    distance: number,
+    height: number,
+    groundSpeed: number
+  ): number {
+    const glideslopeGradient = Math.tan(gsAngle * Avionics.Utils.DEG2RAD);
+    // The vertical speed required to maintain a flight path parallel to the glideslope.
+    const glideslopeVs = UnitType.MPS.convertTo(-glideslopeGradient * groundSpeed, UnitType.FPM);
+    // The vertical glideslope deviation.
+    const deviation = UnitType.METER.convertTo(glideslopeGradient * distance - height, UnitType.FOOT);
+    // The maximum allowed target adjustment rate, in feet per minute, to glideslope deviation while re-establishing on
+    // the glideslope (i.e. while trying to reduce glideslope deviation to zero). 500 FPM reducing linearly to 100 FPM
+    // from 2.5 nautical miles to 0.5 nautical miles from the glideslope antenna.
+    const maxCorrectionVs = MathUtils.lerp(distance, 926, 4630, 100, 500, true, true);
+
+    // Target adjustment rate (before clamping to the maximum allowed value) is computed such that the glideslope will
+    // always be intercepted 10 seconds in the future if the airplane follows the target rate.
+    const glideslopeCorrection = MathUtils.clamp(deviation * 6, -maxCorrectionVs, maxCorrectionVs);
+    const desiredVs = glideslopeVs + glideslopeCorrection;
+
+    // Do not ever direct the airplane to climb.
+    return Math.min(desiredVs, 0);
+  }
+
+  /**
    * Checks whether a glidepath director can be armed.
    * @param apValues Autopilot values from the director's parent autopilot.
    * @returns Whether the director can be armed.

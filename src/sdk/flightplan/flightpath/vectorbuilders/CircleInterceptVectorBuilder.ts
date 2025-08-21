@@ -1,4 +1,4 @@
-import { GeoCircle } from '../../../geo/GeoCircle';
+import { GeoCircle, ReadonlyGeoCircle } from '../../../geo/GeoCircle';
 import { LatLonInterface } from '../../../geo/GeoInterfaces';
 import { ReadonlyFloat64Array, Vec3Math } from '../../../math/VecMath';
 import { ArrayUtils } from '../../../utils/datastructures/ArrayUtils';
@@ -30,7 +30,7 @@ export class CircleInterceptVectorBuilder {
     index: number,
     start: ReadonlyFloat64Array | LatLonInterface,
     course: number,
-    circleToIntercept: GeoCircle,
+    circleToIntercept: ReadonlyGeoCircle,
     flags?: number,
     heading?: number | null,
     isHeadingTrue?: boolean
@@ -51,8 +51,8 @@ export class CircleInterceptVectorBuilder {
     vectors: FlightPathVector[],
     index: number,
     start: ReadonlyFloat64Array | LatLonInterface,
-    path: GeoCircle,
-    circleToIntercept: GeoCircle,
+    path: ReadonlyGeoCircle,
+    circleToIntercept: ReadonlyGeoCircle,
     flags?: number,
     heading?: number | null,
     isHeadingTrue?: boolean
@@ -62,8 +62,8 @@ export class CircleInterceptVectorBuilder {
     vectors: FlightPathVector[],
     index: number,
     start: ReadonlyFloat64Array | LatLonInterface,
-    pathArg: number | GeoCircle,
-    circleToIntercept: GeoCircle,
+    pathArg: number | ReadonlyGeoCircle,
+    circleToIntercept: ReadonlyGeoCircle,
     flags = 0,
     heading: number | null = null,
     isHeadingTrue = false
@@ -80,7 +80,7 @@ export class CircleInterceptVectorBuilder {
 
       path = pathArg;
     } else {
-      path = CircleInterceptVectorBuilder.geoCircleCache[0].setAsGreatCircle(start, pathArg);
+      path = CircleInterceptVectorBuilder.geoCircleCache[0].setAsGreatCircle(start, pathArg as number);
     }
 
     const intersections = CircleInterceptVectorBuilder.intersectionCache;

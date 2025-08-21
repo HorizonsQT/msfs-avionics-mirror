@@ -92,7 +92,7 @@ export class GNSMapBuilder {
       .withLayer(GNSMapKeys.CompassArc, c => <MapRangeCompassLayer bus={bus} bearingTickMajorLength={7} arcStrokeColor='cyan' arcStrokeWidth={1}
         bearingTickMinorLength={7} bearingLabelFont='GreatNiftySymbol-Regular' bearingLabelFontSize={10} bearingLabelOutlineColor='black' bearingLabelOutlineWidth={2} bearingLabelFontColor='cyan'
         model={c.model} mapProjection={c.projection} />)
-      .withOwnAirplanePropBindings(['position', 'hdgTrue', 'trackTrue', 'isOnGround', 'groundSpeed'], 6)
+      .withOwnAirplanePropBindings(['position', { key: 'hdgTrue', topic: 'actual_hdg_deg_true' }, 'trackTrue', 'isOnGround', 'groundSpeed'], 6)
       .withFollowAirplane()
       .withRotation()
       .withLayerOrder(MapSystemKeys.OwnAirplaneIcon, 100)
@@ -164,7 +164,7 @@ export class GNSMapBuilder {
       .withOwnAirplaneIconOrientation(MapOwnAirplaneIconOrientation.TrackUp)
       .withLayer(GNSMapKeys.RangeLegend, c => <RangeLegendLayer model={c.model} mapProjection={c.projection} />)
       .withLayer(GNSMapKeys.CompassNorth, c => <CompassNorthLayer model={c.model} mapProjection={c.projection} />)
-      .withOwnAirplanePropBindings(['position', 'hdgTrue', 'trackTrue', 'isOnGround'], 6)
+      .withOwnAirplanePropBindings(['position', { key: 'hdgTrue', topic: 'actual_hdg_deg_true' }, 'trackTrue', 'isOnGround'], 6)
       .withModule(GNSMapKeys.Range, () => new GNSMapIndexedRangeModule())
       .withFollowAirplane()
       .withRotation()
@@ -217,7 +217,7 @@ export class GNSMapBuilder {
       .withOwnAirplaneIcon(gnsType === 'wt430' ? 22 : 16, OwnshipIconPath, Vec2Math.create(0.5, 0.5))
       .withOwnAirplaneIconOrientation(MapOwnAirplaneIconOrientation.TrackUp)
       .withLayer(GNSMapKeys.RangeLegend, c => <RangeLegendLayer model={c.model} mapProjection={c.projection} />)
-      .withOwnAirplanePropBindings(['position', 'hdgTrue', 'trackTrue', 'isOnGround'], 6)
+      .withOwnAirplanePropBindings(['position', { key: 'hdgTrue', topic: 'actual_hdg_deg_true' }, 'trackTrue', 'isOnGround'], 6)
       .withModule(GNSMapKeys.Range, () => new GNSMapIndexedRangeModule())
       .withModule(MapSystemKeys.DataIntegrity, () => new MapDataIntegrityModule())
       .withFollowAirplane()

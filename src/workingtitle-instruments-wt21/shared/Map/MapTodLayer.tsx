@@ -1,14 +1,15 @@
 import {
-  BasicFacilityWaypoint, BitFlags, ClippedPathStream, ConsumerSubject, EventBus, FacilityLoader, FacilityRepository, FlightPlanner, FlightPlannerEvents, ICAO,
-  MapCullableTextLabelManager, MapLayerProps, MapProjection, MapProjectionChangeType, MapSyncedCanvasLayer, MapSystemWaypointRoles, MapSystemWaypointsRenderer,
-  NullPathStream, NumberUnit, SubscribableArrayEventType, UnitType, VecNSubject, VNavEvents, VNavPathMode, VNavWaypoint
+  BasicFacilityWaypoint, BitFlags, ClippedPathStream, ConsumerSubject, EventBus, FacilityLoader, FacilityRepository,
+  FlightPlanner, FlightPlannerEvents, ICAO,
+  MapCullableTextLabelManager, MapLayerProps, MapProjection, MapProjectionChangeType, MapSyncedCanvasLayer,
+  MapSystemWaypointRoles, MapSystemWaypointsRenderer,
+  NullPathStream, NumberUnit, SubscribableArrayEventType, UnitType, VecNSubject, VNavEvents,
+  VNavPathMode, VNavWaypoint
 } from '@microsoft/msfs-sdk';
 
+import { WTLineFixInfoManager, WTLineFixInfoWaypoint, WTLineFmsUtils, PerformancePlan } from '@microsoft/msfs-wtlinesdk';
+
 import { WT21VNavDataEvents } from '../Navigation/WT21VnavEvents';
-import { PerformancePlan } from '../Performance/PerformancePlan';
-import { WT21FixInfoWaypoint } from '../Systems/FixInfo/WT21FixInfoData';
-import { WT21FixInfoManager } from '../Systems/FixInfo/WT21FixInfoManager';
-import { WT21FmsUtils } from '../Systems/FMS/WT21FmsUtils';
 import { FixInfoFacilityWaypoint, MapDesAdvisoryLabelFactory, MapFixInfoIconFactory, MapTodIconFactory, MapTodLabelFactory } from './MapTod';
 import { WT21MapKeys } from './WT21MapKeys';
 
@@ -25,7 +26,7 @@ export interface MapTodLayerProps extends MapLayerProps<any> {
   /** The text label manager. */
   textManager: MapCullableTextLabelManager;
   /** The fix info manager. If not passed in, then fix info will not be rendered on this layer. */
-  fixInfo?: WT21FixInfoManager;
+  fixInfo?: WTLineFixInfoManager;
   /** The active route perf plan. Only needed if fix info should be displayed. */
   activePerformancePlan?: PerformancePlan;
 }
@@ -67,7 +68,7 @@ export class MapTodLayer extends MapSyncedCanvasLayer<MapTodLayerProps> {
   protected readonly facLoader = this.props.facLoader ?? new FacilityLoader(FacilityRepository.getRepository(this.props.bus));
   protected readonly boundsSub = VecNSubject.create(new Float64Array(4));
   protected readonly clipPathStream = new ClippedPathStream(NullPathStream.INSTANCE, this.boundsSub);
-  protected readonly fixInfoWpEntries = new Map<WT21FixInfoWaypoint, FixInfoWaypointEntry>();
+  protected readonly fixInfoWpEntries = new Map<WTLineFixInfoWaypoint, FixInfoWaypointEntry>();
 
   /** @inheritdoc */
   onAttached(): void {
@@ -164,7 +165,7 @@ export class MapTodLayer extends MapSyncedCanvasLayer<MapTodLayerProps> {
    * Handles a new fix info waypoint being added.
    * @param wp The new waypoint.
    */
-  private async handleFixInfoWpAdded(wp: WT21FixInfoWaypoint): Promise<void> {
+  private async handleFixInfoWpAdded(wp: WTLineFixInfoWaypoint): Promise<void> {
     const facility = await this.facLoader.getFacility(ICAO.getFacilityType(wp.fixIcao), wp.fixIcao);
 
     if (this.props.fixInfo?.ndWaypoints.getArray().includes(wp) === false) {
@@ -189,7 +190,7 @@ export class MapTodLayer extends MapSyncedCanvasLayer<MapTodLayerProps> {
    * Handles when fix info waypoints are removed.
    * @param wp The waypoint that was removed.
    */
-  private handleFixInfoWpRemoved(wp: WT21FixInfoWaypoint): void {
+  private handleFixInfoWpRemoved(wp: WTLineFixInfoWaypoint): void {
     const entry = this.fixInfoWpEntries.get(wp);
     if (entry !== undefined) {
       this.deregisterFixInfoWpEntry(entry);
@@ -214,7 +215,7 @@ export class MapTodLayer extends MapSyncedCanvasLayer<MapTodLayerProps> {
     this.todWaypoint = undefined;
 
     if (this.props.planner.hasActiveFlightPlan()) {
-      const plan = this.props.planner.getFlightPlan(WT21FmsUtils.PRIMARY_ACT_PLAN_INDEX);
+      const plan = this.props.planner.getFlightPlan(WTLineFmsUtils.PRIMARY_ACT_PLAN_INDEX);
 
       if (plan.segmentCount > 1 && this.vnavTodLegIndex.get() >= 0
         && this.vnavPathMode.get() !== VNavPathMode.PathActive
@@ -238,7 +239,7 @@ export class MapTodLayer extends MapSyncedCanvasLayer<MapTodLayerProps> {
     this.desAdvisoryWaypoint = undefined;
 
     if (this.props.planner.hasActiveFlightPlan()) {
-      const plan = this.props.planner.getFlightPlan(WT21FmsUtils.PRIMARY_ACT_PLAN_INDEX);
+      const plan = this.props.planner.getFlightPlan(WTLineFmsUtils.PRIMARY_ACT_PLAN_INDEX);
 
       if (plan.segmentCount > 1 && this.vnavDesAdvisoryLegIndex.get() >= 0
         && MapTodLayer.TOD_DISTANCE_THRESHOLD.compare(this.vnavDistanceToDesAdvisory.get()) <= 0

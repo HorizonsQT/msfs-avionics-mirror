@@ -4,7 +4,8 @@ import {
   MapWaypointRendererLabelFactory, ReadonlyFloat64Array, UnitType, Vec2Math, VNavWaypoint, Waypoint
 } from '@microsoft/msfs-sdk';
 
-import { WT21FixInfoWaypoint } from '../Systems/FixInfo/WT21FixInfoData';
+import { WTLineFixInfoWaypoint } from '@microsoft/msfs-wtlinesdk';
+
 import { WT21_PFD_MFD_Colors } from '../WT21_Colors';
 import { WT21MapWaypointIconPriority } from './MapSystemCommon';
 import { WT21MapStyles } from './WT21MapStylesModule';
@@ -124,7 +125,7 @@ export class MapFixInfoWaypointIcon<T extends Waypoint> extends AbstractMapWaypo
 
   private readonly intersectionCircleDiameterPixels = 12 * this.mapStyles.canvasScale;
 
-  private readonly fixInfo: WT21FixInfoWaypoint;
+  private readonly fixInfo: WTLineFixInfoWaypoint;
 
   /**
    * Constructor.
@@ -340,7 +341,7 @@ export class FixInfoFacilityWaypoint<T extends Facility = Facility> extends Basi
    * @param bus The event bus.
    * @param fixInfo The fix info.
    */
-  constructor(facility: T, bus: EventBus, public readonly fixInfo: Readonly<WT21FixInfoWaypoint>) {
+  constructor(facility: T, bus: EventBus, public readonly fixInfo: Readonly<WTLineFixInfoWaypoint>) {
     super(facility, bus);
   }
 

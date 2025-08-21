@@ -1,6 +1,6 @@
 import { AdcEvents, EventBus, GNSSEvents, LNavEvents, Subject, Subscribable } from '@microsoft/msfs-sdk';
 
-import { WT21LNavDataEvents } from '../Systems/Autopilot/WT21LNavDataEvents';
+import { WTLineLNavDataEvents } from '@microsoft/msfs-wtlinesdk';
 
 /**
  * Handles display bindings for the waypoint alert flashing functionality
@@ -33,7 +33,7 @@ export class WaypointAlerter {
    * @param bus The instance of the event bus to use.
    */
   constructor(private readonly bus: EventBus) {
-    const sub = bus.getSubscriber<AdcEvents & GNSSEvents & LNavEvents & WT21LNavDataEvents>();
+    const sub = bus.getSubscriber<AdcEvents & GNSSEvents & LNavEvents & WTLineLNavDataEvents>();
     sub.on('lnavdata_waypoint_distance').whenChanged().handle(d => { this.currentDistance = d; this.handleChanged(); });
     sub.on('lnav_vector_anticipation_distance').whenChanged().handle(d => { this.anticipationDistance = d; });
     sub.on('lnav_is_tracking').whenChanged().handle(t => { this.isTracking = t; this.handleChanged(); });

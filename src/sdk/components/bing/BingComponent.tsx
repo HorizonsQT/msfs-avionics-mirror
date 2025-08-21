@@ -1,6 +1,6 @@
-/// <reference types="@microsoft/msfs-types/js/common" />
-/// <reference types="@microsoft/msfs-types/js/types" />
-/// <reference types="@microsoft/msfs-types/js/netbingmap" />
+/// <reference types="@microsoft/msfs-types/js/common" preserve="true" />
+/// <reference types="@microsoft/msfs-types/js/types" preserve="true" />
+/// <reference types="@microsoft/msfs-types/js/netbingmap" preserve="true" />
 
 import { GameStateProvider } from '../../data/GameStateProvider';
 import { BitFlags } from '../../math/BitFlags';
@@ -118,6 +118,9 @@ export class BingComponent extends DisplayComponent<BingComponentProps> {
     [BingComponent.hexaToRGBAColor('#cb7300ff'), 12.5],
     [BingComponent.hexaToRGBAColor('#ff0000ff'), 12.5]
   ];
+
+  /** The maximum supported radius, in meters. */
+  public static readonly MAX_RADIUS = 5e6;
 
   private static readonly POSITION_RADIUS_INHIBIT_FRAMES = 10;
 
@@ -242,7 +245,7 @@ export class BingComponent extends DisplayComponent<BingComponentProps> {
   private readonly positionRadiusInhibitTimer = new DebounceTimer();
   private readonly processPendingPositionRadius = (): void => {
     if (this.isPositionRadiusPending) {
-      Coherent.call('SET_MAP_PARAMS', this.uid, this.pos, this.radius);
+      this.sendPositionRadius();
     }
 
     if (--this.positionRadiusInhibitFramesRemaining > 0) {
@@ -251,6 +254,8 @@ export class BingComponent extends DisplayComponent<BingComponentProps> {
       this.isPositionRadiusPending = false;
     }
   };
+
+  private hasRadiusExceededLimit = false;
 
   /**
    * Checks whether this Bing component has been bound.
@@ -366,7 +371,7 @@ export class BingComponent extends DisplayComponent<BingComponentProps> {
       // Only when not SVT, send in initial map params (even if we are asleep), because a bing instance that doesn't
       // have params initialized causes GPU perf issues.
       if (!BitFlags.isAll(this.bingFlags, BingMapsFlags.FL_BINGMAP_3D)) {
-        Coherent.call('SET_MAP_PARAMS', this.uid, this.pos, this.radius);
+        this.sendPositionRadius();
       }
 
       this.props.onBoundCallback && this.props.onBoundCallback(this);
@@ -471,7 +476,7 @@ export class BingComponent extends DisplayComponent<BingComponentProps> {
   }
 
   /**
-   * Sets the center position and radius.
+   * Sets the center position and radius of this Bing component.
    * @param pos The center position.
    * @param radius The radius, in meters.
    */
@@ -483,9 +488,24 @@ export class BingComponent extends DisplayComponent<BingComponentProps> {
       if (this.positionRadiusInhibitFramesRemaining > 0) {
         this.isPositionRadiusPending = true;
       } else {
-        Coherent.call('SET_MAP_PARAMS', this.uid, this.pos, this.radius);
+        this.sendPositionRadius();
       }
     }
+  }
+
+  /**
+   * Sends this component's center position and radius to the sim.
+   */
+  private sendPositionRadius(): void {
+    const radiusExceedsLimit = this.radius > BingComponent.MAX_RADIUS;
+
+    if (!this.hasRadiusExceededLimit && radiusExceedsLimit) {
+      console.warn(`BingComponent (ID ${this.props.id}): attempting to set a radius that exceeds the maximum supported value of ${BingComponent.MAX_RADIUS} m`);
+    }
+
+    this.hasRadiusExceededLimit = radiusExceedsLimit;
+
+    Coherent.call('SET_MAP_PARAMS', this.uid, this.pos, this.radius);
   }
 
   /** @inheritdoc */

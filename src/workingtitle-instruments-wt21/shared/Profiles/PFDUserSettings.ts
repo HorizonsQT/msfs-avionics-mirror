@@ -1,4 +1,4 @@
-import { DefaultUserSettingManager, EventBus } from '@microsoft/msfs-sdk';
+import { DefaultUserSettingManager, EventBus, UserSettingManager } from '@microsoft/msfs-sdk';
 
 /** A format for the AOA component. */
 export type AOAFormat = typeof PFDUserSettings.aoaFormatOptions[number];
@@ -40,7 +40,7 @@ export class PFDUserSettings {
    * @param bus The event bus.
    * @returns a manager for PFD user settings.
    */
-  public static getManager(bus: EventBus): DefaultUserSettingManager<PFDSettings> {
+  public static getManager(bus: EventBus): UserSettingManager<PFDSettings> {
     return PFDUserSettings.INSTANCE ??= new DefaultUserSettingManager<PFDSettings>(bus, pfdSettings);
   }
 }

@@ -1,4 +1,4 @@
-/// <reference types="@microsoft/msfs-types/js/avionics" />
+/// <reference types="@microsoft/msfs-types/js/avionics" preserve="true" />
 
 import {
   AdcEvents, APEvents, EventBus, FacilityType, FlightPlan, FlightPlanCalculatedEvent, FlightPlanIndicationEvent, FlightPlanLegEvent,

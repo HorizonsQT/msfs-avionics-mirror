@@ -1,9 +1,9 @@
 import {
-  ArrayUtils, BitFlags, ChartArea, ChartPage, ChartsClient, ChartUrl, ChartView, ComponentProps, CssTransformBuilder,
-  CssTransformSubject, CssTranslate3dTransform, CssTranslateTransform, DisplayComponent, FSComponent, GeoPoint,
-  GeoReferencedChartArea, LambertConformalConicProjection, LatLonInterface, MappedSubject, MathUtils,
-  MutableSubscribable, ReadonlyFloat64Array, SetSubject, Subject, Subscribable, SubscribableSet, SubscribableUtils,
-  Subscription, ToggleableClassNameRecord, Transform2D, Vec2Math, Vec3Math, VecNMath, VNode
+  ArrayUtils, BitFlags, ChartArea, ChartImageSupplier, ChartPage, ChartsClient, ChartUrl, ChartUtils, ChartView, ComponentProps,
+  CssTransformBuilder, CssTransformSubject, CssTranslate3dTransform, CssTranslateTransform, DisplayComponent,
+  FSComponent, GeoPoint, GeoReferencedChartArea, LambertConformalConicProjection, LatLonInterface, MappedSubject,
+  MathUtils, MutableSubscribable, ReadonlyFloat64Array, SetSubject, Subject, Subscribable, SubscribableSet,
+  SubscribableUtils, Subscription, ToggleableClassNameRecord, Transform2D, Vec2Math, Vec3Math, VecNMath, VNode
 } from '@microsoft/msfs-sdk';
 
 import { GarminChartDisplayLayer } from './GarminChartDisplayLayer';
@@ -52,6 +52,13 @@ export enum GarminChartDisplayChartStatus {
  * Component props for {@link GarminChartDisplay}.
  */
 export interface GarminChartDisplayProps extends ComponentProps {
+  /**
+   * A function that creates a new chart image supplier for the display to use. If not defined, then the display will
+   * create an instance of {@link ChartView} by default.
+   * @returns A new chart image supplier for the display to use.
+   */
+  createChartImageSupplier?: () => ChartImageSupplier;
+
   /** The size of the display, as `[width, height]` in pixels. */
   size: Subscribable<ReadonlyFloat64Array>;
 
@@ -91,7 +98,7 @@ export interface GarminChartDisplayProps extends ComponentProps {
  * A Garmin terminal (airport) chart display. The display renders up to one chart page or sub-area of a chart page at
  * a time. The displayed chart can be scaled, rotated, and panned (translated). Optional geo-referencing data is also
  * supported.
- * 
+ *
  * The display also renders its child nodes on top of the displayed chart. Any descendant components that implement the
  * {@link GarminChartDisplayLayer} interface (that do not descend from another descendant component of the display)
  * are attached to the display once the display is rendered and can listen to various callbacks. Please refer to the
@@ -102,26 +109,34 @@ export class GarminChartDisplay extends DisplayComponent<GarminChartDisplayProps
 
   private readonly vec2Cache = ArrayUtils.create(5, () => Vec2Math.create());
 
-  private readonly chartView = new ChartView();
-  private isChartViewInit = false;
+  private readonly chartImageSupplier = this.props.createChartImageSupplier?.() ?? this.createDefaultChartImageSupplier();
   private readonly requestedChartUrl = Subject.create<string | null>(null);
 
   private readonly chartStatus = MappedSubject.create(
-    ([requestedUrl, liveView]): GarminChartDisplayChartStatus => {
+    ([requestedUrl, image]): GarminChartDisplayChartStatus => {
       if (requestedUrl === null) {
+        // The chart selection is null.
         return GarminChartDisplayChartStatus.NoSelection;
       } else if (requestedUrl) {
-        if (liveView.chartUrl === requestedUrl) {
-          return GarminChartDisplayChartStatus.Displayed;
+        // A chart is selected and a chart image has been requested.
+        if (image.chartUrl === requestedUrl) {
+          // The chart image request has been resolved.
+          if (image.imageUrl && image.errorCode === 0) {
+            return GarminChartDisplayChartStatus.Displayed;
+          } else {
+            return GarminChartDisplayChartStatus.NoChart;
+          }
         } else {
+          // The chart image request is still pending.
           return GarminChartDisplayChartStatus.Loading;
         }
       } else {
+        // A chart URL could not be found for the selected chart.
         return GarminChartDisplayChartStatus.NoChart;
       }
     },
     this.requestedChartUrl,
-    this.chartView.liveView
+    this.chartImageSupplier.image
   );
 
   private readonly rootWidth = this.props.size.map(size => `${size[0]}px`);
@@ -180,11 +195,10 @@ export class GarminChartDisplay extends DisplayComponent<GarminChartDisplayProps
   private readonly imageCssTransform = CssTransformSubject.create(CssTransformBuilder.translate('px'));
 
   private isGeoReferenced = false;
-  private readonly projectionCenter = { lat: 0, lon: 0 };
-  private readonly projectionAnchorXY = Vec2Math.create();
-  private readonly projectionPreRotation = Vec3Math.create();
-  private readonly projectionTranslation = Vec2Math.create();
-  private readonly projection = new LambertConformalConicProjection().setReflectY(true);
+  private readonly projectionZeroCenter = { lat: 0, lon: 0 };
+  private readonly projectionZeroPreRotation = Vec3Math.create();
+  private readonly projectionZeroTranslation = Vec2Math.create();
+  private readonly projection = new LambertConformalConicProjection();
 
   private needUpdateDisplayedChart = false;
   private needUpdateDisplayedUrl = false;
@@ -252,15 +266,25 @@ export class GarminChartDisplay extends DisplayComponent<GarminChartDisplayProps
 
   private readonly subscriptions: Subscription[] = [];
 
-  private selectedChartSub?: Subscription;
+  /**
+   * Creates a default chart image supplier instance.
+   * @returns A default chart image supplier instance.
+   */
+  private createDefaultChartImageSupplier(): ChartImageSupplier {
+    const view = new ChartView();
+    ChartsClient.initializeChartView(view);
+    return view;
+  }
 
   /** @inheritDoc */
   public onAfterRender(): void {
-    this.initChartView();
-
     this.subscriptions.push(
       this.props.size.sub(() => {
         this.needUpdateInitialTransformation = true;
+      }, true),
+
+      this.props.selectedChart.sub(() => {
+        this.needUpdateDisplayedChart = true;
       }, true),
 
       this.props.displayMode.sub(() => {
@@ -287,23 +311,6 @@ export class GarminChartDisplay extends DisplayComponent<GarminChartDisplayProps
         this.chartStatus.pipe(this.props.chartStatus)
       );
     }
-  }
-
-  /**
-   * Initializes this display's chart view component. Once the chart view is initialized, this display will be able to
-   * render chart images.
-   */
-  private async initChartView(): Promise<void> {
-    await ChartsClient.initializeChartView(this.chartView);
-    this.isChartViewInit = true;
-
-    if (!this.chartView.isAlive) {
-      return;
-    }
-
-    this.selectedChartSub = this.props.selectedChart.sub(() => {
-      this.needUpdateDisplayedChart = true;
-    }, true);
   }
 
   /**
@@ -342,7 +349,7 @@ export class GarminChartDisplay extends DisplayComponent<GarminChartDisplayProps
    * display. The maximum value is set via this display's `maxZoomLevel` prop. If there is no displayed chart or if
    * this display's area (width multiplied by height) is zero, then this method does nothing. Any changes to this
    * display made by this method will not take effect until the next time the display is updated.
-   * 
+   *
    * A zoom level of zero scales the displayed chart area such that the displayed width of the chart area equals the
    * width of the display. Every unit increase in zoom level increases the scaling applied to the displayed chart area
    * by a factor of 2.
@@ -367,7 +374,7 @@ export class GarminChartDisplay extends DisplayComponent<GarminChartDisplayProps
    * chart area fits within the display. The maximum value is set via this display's `maxZoomLevel` prop. If there is
    * no displayed chart or if this display's area (width multiplied by height) is zero, then this method does nothing.
    * Any changes to this display made by this method will not take effect until the next time the display is updated.
-   * 
+   *
    * A zoom level of zero scales the displayed chart area such that the displayed width of the chart area equals the
    * width of the display. Every unit increase in zoom level increases the scaling applied to the displayed chart area
    * by a factor of 2.
@@ -381,7 +388,7 @@ export class GarminChartDisplay extends DisplayComponent<GarminChartDisplayProps
    * `maxZoomLevel` prop. If there is no displayed chart or if this display's area (width multiplied by height) is
    * zero, then this method does nothing. Any changes to this display made by this method will not take effect until
    * the next time the display is updated.
-   * 
+   *
    * A zoom level of zero scales the displayed chart area such that the displayed width of the chart area equals the
    * width of the display. Every unit increase in zoom level increases the scaling applied to the displayed chart area
    * by a factor of 2.
@@ -414,7 +421,7 @@ export class GarminChartDisplay extends DisplayComponent<GarminChartDisplayProps
    * Sets this display's chart rotation angle. If there is no displayed chart or if this display's area (width
    * multiplied by height) is zero, then this method does nothing. Any changes to this display made by this method will
    * not take effect until the next time the display is updated.
-   * 
+   *
    * A rotation angle of zero results in the chart being displayed "upright", with positive angles rotating the chart
    * clockwise.
    * @param rotation The rotation angle to set, in degrees.
@@ -436,7 +443,7 @@ export class GarminChartDisplay extends DisplayComponent<GarminChartDisplayProps
    * Changes this display's chart rotation angle. If there is no displayed chart or if this display's area (width
    * multiplied by height) is zero, then this method does nothing. Any changes to this display made by this method will
    * not take effect until the next time the display is updated.
-   * 
+   *
    * A rotation angle of zero results in the chart being displayed "upright", with positive angles rotating the chart
    * clockwise.
    * @param delta The amount by which to change the rotation angle, in degrees.
@@ -449,7 +456,7 @@ export class GarminChartDisplay extends DisplayComponent<GarminChartDisplayProps
    * Resets this display's chart panning offset to zero along both the x and y axes. If there is no displayed chart or
    * if this display's area (width multiplied by height) is zero, then this method does nothing. Any changes to this
    * display made by this method will not take effect until the next time the display is updated.
-   * 
+   *
    * The panning offset is the offset of the center of the displayed chart area from the center of the display, as
    * `[x, y]` in the chart's internal coordinate system. An offset of `[0, 0]` indicates the displayed chart area is
    * centered in the display window.
@@ -567,12 +574,12 @@ export class GarminChartDisplay extends DisplayComponent<GarminChartDisplayProps
   public update(time: number): void {
     const dt = this.lastUpdateTime === undefined ? 0 : Math.max(time - this.lastUpdateTime, 0);
 
-    if (this.needUpdateDisplayedChart && this.isChartViewInit) {
+    if (this.needUpdateDisplayedChart) {
       this.updateDisplayedChart();
       this.needUpdateDisplayedChart = false;
     }
 
-    if (this.needUpdateDisplayedUrl && this.isChartViewInit) {
+    if (this.needUpdateDisplayedUrl) {
       this.updateDisplayedUrl();
       this.needUpdateDisplayedUrl = false;
     }
@@ -701,11 +708,10 @@ export class GarminChartDisplay extends DisplayComponent<GarminChartDisplayProps
       ? url.url
       : selectedChart ? '' : null;
 
-    // chartView.showChartImage() ignores invalid URLs, so only call the method when we have a valid URL to set. When
-    // the requested URL is not valid, the image element that displays the chart will be hidden, so we don't have to
-    // worry about displaying the incorrect image.
+    // Only call the method when we have a valid URL to set. When the requested URL is not valid, the image element
+    // that displays the chart will be hidden, so we don't have to worry about displaying the incorrect image.
     if (requestedChartUrl) {
-      this.chartView.showChartImage(requestedChartUrl);
+      this.chartImageSupplier.showChartImage(requestedChartUrl);
     }
 
     this.requestedChartUrl.set(requestedChartUrl);
@@ -1019,10 +1025,7 @@ export class GarminChartDisplay extends DisplayComponent<GarminChartDisplayProps
     if (selectedChart && selectedChart.geoReferencedArea) {
       const geoReferencedArea = selectedChart.geoReferencedArea;
 
-      const topLeftLatLon = geoReferencedArea.worldRectangle.upperLeft;
       const topLeftXY = geoReferencedArea.chartRectangle.upperLeft;
-
-      const bottomRightLatLon = geoReferencedArea.worldRectangle.lowerRight;
       const bottomRightXY = geoReferencedArea.chartRectangle.lowerRight;
 
       geoReferenceLeft = Math.max(topLeftXY[0], this.areaLeft);
@@ -1030,44 +1033,9 @@ export class GarminChartDisplay extends DisplayComponent<GarminChartDisplayProps
       geoReferenceRight = Math.min(bottomRightXY[0], this.areaRight);
       geoReferenceBottom = Math.min(bottomRightXY[1], this.areaBottom);
 
-      // Pre-rotate the central meridian to 0 deg longitude.
-      this.projectionPreRotation[0] = -geoReferencedArea.projection.centralMeridian * Avionics.Utils.DEG2RAD;
+      ChartUtils.setGeoProjectionFromChartArea(this.projection, geoReferencedArea);
 
-      // Project the top-left corner of the area to (0, 0). Note that this is *before* post-projection translation
-      // is applied.
-      this.projectionCenter.lat = topLeftLatLon[1];
-      this.projectionCenter.lon = topLeftLatLon[0];
-
-      // Reset the post-projection translation so that the top-left corner is projected to (0, 0) *after* the
-      // post-projection translation is applied.
-      this.projectionTranslation.fill(0);
-
-      this.projection
-        .setScaleFactor(1)
-        .setStandardParallels(geoReferencedArea.projection.standardParallel1, geoReferencedArea.projection.standardParallel2)
-        .setPreRotation(this.projectionPreRotation)
-        .setCenter(this.projectionCenter)
-        .setPostRotation(-geoReferencedArea.worldRectangle.orientation * Avionics.Utils.DEG2RAD)
-        .setTranslation(this.projectionTranslation);
-
-      this.projectionAnchorXY.set(bottomRightLatLon);
-      const bottomRightProjected = this.projection.project(this.projectionAnchorXY, this.projectionAnchorXY);
-
-      // Solve for the scale factor by comparing the projected distance between top-left and bottom-right with scale
-      // factor of 1 to the desired projected distance (from the georeferenced area specs). Remember that the top-left
-      // corner is guaranteed to be projected to (0, 0).
-      const scaleFactor = Math.hypot(bottomRightXY[0] - topLeftXY[0], bottomRightXY[1] - topLeftXY[1])
-        / Math.hypot(bottomRightProjected[0], bottomRightProjected[1]);
-
-      // Add post-projection translation so that the projected coordinates match the coordinates of the chart image,
-      // with (0, 0) being the top-left of the *entire* chart area.
-      this.projectionTranslation.set(topLeftXY);
-
-      this.projection
-        .setScaleFactor(scaleFactor)
-        .setTranslation(this.projectionTranslation);
-
-      isGeoReferenced = isFinite(scaleFactor);
+      isGeoReferenced = isFinite(this.projection.getScaleFactor());
     } else {
       isGeoReferenced = false;
     }
@@ -1078,21 +1046,13 @@ export class GarminChartDisplay extends DisplayComponent<GarminChartDisplayProps
       geoReferenceRight = 0;
       geoReferenceBottom = 0;
 
-      this.projectionPreRotation[0] = 0;
-
-      this.projectionCenter.lat = 0;
-      this.projectionCenter.lon = 0;
-
-      this.projectionTranslation[0] = 0;
-      this.projectionTranslation[1] = 0;
-
       this.projection
         .setScaleFactor(1)
         .setStandardParallels(0)
-        .setPreRotation(this.projectionPreRotation)
-        .setCenter(this.projectionCenter)
+        .setPreRotation(this.projectionZeroPreRotation)
+        .setCenter(this.projectionZeroCenter)
         .setPostRotation(0)
-        .setTranslation(this.projectionTranslation);
+        .setTranslation(this.projectionZeroTranslation);
     }
 
     if (isGeoReferenced !== this.isGeoReferenced) {
@@ -1339,7 +1299,7 @@ export class GarminChartDisplay extends DisplayComponent<GarminChartDisplayProps
           }}
         >
           <img
-            src={this.chartView.liveViewName}
+            src={this.chartImageSupplier.image.map(image => image.imageUrl)}
             class='terminal-chart-display-img'
             style={{
               'display': this.imageDisplay,
@@ -1364,9 +1324,7 @@ export class GarminChartDisplay extends DisplayComponent<GarminChartDisplayProps
     this.rootWidth.destroy();
     this.rootHeight.destroy();
 
-    this.selectedChartSub?.destroy();
-
-    this.chartView.destroy();
+    this.chartImageSupplier.destroy();
 
     for (const sub of this.subscriptions) {
       sub.destroy();

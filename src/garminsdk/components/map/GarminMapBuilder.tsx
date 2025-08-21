@@ -21,7 +21,7 @@ import {
   MapAirspaceVisController, MapAirspaceVisControllerModules, MapAirspaceVisUserSettings, MapDataIntegrityRTRController, MapDataIntegrityRTRControllerContext,
   MapDataIntegrityRTRControllerModules, MapDesiredOrientationController, MapDesiredOrientationControllerContext, MapDesiredOrientationControllerModules,
   MapFlightPlanFocusRTRController, MapFlightPlanFocusRTRControllerContext, MapFlightPlanFocusRTRControllerModules,
-  MapGarminAutopilotPropsBinding, MapGarminAutopilotPropsController, MapGarminAutopilotPropsControllerModules, MapGarminAutopilotPropsKey,
+  MapGarminAutopilotPropsController, MapGarminAutopilotPropsControllerBinding, MapGarminAutopilotPropsControllerModules, MapGarminAutopilotPropsKey,
   MapGarminTrafficController, MapGarminTrafficControllerModules, MapNexradController, MapNexradControllerModules, MapNexradUserSettings,
   MapOrientationModeController, MapOrientationModeControllerContext, MapOrientationModeControllerModules, MapOrientationRTRController,
   MapOrientationRTRControllerContext, MapOrientationRTRControllerModules, MapOrientationSettingsController, MapOrientationSettingsControllerModules,
@@ -185,8 +185,8 @@ export type IndicatorGroupCallbacks = Omit<MapGenericLayerProps<any>, keyof MapL
 export class GarminMapBuilder {
 
   /**
-   * Configures a map builder to add a module describing the player airplane's autopilot properties, and optionally
-   * binds the module's properties to data received over the event bus.
+   * Configures this builder to add a module describing the player airplane's autopilot properties, and optionally
+   * binds the module's properties to external data.
    *
    * Adds the following...
    *
@@ -196,24 +196,29 @@ export class GarminMapBuilder {
    * Controllers:
    * * `[MapSystemKeys.AutopilotProps]: MapGarminAutopilotPropsController` (optional)
    * @param mapBuilder The map builder to configure.
-   * @param propertiesToBind Properties on the autopilot module to bind to data received over the event bus.
-   * @param updateFreq The update frequency, in hertz, of the data bindings, or a subscribable which provides it. If
-   * not defined, the data bindings will update every frame. Ignored if `propertiesToBind` is undefined.
+   * @param bindings An iterable containing definitions of the bindings to create between the autopilot module's
+   * properties and external data. If not defined, then no bindings will be created.
+   * @param updateFreq The default frequency, in hertz, at which to update the module props from their bound data
+   * sources. This frequency, if defined, is applied to all bindings that do not explicitly define their own update
+   * frequencies. If the frequency is `null`, then updates will not be throttled by frequency - each property will be
+   * updated as soon as the value of its data source changes. If the frequency is not `null`, then each property will
+   * only be updated when the controller's `onBeforeUpdated()` method is called, and the frequency of updates will not
+   * exceed `updateFreq`. Ignored if `bindings` is undefined.
    * @returns This builder, after it has been configured.
    */
   public static autopilotProps<MapBuilder extends MapSystemBuilder>(
     mapBuilder: MapBuilder,
-    propertiesToBind?: Iterable<MapGarminAutopilotPropsKey | MapGarminAutopilotPropsBinding>,
-    updateFreq?: number | Subscribable<number>
+    bindings?: Iterable<MapGarminAutopilotPropsKey | MapGarminAutopilotPropsControllerBinding>,
+    updateFreq?: number | null | Subscribable<number | null>
   ): MapBuilder {
     mapBuilder.withModule(MapSystemKeys.AutopilotProps, () => new MapGarminAutopilotPropsModule());
 
-    if (propertiesToBind !== undefined) {
+    if (bindings !== undefined) {
       mapBuilder.withController<MapGarminAutopilotPropsController, MapGarminAutopilotPropsControllerModules>(
         MapSystemKeys.AutopilotProps,
         context => new MapGarminAutopilotPropsController(
           context,
-          propertiesToBind,
+          bindings,
           updateFreq
         )
       );

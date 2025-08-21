@@ -1,7 +1,8 @@
 import {
-  AdcEvents, ArrayUtils, ConsumerSubject, ConsumerValue, EventBus, FlightPlan, FlightPlanner, GeoPoint,
-  GlidePathCalculator, GNSSEvents, GPSSystemState, LNavDataEvents, LNavEvents, LNavUtils, MathUtils, RnavTypeFlags,
-  SimVarValueType, Subject, Subscribable, SubscribableUtils, UnitType, VNavUtils, VNavVars
+  AdcEvents, ArrayUtils, BitFlags, ConsumerSubject, ConsumerValue, EventBus, FlightPlan, FlightPlanner,
+  FlightPlanSegment, FlightPlanSegmentType, GeoPoint, GlidePathCalculator2, GNSSEvents, GPSSystemState, LegDefinition,
+  LegDefinitionFlags, LNavDataEvents, LNavEvents, LNavUtils, MathUtils, RnavTypeFlags, SimVarValueType, Subject,
+  Subscribable, SubscribableUtils, UnitType, VNavUtils, VNavVars
 } from '@microsoft/msfs-sdk';
 
 import { FmsEvents } from '../../flightplan/FmsEvents';
@@ -89,7 +90,7 @@ export class GarminGlidepathComputer {
   );
 
   private readonly glidepathServiceLevelCalculator: GlidepathServiceLevelCalculator;
-  private readonly glidepathCalculator: GlidePathCalculator;
+  private readonly glidepathCalculator: GlidePathCalculator2;
 
   private readonly approachHasGp = Subject.create<boolean>(false);
   private readonly gpVerticalDeviation = Subject.create<number | null>(null);
@@ -99,7 +100,7 @@ export class GarminGlidepathComputer {
 
   // LNAV Consumer Subjects
   private readonly lnavLegIndex = ConsumerValue.create(null, 0);
-  private readonly lnavLegDistanceAlong = ConsumerValue.create(null, 0);
+  private readonly lnavLegDistanceRemaining = ConsumerValue.create(null, 0);
   private readonly lnavDataXtk = ConsumerValue.create(null, 0);
   private readonly lnavDataCdiScale = ConsumerValue.create(null, 4);
 
@@ -177,7 +178,10 @@ export class GarminGlidepathComputer {
       this.approachDetails
     );
 
-    this.glidepathCalculator = new GlidePathCalculator(this.bus, this.flightPlanner, this.primaryPlanIndex);
+    this.glidepathCalculator = new GlidePathCalculator2(this.flightPlanner, {
+      planIndex: this.primaryPlanIndex,
+      isEligibleReferenceLeg: GarminGlidepathComputer.isEligibleReferenceLeg,
+    });
 
     const sub = this.bus.getSubscriber<LNavEvents & LNavDataEvents & AdcEvents & GNSSEvents & FmsEvents>();
 
@@ -186,12 +190,12 @@ export class GarminGlidepathComputer {
       if (this.isLNavIndexValid) {
         const suffix = LNavUtils.getEventBusTopicSuffix(lnavIndex);
         this.lnavLegIndex.setConsumer(sub.on(`lnav_tracked_leg_index${suffix}`));
-        this.lnavLegDistanceAlong.setConsumer(sub.on(`lnav_leg_distance_along${suffix}`));
+        this.lnavLegDistanceRemaining.setConsumer(sub.on(`lnav_leg_distance_remaining${suffix}`));
         this.lnavDataXtk.setConsumer(sub.on(`lnavdata_xtk${suffix}`));
         this.lnavDataCdiScale.setConsumer(sub.on(`lnavdata_cdi_scale${suffix}`));
       } else {
         this.lnavLegIndex.setConsumer(null);
-        this.lnavLegDistanceAlong.setConsumer(null);
+        this.lnavLegDistanceRemaining.setConsumer(null);
         this.lnavDataXtk.setConsumer(null);
         this.lnavDataCdiScale.setConsumer(null);
       }
@@ -233,7 +237,7 @@ export class GarminGlidepathComputer {
 
     const lateralPlan = this.flightPlanner.getFlightPlan(this.primaryPlanIndex);
 
-    const alongLegDistance = UnitType.NMILE.convertTo(this.lnavLegDistanceAlong.get(), UnitType.METER);
+    const legDistanceRemaining = UnitType.NMILE.convertTo(this.lnavLegDistanceRemaining.get(), UnitType.METER);
 
     const lateralLegIndex = this.lnavLegIndex.get();
 
@@ -241,7 +245,8 @@ export class GarminGlidepathComputer {
       lateralPlan.length > 0
       && lateralLegIndex < lateralPlan.length
     ) {
-      this.manageGlidepath(lateralPlan, lateralLegIndex, alongLegDistance);
+      this.glidepathCalculator.update();
+      this.manageGlidepath(lateralPlan, lateralLegIndex, legDistanceRemaining);
     } else {
       this.failGlidepath();
     }
@@ -334,22 +339,38 @@ export class GarminGlidepathComputer {
       const gpServiceLevel = this.glidepathServiceLevelCalculator.getServiceLevel();
 
       if (gpServiceLevel !== GlidepathServiceLevel.None) {
-        this.gpServiceLevel.set(gpServiceLevel);
+        const gpDistance = this.glidepathCalculator.getDistanceToReference(activeLegIndex, distanceAlongLeg);
 
-        const gpDistance = this.glidepathCalculator.getGlidepathDistance(activeLegIndex, distanceAlongLeg);
-        this.gpDistance.set(gpDistance);
+        if (gpDistance !== undefined) {
+          const currentAlt = this.glidepathServiceLevelCalculator.isBaroServiceLevel(gpServiceLevel) ? this.currentAltitude : this.currentGpsAltitude;
+          const desiredGPAltitude = this.glidepathCalculator.getDesiredAltitude(gpDistance);
 
-        const currentAlt = this.glidepathServiceLevelCalculator.isBaroServiceLevel(gpServiceLevel) ? this.currentAltitude : this.currentGpsAltitude;
-        const desiredGPAltitudeFeet = UnitType.METER.convertTo(this.glidepathCalculator.getDesiredGlidepathAltitude(gpDistance), UnitType.FOOT);
+          if (desiredGPAltitude) {
+            const desiredGPAltitudeFeet = UnitType.METER.convertTo(desiredGPAltitude, UnitType.FOOT);
 
-        this.gpVerticalDeviation.set(MathUtils.clamp(desiredGPAltitudeFeet - currentAlt, -1000, 1000));
-        this.gpFpa.set(this.glidepathCalculator.glidepathFpa);
-        this.approachHasGp.set(true);
-        return;
+            this.gpServiceLevel.set(gpServiceLevel);
+            this.gpDistance.set(gpDistance);
+            this.gpVerticalDeviation.set(MathUtils.clamp(desiredGPAltitudeFeet - currentAlt, -1000, 1000));
+            this.gpFpa.set(this.glidepathCalculator.glidepath.get().angle);
+            this.approachHasGp.set(true);
+            return;
+          }
+        }
       }
     }
 
     this.approachHasGp.set(false);
     this.resetGpVars();
+  }
+
+  /**
+   * Checks whether a candidate flight plan leg is eligible to host a glidepath reference point.
+   * @param leg The flight plan leg to check.
+   * @param segment The flight plan segment containing the leg to check.
+   * @returns Whether the specified flight plan leg is eligible to host a glidepath reference point.
+   */
+  private static isEligibleReferenceLeg(leg: LegDefinition, segment: FlightPlanSegment): boolean {
+    return segment.segmentType === FlightPlanSegmentType.Approach
+      && !BitFlags.isAny(leg.flags, LegDefinitionFlags.MissedApproach);
   }
 }

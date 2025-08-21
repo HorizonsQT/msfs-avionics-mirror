@@ -10,6 +10,15 @@ export type FlightPathLegCalculationOptions = {
    * calculated discontinuity vectors will have the `Discontinuity` flag applied to them.
    */
   calculateDiscontinuityVectors: boolean;
+
+  /**
+   * Whether to calculate strictly great-circle paths to span discontinuities in the flight path. If `true`, then any
+   * discontinuity-spanning path will always be the shortest great-circle path between the two ends of the
+   * discontinuity. If `false`, then the discontinuity-spanning path will be calculated in a manner that smoothly joins
+   * the two ends the discontinuity, if possible. Ignored if `calculateDiscontinuityVectors` is `false`. Defaults to
+   * `false`.
+   */
+  useGreatCirclePathForDiscontinuity?: boolean;
 };
 
 /**

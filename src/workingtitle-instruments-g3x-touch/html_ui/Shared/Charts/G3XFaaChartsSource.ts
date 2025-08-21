@@ -1,6 +1,6 @@
 import {
-  ApproachIdentifier, ArrayUtils, BuiltInChartProvider, ChartIndex, ChartMetadata, ChartUrl, FaaChartType,
-  GeoReferencedChartArea
+  ApproachIdentifier, ArrayUtils, BuiltInChartProvider, ChartImageSupplier, ChartIndex, ChartMetadata, ChartsClient,
+  ChartService, ChartUrl, ChartView, FaaChartType, GeoReferencedChartArea, SimChartService
 } from '@microsoft/msfs-sdk';
 
 import { GarminFaaChartsUtils } from '@microsoft/msfs-garminsdk';
@@ -33,6 +33,20 @@ export class G3XFaaChartsSource implements G3XChartsSource {
 
   /** @inheritDoc */
   public readonly supportsNightMode = false;
+
+  private readonly chartService = new SimChartService();
+
+  /** @inheritDoc */
+  public getChartService(): ChartService {
+    return this.chartService;
+  }
+
+  /** @inheritDoc */
+  public createChartImageSupplier(): ChartImageSupplier {
+    const view = new ChartView();
+    ChartsClient.initializeChartView(view);
+    return view;
+  }
 
   /** @inheritDoc */
   public getAirportDiagramCharts(chartIndex: ChartIndex<string>): ChartMetadata[] {

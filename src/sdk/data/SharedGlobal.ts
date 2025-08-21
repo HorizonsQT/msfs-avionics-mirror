@@ -3,11 +3,14 @@ import { Subscribable } from '../sub/Subscribable';
 
 /**
  * A reference to a shared global object.
- * @experimental
+ * @experimental This API is still under development and should not be used for production code.
  */
 export interface SharedGlobalObjectRef<T extends object> {
   /** The object instance. */
   readonly instance: T;
+
+  /** Whether the CoherentGT view in which this reference was retrieved is the owner of the object. */
+  readonly isViewOwner: boolean;
 
   /** Whether the object has been detached. */
   readonly isDetached: Subscribable<boolean>;
@@ -15,6 +18,7 @@ export interface SharedGlobalObjectRef<T extends object> {
 
 /**
  * An entry describing a shared global.
+ * @experimental This API is still under development and should not be used for production code.
  */
 type GlobalEntry = {
   /** A Promise which is fulfilled when the global is attached. */
@@ -22,6 +26,9 @@ type GlobalEntry = {
 
   /** The status of the global. */
   status: 'pending' | 'attached' | 'detached';
+
+  /** Whether the CoherentGT view in which the entry was created is the owner of the global. */
+  isViewOwner: boolean;
 
   /** Whether the global is detached. */
   isDetached: Subject<boolean>;
@@ -40,7 +47,7 @@ type GlobalEntry = {
  * owning view - this is the view from which the global was originally created. When a view is destroyed, all globals
  * that it owns are detached. Once a shared global is detached, it must be created again by another view to continue
  * to be used.
- * @experimental
+ * @experimental This API is still under development and should not be used for production code.
  */
 export class SharedGlobal {
   private static listenerPromise?: Promise<ViewListener.ViewListener>;
@@ -50,6 +57,7 @@ export class SharedGlobal {
   /**
    * Initializes the shared global listener.
    * @returns A Promise which is fulfilled when the shared global listener is initialized.
+   * @experimental This API is still under development and should not be used for production code.
    */
   private static initListener(): Promise<ViewListener.ViewListener> {
     return SharedGlobal.listenerPromise ??= new Promise(resolve => {
@@ -66,7 +74,7 @@ export class SharedGlobal {
    * as the owner.
    * @param name The name of the shared global object to get.
    * @returns A Promise which is fulfilled with a reference to the specified shared global object.
-   * @experimental
+   * @experimental This API is still under development and should not be used for production code.
    */
   public static async get<T extends object = object>(name: string): Promise<SharedGlobalObjectRef<T>> {
     const listener = await SharedGlobal.initListener();
@@ -88,6 +96,7 @@ export class SharedGlobal {
 
     return {
       instance: obj as T,
+      isViewOwner: entry.isViewOwner,
       isDetached: entry.isDetached,
     };
   }
@@ -97,7 +106,7 @@ export class SharedGlobal {
    * @param name The name of the shared global object for which to wait.
    * @returns A Promise which is fulfilled with a reference to the specified shared global object once the global has
    * been created.
-   * @experimental
+   * @experimental This API is still under development and should not be used for production code.
    */
   public static async await<T extends object = object>(name: string): Promise<SharedGlobalObjectRef<T>> {
     const listener = await SharedGlobal.initListener();
@@ -113,6 +122,7 @@ export class SharedGlobal {
 
     return {
       instance: obj as T,
+      isViewOwner: entry.isViewOwner,
       isDetached: entry.isDetached,
     };
   }
@@ -141,6 +151,7 @@ export class SharedGlobal {
     const entry: GlobalEntry = {
       attachPromise,
       status: 'pending',
+      isViewOwner: false,
       isDetached: Subject.create(false),
       resolve: resolve!,
       reject: reject!,
@@ -156,16 +167,19 @@ export class SharedGlobal {
   /**
    * Responds to when a shared global is attached.
    * @param name The name of the attached global.
+   * @param isViewOwner Whether the CoherentGT view that received the callback is the owner of the attached global.
    */
-  private static onGlobalAttached(name: string): void {
+  private static onGlobalAttached(name: string, isViewOwner: boolean): void {
     const entry = SharedGlobal.globalEntries.get(name);
     if (entry) {
       entry.status = 'attached';
+      entry.isViewOwner = isViewOwner;
       entry.resolve?.();
     } else {
       SharedGlobal.globalEntries.set(name, {
         attachPromise: Promise.resolve(),
         status: 'attached',
+        isViewOwner,
         isDetached: Subject.create(false),
       });
     }

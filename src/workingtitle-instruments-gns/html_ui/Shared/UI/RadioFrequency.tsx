@@ -1,4 +1,4 @@
-/// <reference types="@microsoft/msfs-types/js/simvar" />
+/// <reference types="@microsoft/msfs-types/js/simvar" preserve="true" />
 import { ComponentProps, DisplayComponent, EventBus, FrequencyChangeEvent, FSComponent, RadioEvents, RadioType, SimVarValueType, Subject, VNode } from '@microsoft/msfs-sdk';
 
 import './RadioFrequency.css';

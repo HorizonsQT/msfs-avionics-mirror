@@ -1,4 +1,4 @@
-import { GeoCircle } from '../../../geo/GeoCircle';
+import { GeoCircle, ReadonlyGeoCircle } from '../../../geo/GeoCircle';
 import { LatLonInterface } from '../../../geo/GeoInterfaces';
 import { GeoMath } from '../../../geo/GeoMath';
 import { GeoPoint } from '../../../geo/GeoPoint';
@@ -53,9 +53,9 @@ export class ProcedureTurnVectorBuilder {
     vectors: FlightPathVector[],
     index: number,
     start: ReadonlyFloat64Array | LatLonInterface,
-    startPath: GeoCircle,
+    startPath: ReadonlyGeoCircle,
     end: ReadonlyFloat64Array | LatLonInterface,
-    endPath: GeoCircle,
+    endPath: ReadonlyGeoCircle,
     outboundCourse: number,
     desiredTurnRadius: number,
     desiredTurnDirection?: VectorTurnDirection,

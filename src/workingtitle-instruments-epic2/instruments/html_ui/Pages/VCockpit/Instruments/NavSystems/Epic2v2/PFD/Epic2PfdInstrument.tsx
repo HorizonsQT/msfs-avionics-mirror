@@ -1,9 +1,9 @@
-/// <reference types="@microsoft/msfs-types/Pages/VCockpit/Instruments/Shared/BaseInstrument" />
-/// <reference types="@microsoft/msfs-types/Pages/VCockpit/Core/VCockpit" />
-/// <reference types="@microsoft/msfs-types/js/simvar" />
-/// <reference types="@microsoft/msfs-types/js/netbingmap" />
-/// <reference types="@microsoft/msfs-types/js/common" />
-/// <reference types="@microsoft/msfs-types/js/avionics" />
+/// <reference types="@microsoft/msfs-types/pages/vcockpit/instruments/shared/baseinstrument" preserve="true" />
+/// <reference types="@microsoft/msfs-types/pages/vcockpit/core/vcockpit" preserve="true" />
+/// <reference types="@microsoft/msfs-types/js/simvar" preserve="true" />
+/// <reference types="@microsoft/msfs-types/js/netbingmap" preserve="true" />
+/// <reference types="@microsoft/msfs-types/js/common" preserve="true" />
+/// <reference types="@microsoft/msfs-types/js/avionics" preserve="true" />
 
 import {
   AvionicsSystemState, DefaultTcasAdvisoryDataProvider, FSComponent, MappedSubject, MinimumsManager, PluginSystem, SoundServer, Subject
@@ -17,8 +17,8 @@ import {
   DisplayUnitDefinition, DisplayUnitIndices, Epic2Adsb, Epic2BearingPointerNavIndicator, Epic2CourseNeedleNavIndicator, Epic2CourseNeedleNavSourceNames,
   Epic2FsInstrument, Epic2GhostNeedleNavIndicator, Epic2GhostNeedleNavSourceNames, Epic2NavIndicator, Epic2NavIndicatorName, Epic2NavIndicators,
   Epic2NavSourceNames, Epic2TcasII, Epic2TransponderManager, Epic2VSpeedController, ExcessiveDescentRateModule, ExcessiveGlideslopeDeviationModule,
-  ExcessiveTerrainClosureModule, GpsSource, Gpws, GpwsAlertController, InstrumentBackplaneNames, MapDataProvider, MapWaypointsDisplay, NavIndicators,
-  NavRadioNavSource, NavSources, TouchdownCalloutModule, UnsafeTerrainClearanceModule
+  ExcessiveTerrainClosureModule, ForwardLookingTerrainAlertModule, GpsSource, Gpws, GpwsAlertController, InstrumentBackplaneNames, MapDataProvider,
+  MapWaypointsDisplay, NavIndicators, NavRadioNavSource, NavSources, TouchdownCalloutModule, UnsafeTerrainClearanceModule
 } from '@microsoft/msfs-epic2-shared';
 
 import { HorizonSectionContainer } from './Components/HorizonSectionContainer';
@@ -171,7 +171,7 @@ export class Epic2PfdInstrument extends Epic2FsInstrument {
       this.gpws.addModule(new AltitudeLossAfterTakeoffModule(this.bus, this.gpwsAlertController));
       this.gpws.addModule(new UnsafeTerrainClearanceModule(this.bus, this.gpwsAlertController, this.airspeedDataProvider));
       this.gpws.addModule(new ExcessiveGlideslopeDeviationModule(this.bus, this.gpwsAlertController, this.verticalDeviationDataProvider, this.autopilotDataProvider));
-
+      this.gpws.addModule(new ForwardLookingTerrainAlertModule(this.bus, this.gpwsAlertController, this.inertialDataProvider));
     }
 
     this.tcas = new Epic2TcasII(this.bus, this.trafficInstrument, new Epic2Adsb(this.bus), this.config.sensors.acasDefinition);

@@ -1,3 +1,4 @@
+import { ReadonlyLifecycle } from './Lifecycle';
 import { Subject } from './Subject';
 import { MutableSubscribable, Subscribable } from './Subscribable';
 import { SubscribableSet } from './SubscribableSet';
@@ -343,5 +344,11 @@ class MappedSourcePipe<S, T, M, U extends MutableSubscribable<any, T>> implement
     this.sourceSub.destroy();
     this.pipe?.destroy();
     this.pipe = undefined;
+  }
+
+  /** @inheritdoc */
+  public withLifecycle(lifecycle: ReadonlyLifecycle): this {
+    lifecycle.register(this);
+    return this;
   }
 }

@@ -1,6 +1,6 @@
 import {
-  ArraySubject, ComponentProps, DisplayComponent, FSComponent, NodeReference, NumberFormatter, NumberUnitInterface, NumberUnitSubject, Subject, Subscribable,
-  SubscribableArray, UnitFamily, UserSettingManager, UserSettingValueFilter, VNode
+  ArraySubject, ComponentProps, DisplayComponent, FSComponent, NodeReference, NumberFormatter, NumberUnitInterface, NumberUnitSubject, PropertyTypeOf, Subject, Subscribable,
+  SubscribableArray, ToNonNullable, UnitFamily, UserSettingManager, UserSettingValueFilter, VNode
 } from '@microsoft/msfs-sdk';
 
 import { MapUserSettingTypes } from '@microsoft/msfs-garminsdk';
@@ -63,7 +63,7 @@ export class MapToggleSettingControl<K extends keyof UserSettingValueFilter<MapU
  */
 export interface MapEnumSettingControlProps<K extends keyof MapUserSettingTypes> extends MapSettingControlProps<K> {
   /** An array of values assignable to the setting. */
-  values: SubscribableArray<NonNullable<MapUserSettingTypes[K]>>;
+  values: SubscribableArray<ToNonNullable<PropertyTypeOf<MapUserSettingTypes, K>>>;
 
   /** An array of text representations of setting values. */
   valueText: SubscribableArray<string>;
@@ -159,7 +159,7 @@ export class MapRangeSettingControl<K extends keyof UserSettingValueFilter<MapUs
         viewService={this.props.viewService}
         settingManager={this.props.settingManager}
         settingName={this.props.settingName}
-        values={this.valuesSub as unknown as SubscribableArray<NonNullable<MapUserSettingTypes[K]>>}
+        values={this.valuesSub as unknown as SubscribableArray<ToNonNullable<PropertyTypeOf<MapUserSettingTypes, K>>>}
         outerContainer={this.props.outerContainer}
         registerFunc={this.props.registerFunc}
         buildMenuItem={this.buildMenuItem.bind(this)}

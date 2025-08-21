@@ -1,4 +1,4 @@
-/// <reference types="@microsoft/msfs-types/js/simvar" />
+/// <reference types="@microsoft/msfs-types/js/simvar" preserve="true" />
 
 import { ControlEvents } from '../data/ControlPublisher';
 import { EventBus } from '../data/EventBus';
@@ -203,28 +203,28 @@ export class NavProcSimVarPublisher extends SimVarPublisher<NavProcSimVars> {
    */
   private static createNavRadioDefinitions<Index extends NavRadioIndex>(index: Index): [keyof NavRadioDataEventsIndexed<Index>, SimVarDefinition][] {
     return [
-      [`nav_signal_${index}`, { name: `NAV SIGNAL:${index}`, type: SimVarValueType.Number }],
-      [`nav_obs_${index}`, { name: `NAV OBS:${index}`, type: SimVarValueType.Degree }],
-      [`nav_has_dme_${index}`, { name: `NAV HAS DME:${index}`, type: SimVarValueType.Bool }],
-      [`nav_has_nav_${index}`, { name: `NAV HAS NAV:${index}`, type: SimVarValueType.Bool }],
-      [`nav_cdi_${index}`, { name: `NAV CDI:${index}`, type: SimVarValueType.Number }],
-      [`nav_dme_${index}`, { name: `NAV DME:${index}`, type: SimVarValueType.NM }],
-      [`nav_radial_${index}`, { name: `NAV RADIAL:${index}`, type: SimVarValueType.Degree }],
-      [`nav_radial_error_${index}`, { name: `NAV RADIAL ERROR:${index}`, type: SimVarValueType.Degree }],
-      [`nav_ident_${index}`, { name: `NAV IDENT:${index}`, type: SimVarValueType.String }],
-      [`nav_to_from_${index}`, { name: `NAV TOFROM:${index}`, type: SimVarValueType.Enum }],
-      [`nav_localizer_${index}`, { name: `NAV HAS LOCALIZER:${index}`, type: SimVarValueType.Bool }],
-      [`nav_localizer_crs_${index}`, { name: `NAV LOCALIZER:${index}`, type: SimVarValueType.Number }],
-      [`nav_loc_airport_ident_${index}`, { name: `NAV LOC AIRPORT IDENT:${index}`, type: SimVarValueType.String }],
-      [`nav_loc_runway_designator_${index}`, { name: `NAV LOC RUNWAY DESIGNATOR:${index}`, type: SimVarValueType.Number }],
-      [`nav_loc_runway_number_${index}`, { name: `NAV LOC RUNWAY NUMBER:${index}`, type: SimVarValueType.Number }],
-      [`nav_glideslope_${index}`, { name: `NAV HAS GLIDE SLOPE:${index}`, type: SimVarValueType.Bool }],
-      [`nav_gs_error_${index}`, { name: `NAV GLIDE SLOPE ERROR:${index}`, type: SimVarValueType.Degree }],
-      [`nav_raw_gs_${index}`, { name: `NAV RAW GLIDE SLOPE:${index}`, type: SimVarValueType.Degree }],
-      [`nav_lla_${index}`, { name: `NAV VOR LATLONALT:${index}`, type: SimVarValueType.LLA }],
-      [`nav_dme_lla_${index}`, { name: `NAV DME LATLONALT:${index}`, type: SimVarValueType.LLA }],
-      [`nav_gs_lla_${index}`, { name: `NAV GS LATLONALT:${index}`, type: SimVarValueType.LLA }],
-      [`nav_magvar_${index}`, { name: `NAV MAGVAR:${index}`, type: SimVarValueType.Degree }]
+      [`nav_signal_${index}` as const, { name: `NAV SIGNAL:${index}`, type: SimVarValueType.Number }],
+      [`nav_obs_${index}` as const, { name: `NAV OBS:${index}`, type: SimVarValueType.Degree }],
+      [`nav_has_dme_${index}` as const, { name: `NAV HAS DME:${index}`, type: SimVarValueType.Bool }],
+      [`nav_has_nav_${index}` as const, { name: `NAV HAS NAV:${index}`, type: SimVarValueType.Bool }],
+      [`nav_cdi_${index}` as const, { name: `NAV CDI:${index}`, type: SimVarValueType.Number }],
+      [`nav_dme_${index}` as const, { name: `NAV DME:${index}`, type: SimVarValueType.NM }],
+      [`nav_radial_${index}` as const, { name: `NAV RADIAL:${index}`, type: SimVarValueType.Degree }],
+      [`nav_radial_error_${index}` as const, { name: `NAV RADIAL ERROR:${index}`, type: SimVarValueType.Degree }],
+      [`nav_ident_${index}` as const, { name: `NAV IDENT:${index}`, type: SimVarValueType.String }],
+      [`nav_to_from_${index}` as const, { name: `NAV TOFROM:${index}`, type: SimVarValueType.Enum }],
+      [`nav_localizer_${index}` as const, { name: `NAV HAS LOCALIZER:${index}`, type: SimVarValueType.Bool }],
+      [`nav_localizer_crs_${index}` as const, { name: `NAV LOCALIZER:${index}`, type: SimVarValueType.Number }],
+      [`nav_loc_airport_ident_${index}` as const, { name: `NAV LOC AIRPORT IDENT:${index}`, type: SimVarValueType.String }],
+      [`nav_loc_runway_designator_${index}` as const, { name: `NAV LOC RUNWAY DESIGNATOR:${index}`, type: SimVarValueType.Number }],
+      [`nav_loc_runway_number_${index}` as const, { name: `NAV LOC RUNWAY NUMBER:${index}`, type: SimVarValueType.Number }],
+      [`nav_glideslope_${index}` as const, { name: `NAV HAS GLIDE SLOPE:${index}`, type: SimVarValueType.Bool }],
+      [`nav_gs_error_${index}` as const, { name: `NAV GLIDE SLOPE ERROR:${index}`, type: SimVarValueType.Degree }],
+      [`nav_raw_gs_${index}` as const, { name: `NAV RAW GLIDE SLOPE:${index}`, type: SimVarValueType.Degree }],
+      [`nav_lla_${index}` as const, { name: `NAV VOR LATLONALT:${index}`, type: SimVarValueType.LLA }],
+      [`nav_dme_lla_${index}` as const, { name: `NAV DME LATLONALT:${index}`, type: SimVarValueType.LLA }],
+      [`nav_gs_lla_${index}` as const, { name: `NAV GS LATLONALT:${index}`, type: SimVarValueType.LLA }],
+      [`nav_magvar_${index}` as const, { name: `NAV MAGVAR:${index}`, type: SimVarValueType.Degree }]
     ];
   }
 
@@ -235,9 +235,9 @@ export class NavProcSimVarPublisher extends SimVarPublisher<NavProcSimVars> {
    */
   private static createAdfRadioDefinitions<Index extends AdfRadioIndex>(index: Index): [keyof AdfRadioDataEventsIndexed<Index>, SimVarDefinition][] {
     return [
-      [`adf_signal_${index}`, { name: `ADF SIGNAL:${index}`, type: SimVarValueType.Number }],
-      [`adf_bearing_${index}`, { name: `ADF RADIAL:${index}`, type: SimVarValueType.Degree }],
-      [`adf_lla_${index}`, { name: `ADF LATLONALT:${index}`, type: SimVarValueType.LLA }]
+      [`adf_signal_${index}` as const, { name: `ADF SIGNAL:${index}`, type: SimVarValueType.Number }],
+      [`adf_bearing_${index}` as const, { name: `ADF RADIAL:${index}`, type: SimVarValueType.Degree }],
+      [`adf_lla_${index}` as const, { name: `ADF LATLONALT:${index}`, type: SimVarValueType.LLA }]
     ];
   }
 }

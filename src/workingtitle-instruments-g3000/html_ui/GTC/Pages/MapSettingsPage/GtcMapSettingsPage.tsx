@@ -1,6 +1,7 @@
 import {
-  DisplayComponent, DurationDisplay, DurationDisplayDelim, DurationDisplayFormat, FSComponent, NodeReference, Subject,
-  Subscribable, SubscribableSet, Subscription, UnitType, UserSetting, UserSettingManager, UserSettingValueFilter, VNode
+  DisplayComponent, DurationDisplay, DurationDisplayDelim, DurationDisplayFormat, FSComponent, NodeReference,
+  PropertyTypeOf, Subject, Subscribable, SubscribableSet, Subscription, ToNonNullable, UnitType, UserSetting,
+  UserSettingManager, UserSettingValueFilter, VNode
 } from '@microsoft/msfs-sdk';
 
 import {
@@ -191,7 +192,7 @@ export class GtcMapSettingsPage extends GtcView<GtcMapSettingsPageProps> {
    * @param settingName The name of the setting to which to write.
    * @param value The value to write.
    */
-  private writeToSetting<K extends keyof G3000MapUserSettingTypes & string>(settingName: K, value: NonNullable<G3000MapUserSettingTypes[K]>): void {
+  private writeToSetting<K extends keyof G3000MapUserSettingTypes & string>(settingName: K, value: ToNonNullable<PropertyTypeOf<G3000MapUserSettingTypes, K>>): void {
     for (const manager of this.mapWriteSettingManagers) {
       manager.getSetting(settingName).value = value;
     }

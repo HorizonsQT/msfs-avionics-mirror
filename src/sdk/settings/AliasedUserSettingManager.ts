@@ -1,13 +1,17 @@
-import { BasicConsumer, Consumer, EventBus } from '../data';
+import { BasicConsumer, EventBus } from '../data';
 import { AbstractSubscribable } from '../sub/AbstractSubscribable';
 import { Subscription } from '../sub/Subscription';
+import { PropertyTypeOf, ToNonNullable } from '../utils/types/UtilityTypes';
 import {
-  MappedUserSettingManager, UserSetting, UserSettingDefinition, UserSettingManager, UserSettingMap, UserSettingRecord, UserSettingValue
+  MappedUserSettingManager, OptionalUserSettingFromManager, UserSetting, UserSettingConsumerFromManager,
+  UserSettingDefinition, UserSettingFromManager, UserSettingManager, UserSettingMap, UserSettingRecord,
+  UserSettingValue
 } from './UserSetting';
 
 /**
  * An aliased user setting manager which can dynamically (re)define the settings from which its aliased settings are
  * sourced.
+ * @template T The record describing the settings provided by the manager.
  */
 export class AliasedUserSettingManager<T extends UserSettingRecord> implements UserSettingManager<T> {
   private readonly aliasedSettings: Map<string, AliasedUserSetting<UserSettingValue>>;
@@ -46,28 +50,28 @@ export class AliasedUserSettingManager<T extends UserSettingRecord> implements U
   }
 
   /** @inheritdoc */
-  public tryGetSetting<K extends string>(name: K): UserSetting<NonNullable<T[K]>> | undefined {
-    return this.aliasedSettings.get(name) as UserSetting<NonNullable<T[K]>> | undefined;
+  public tryGetSetting<K extends string>(name: K): OptionalUserSettingFromManager<T, K> {
+    return this.aliasedSettings.get(name) as OptionalUserSettingFromManager<T, K>;
   }
 
   /** @inheritdoc */
-  public getSetting<K extends keyof T & string>(name: K): UserSetting<NonNullable<T[K]>> {
+  public getSetting<K extends keyof T & string>(name: K): UserSettingFromManager<T, K> {
     const setting = this.tryGetSetting(name);
     if (setting === undefined) {
       throw new Error(`AliasedUserSettingManager: Could not find setting with name ${name}`);
     }
 
-    return setting as UserSetting<NonNullable<T[K]>>;
+    return setting as UserSettingFromManager<T, K>;
   }
 
   /** @inheritdoc */
-  public whenSettingChanged<K extends keyof T & string>(name: K): Consumer<NonNullable<T[K]>> {
-    const setting = this.aliasedSettings.get(name) as UserSetting<NonNullable<T[K]>> | undefined;
+  public whenSettingChanged<K extends keyof T & string>(name: K): UserSettingConsumerFromManager<T, K> {
+    const setting = this.aliasedSettings.get(name) as UserSetting<ToNonNullable<PropertyTypeOf<T, K>>> | undefined;
     if (!setting) {
       throw new Error(`AliasedUserSettingManager: Could not find setting with name ${name}`);
     }
 
-    return new BasicConsumer<NonNullable<T[K]>>((handler, paused) => {
+    return new BasicConsumer<ToNonNullable<PropertyTypeOf<T, K>>>((handler, paused) => {
       return setting.sub(handler, true, paused);
     }).whenChanged();
   }

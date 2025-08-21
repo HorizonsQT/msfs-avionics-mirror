@@ -1,7 +1,8 @@
 import { DefaultUserSettingManager, EventBus, UserSettingDefinition, UserSettingManager, UserSettingMap } from '@microsoft/msfs-sdk';
 
 import {
-  MapDeclutterSettingMode, MapOrientationSettingMode, MapTerrainSettingMode, MapTrafficAlertLevelSettingMode, MapUserSettingsUtils, MapUserSettingTypes
+  MapDeclutterSettingMode, MapOrientationSettingMode, MapTerrainSettingMode, MapTrafficAlertLevelSettingMode,
+  MapUserSettingsUtils, MapUserSettingTypes
 } from '@microsoft/msfs-garminsdk';
 
 import { PfdIndex } from '../CommonTypes';
@@ -260,14 +261,14 @@ export class MapUserSettings {
 
     for (const name of MapUserSettingsUtils.SETTING_NAMES) {
       if (name in G3000MapUserSettingUtils.DELEGATE_MAP) {
-        map[name] = `${G3000MapUserSettingUtils.DELEGATE_MAP[name as G3000MapDelegatedUserSettingNames]}_${index}`;
+        map[name] = `${G3000MapUserSettingUtils.DELEGATE_MAP[name as G3000MapDelegatedUserSettingNames]}_${index}` as const;
       } else {
-        map[name] = `${name as keyof G3000MapUserSettingTypes}_${index}`;
+        map[name] = `${name as keyof G3000MapUserSettingTypes}_${index}` as const;
       }
     }
 
     for (const name of G3000MapUserSettingUtils.SPECIFIC_SETTING_NAMES) {
-      map[name] = `${name}_${index}`;
+      map[name] = `${name}_${index}` as const;
     }
 
     return map;
@@ -289,18 +290,18 @@ export class MapUserSettings {
 
     for (const name of displayPaneSettingNames) {
       if (name in G3000MapUserSettingUtils.DELEGATE_MAP) {
-        map[name] = `${G3000MapUserSettingUtils.DELEGATE_MAP[name as G3000MapDelegatedUserSettingNames]}_${displayPaneIndex}`;
+        map[name] = `${G3000MapUserSettingUtils.DELEGATE_MAP[name as G3000MapDelegatedUserSettingNames]}_${displayPaneIndex}` as const;
       } else {
-        map[name] = `${name as Exclude<keyof G3000MapUserSettingTypes, keyof MapSplitUserSettingTypes>}_${displayPaneIndex}`;
+        map[name] = `${name as Exclude<keyof G3000MapUserSettingTypes, keyof MapSplitUserSettingTypes>}_${displayPaneIndex}` as const;
       }
     }
 
     for (const name of G3000MapUserSettingUtils.SPECIFIC_SETTING_NAMES) {
-      map[name] = `${name}_${displayPaneIndex}`;
+      map[name] = `${name}_${displayPaneIndex}` as const;
     }
 
     for (const name of MapUserSettings.SPLIT_SETTING_NAMES) {
-      map[name] = `${name}Pfd_${index}`;
+      map[name] = `${name}Pfd_${index}` as const;
     }
 
     return map;

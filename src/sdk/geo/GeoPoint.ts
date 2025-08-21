@@ -7,11 +7,11 @@ import { GeoMath } from './GeoMath';
  * A representation of a point on Earth's surface.
  */
 export interface GeoPointInterface {
-  /** The latitude of the point. */
-  lat: number;
+  /** The latitude of this point, in degrees. */
+  readonly lat: number;
 
-  /** The longitude of the point. */
-  lon: number;
+  /** The longitude of this point, in degrees. */
+  readonly lon: number;
 
   /**
    * Checks whether this point is valid. This point is valid if and only if both latitude and longitude are finite.
@@ -24,7 +24,7 @@ export interface GeoPointInterface {
    * @param other The point to which to calculate the distance.
    * @returns The great-circle distance to the other point, in great-arc radians.
    */
-  distance(other: LatLonInterface): number;
+  distance(other: Readonly<LatLonInterface>): number;
   /**
    * Calculates the great-circle distance between this point and another point.
    * @param lat The latitude of the point to which to calculate the distance.
@@ -38,7 +38,7 @@ export interface GeoPointInterface {
    * @param other The other point.
    * @returns The rhumb-line distance to the other point, in great-arc radians.
    */
-  distanceRhumb(other: LatLonInterface): number;
+  distanceRhumb(other: Readonly<LatLonInterface>): number;
   /**
    * Calculates the distance along the rhumb line connecting this point with another point.
    * @param lat The latitude of the other point, in degrees.
@@ -55,7 +55,7 @@ export interface GeoPointInterface {
    * coincident or antipodal. If this point is one of the poles, then the bearing will be expressed relative to the
    * direction in which the meridian defined by this point's longitude crosses the pole rather than true north.
    */
-  bearingTo(other: LatLonInterface): number;
+  bearingTo(other: Readonly<LatLonInterface>): number;
   /**
    * Calculates the initial true bearing (forward azimuth) from this point to another point along the great circle
    * connecting the two.
@@ -75,7 +75,7 @@ export interface GeoPointInterface {
    * coincident or antipodal. If this point is one of the poles, then the bearing will be expressed relative to the
    * direction in which the meridian defined by this point's longitude crosses the pole rather than true north.
    */
-  bearingFrom(other: LatLonInterface): number;
+  bearingFrom(other: Readonly<LatLonInterface>): number;
   /**
    * Calculates the final true bearing from another point to this point (i.e. the back azimuth from this point to the
    * other point) along the great circle connecting the two.
@@ -92,7 +92,7 @@ export interface GeoPointInterface {
    * @param other The other point.
    * @returns The constant true bearing to the other point, in degrees.
    */
-  bearingRhumb(other: LatLonInterface): number;
+  bearingRhumb(other: Readonly<LatLonInterface>): number;
   /**
    * Calculates the constant true bearing from this point to another point along the rhumb line connecting the two.
    * @param lat The latitude of the other point, in degrees.
@@ -171,7 +171,7 @@ export interface GeoPointInterface {
 /**
  * A read-only wrapper for a GeoPoint.
  */
-export class GeoPointReadOnly implements GeoPointInterface, LatLonInterface {
+export class GeoPointReadOnly implements GeoPointInterface, Readonly<LatLonInterface> {
   /**
    * Constructor.
    * @param source - the source of the new read-only point.
@@ -201,11 +201,11 @@ export class GeoPointReadOnly implements GeoPointInterface, LatLonInterface {
   }
 
   /** @inheritdoc */
-  public distance(other: LatLonInterface): number;
+  public distance(other: Readonly<LatLonInterface>): number;
   /** @inheritdoc */
   public distance(lat: number, lon: number): number
   // eslint-disable-next-line jsdoc/require-jsdoc
-  public distance(arg1: LatLonInterface | number, arg2?: number): number {
+  public distance(arg1: Readonly<LatLonInterface> | number, arg2?: number): number {
     if (typeof arg1 === 'number') {
       return this.source.distance(arg1, arg2 as number);
     } else {
@@ -214,11 +214,11 @@ export class GeoPointReadOnly implements GeoPointInterface, LatLonInterface {
   }
 
   /** @inheritdoc */
-  public distanceRhumb(other: LatLonInterface): number;
+  public distanceRhumb(other: Readonly<LatLonInterface>): number;
   /** @inheritdoc */
   public distanceRhumb(lat: number, lon: number): number
   // eslint-disable-next-line jsdoc/require-jsdoc
-  public distanceRhumb(arg1: LatLonInterface | number, arg2?: number): number {
+  public distanceRhumb(arg1: Readonly<LatLonInterface> | number, arg2?: number): number {
     if (typeof arg1 === 'number') {
       return this.source.distanceRhumb(arg1, arg2 as number);
     } else {
@@ -227,11 +227,11 @@ export class GeoPointReadOnly implements GeoPointInterface, LatLonInterface {
   }
 
   /** @inheritdoc */
-  public bearingTo(other: LatLonInterface): number;
+  public bearingTo(other: Readonly<LatLonInterface>): number;
   /** @inheritdoc */
   public bearingTo(lat: number, lon: number): number
   // eslint-disable-next-line jsdoc/require-jsdoc
-  public bearingTo(arg1: LatLonInterface | number, arg2?: number): number {
+  public bearingTo(arg1: Readonly<LatLonInterface> | number, arg2?: number): number {
     if (typeof arg1 === 'number') {
       return this.source.bearingTo(arg1, arg2 as number);
     } else {
@@ -240,11 +240,11 @@ export class GeoPointReadOnly implements GeoPointInterface, LatLonInterface {
   }
 
   /** @inheritdoc */
-  public bearingFrom(other: LatLonInterface): number;
+  public bearingFrom(other: Readonly<LatLonInterface>): number;
   /** @inheritdoc */
   public bearingFrom(lat: number, lon: number): number
   // eslint-disable-next-line jsdoc/require-jsdoc
-  public bearingFrom(arg1: LatLonInterface | number, arg2?: number): number {
+  public bearingFrom(arg1: Readonly<LatLonInterface> | number, arg2?: number): number {
     if (typeof arg1 === 'number') {
       return this.source.bearingFrom(arg1, arg2 as number);
     } else {
@@ -253,11 +253,11 @@ export class GeoPointReadOnly implements GeoPointInterface, LatLonInterface {
   }
 
   /** @inheritdoc */
-  public bearingRhumb(other: LatLonInterface): number;
+  public bearingRhumb(other: Readonly<LatLonInterface>): number;
   /** @inheritdoc */
   public bearingRhumb(lat: number, lon: number): number
   // eslint-disable-next-line jsdoc/require-jsdoc
-  public bearingRhumb(arg1: LatLonInterface | number, arg2?: number): number {
+  public bearingRhumb(arg1: Readonly<LatLonInterface> | number, arg2?: number): number {
     if (typeof arg1 === 'number') {
       return this.source.bearingRhumb(arg1, arg2 as number);
     } else {
@@ -322,11 +322,11 @@ export class GeoPointReadOnly implements GeoPointInterface, LatLonInterface {
   }
 
   /** @inheritdoc */
-  public equals(other: LatLonInterface, tolerance?: number): boolean;
+  public equals(other: Readonly<LatLonInterface>, tolerance?: number): boolean;
   /** @inheritdoc */
   public equals(lat: number, lon: number, tolerance?: number): boolean;
   // eslint-disable-next-line jsdoc/require-jsdoc
-  public equals(arg1: LatLonInterface | number, arg2?: number, arg3?: number): boolean {
+  public equals(arg1: Readonly<LatLonInterface> | number, arg2?: number, arg3?: number): boolean {
     if (typeof arg1 === 'number') {
       return this.source.equals(arg1, arg2 as number, arg3);
     } else {
@@ -343,7 +343,7 @@ export class GeoPointReadOnly implements GeoPointInterface, LatLonInterface {
 /**
  * A point on Earth's surface. This class uses a spherical Earth model.
  */
-export class GeoPoint implements GeoPointInterface, LatLonInterface {
+export class GeoPoint implements GeoPointInterface, Readonly<LatLonInterface> {
   /**
    * The default equality tolerance, defined as the maximum allowed distance between two equal points in great-arc
    * radians.
@@ -353,8 +353,12 @@ export class GeoPoint implements GeoPointInterface, LatLonInterface {
   private static readonly tempVec3 = new Float64Array(3);
   private static readonly tempGeoPoint = new GeoPoint(0, 0);
 
-  private _lat = 0;
-  private _lon = 0;
+  /** The latitude of this point, in degrees. */
+  public readonly lat = 0;
+  /** The longitude of this point, in degrees. */
+  public readonly lon = 0;
+
+  /** A readonly version of this point. */
   public readonly readonly: GeoPointReadOnly;
 
   /**
@@ -368,29 +372,13 @@ export class GeoPoint implements GeoPointInterface, LatLonInterface {
   }
 
   /**
-   * The latitude of this point, in degrees.
-   * @returns the latitude of this point.
-   */
-  public get lat(): number {
-    return this._lat;
-  }
-
-  /**
-   * The longitude of this point, in degrees.
-   * @returns the longitude of this point.
-   */
-  public get lon(): number {
-    return this._lon;
-  }
-
-  /**
    * Converts an argument list consisting of either a LatLonInterface or lat/lon coordinates into an equivalent
    * LatLonInterface.
    * @param arg1 Argument 1.
    * @param arg2 Argument 2.
    * @returns A LatLonInterface.
    */
-  private static asLatLonInterface(arg1: LatLonInterface | number, arg2: any): LatLonInterface {
+  private static asLatLonInterface(arg1: Readonly<LatLonInterface> | number, arg2: any): Readonly<LatLonInterface> {
     if (typeof arg1 === 'number') {
       return GeoPoint.tempGeoPoint.set(arg1, arg2 as number);
     } else {
@@ -415,7 +403,7 @@ export class GeoPoint implements GeoPointInterface, LatLonInterface {
 
   /** @inheritDoc */
   public isValid(): boolean {
-    return isFinite(this._lat) && isFinite(this._lon);
+    return isFinite(this.lat) && isFinite(this.lon);
   }
 
   /**
@@ -423,7 +411,7 @@ export class GeoPoint implements GeoPointInterface, LatLonInterface {
    * @param other The point from which to take the new latitude/longitude values.
    * @returns This point, after it has been changed.
    */
-  public set(other: LatLonInterface): this;
+  public set(other: Readonly<LatLonInterface>): this;
   /**
    * Sets this point's latitude/longitude values.
    * @param lat The new latitude, in degrees.
@@ -432,7 +420,7 @@ export class GeoPoint implements GeoPointInterface, LatLonInterface {
    */
   public set(lat: number, lon: number): this;
   // eslint-disable-next-line jsdoc/require-jsdoc
-  public set(arg1: LatLonInterface | number, arg2?: number): this {
+  public set(arg1: Readonly<LatLonInterface> | number, arg2?: number): this {
     let lat, lon;
     if (typeof arg1 === 'number') {
       lat = arg1;
@@ -450,8 +438,8 @@ export class GeoPoint implements GeoPointInterface, LatLonInterface {
       lon += 180;
       lon = MathUtils.normalizeAngleDeg(lon, -180);
     }
-    this._lat = lat;
-    this._lon = lon;
+    (this.lat as number) = lat;
+    (this.lon as number) = lon;
     return this;
   }
 
@@ -483,51 +471,51 @@ export class GeoPoint implements GeoPointInterface, LatLonInterface {
   }
 
   /** @inheritdoc */
-  public distance(other: LatLonInterface): number;
+  public distance(other: Readonly<LatLonInterface>): number;
   /** @inheritdoc */
   public distance(lat: number, lon: number): number;
   // eslint-disable-next-line jsdoc/require-jsdoc
-  public distance(arg1: LatLonInterface | number, arg2?: number): number {
+  public distance(arg1: Readonly<LatLonInterface> | number, arg2?: number): number {
     const other = GeoPoint.asLatLonInterface(arg1, arg2);
     return GeoPoint.distance(this.lat, this.lon, other.lat, other.lon);
   }
 
   /** @inheritdoc */
-  public distanceRhumb(other: LatLonInterface): number;
+  public distanceRhumb(other: Readonly<LatLonInterface>): number;
   /** @inheritdoc */
   public distanceRhumb(lat: number, lon: number): number;
   // eslint-disable-next-line jsdoc/require-jsdoc
-  public distanceRhumb(arg1: LatLonInterface | number, arg2?: number): number {
+  public distanceRhumb(arg1: Readonly<LatLonInterface> | number, arg2?: number): number {
     const other = GeoPoint.asLatLonInterface(arg1, arg2);
     return GeoPoint.distanceRhumb(this.lat, this.lon, other.lat, other.lon);
   }
 
   /** @inheritdoc */
-  public bearingTo(other: LatLonInterface): number;
+  public bearingTo(other: Readonly<LatLonInterface>): number;
   /** @inheritdoc */
   public bearingTo(lat: number, lon: number): number;
   // eslint-disable-next-line jsdoc/require-jsdoc
-  public bearingTo(arg1: LatLonInterface | number, arg2?: number): number {
+  public bearingTo(arg1: Readonly<LatLonInterface> | number, arg2?: number): number {
     const other = GeoPoint.asLatLonInterface(arg1, arg2);
     return GeoPoint.initialBearing(this.lat, this.lon, other.lat, other.lon);
   }
 
   /** @inheritdoc */
-  public bearingFrom(other: LatLonInterface): number;
+  public bearingFrom(other: Readonly<LatLonInterface>): number;
   /** @inheritdoc */
   public bearingFrom(lat: number, lon: number): number;
   // eslint-disable-next-line jsdoc/require-jsdoc
-  public bearingFrom(arg1: LatLonInterface | number, arg2?: number): number {
+  public bearingFrom(arg1: Readonly<LatLonInterface> | number, arg2?: number): number {
     const other = GeoPoint.asLatLonInterface(arg1, arg2);
     return GeoPoint.finalBearing(other.lat, other.lon, this.lat, this.lon);
   }
 
   /** @inheritdoc */
-  public bearingRhumb(other: LatLonInterface): number;
+  public bearingRhumb(other: Readonly<LatLonInterface>): number;
   /** @inheritdoc */
   public bearingRhumb(lat: number, lon: number): number;
   // eslint-disable-next-line jsdoc/require-jsdoc
-  public bearingRhumb(arg1: LatLonInterface | number, arg2?: number): number {
+  public bearingRhumb(arg1: Readonly<LatLonInterface> | number, arg2?: number): number {
     const other = GeoPoint.asLatLonInterface(arg1, arg2);
     return GeoPoint.bearingRhumb(this.lat, this.lon, other.lat, other.lon);
   }
@@ -616,7 +604,7 @@ export class GeoPoint implements GeoPointInterface, LatLonInterface {
    * @returns The antipode of this point.
    */
   public antipode(out?: GeoPoint): GeoPoint {
-    return (out ?? this).set(-this._lat, this._lon + 180);
+    return (out ?? this).set(-this.lat, this.lon + 180);
   }
 
   /** @inheritdoc */
@@ -625,14 +613,14 @@ export class GeoPoint implements GeoPointInterface, LatLonInterface {
   }
 
   /** @inheritdoc */
-  public equals(other: LatLonInterface, tolerance?: number): boolean;
+  public equals(other: Readonly<LatLonInterface>, tolerance?: number): boolean;
   /** @inheritdoc */
   public equals(lat: number, lon: number, tolerance?: number): boolean;
   // eslint-disable-next-line jsdoc/require-jsdoc
-  public equals(arg1: LatLonInterface | number, arg2?: number, arg3?: number): boolean {
+  public equals(arg1: Readonly<LatLonInterface> | number, arg2?: number, arg3?: number): boolean {
     const other = GeoPoint.asLatLonInterface(arg1, arg2);
     if (other) {
-      if (isNaN(this._lat) && isNaN(this._lon) && isNaN(other.lat) && isNaN(other.lon)) {
+      if (isNaN(this.lat) && isNaN(this.lon) && isNaN(other.lat) && isNaN(other.lon)) {
         return true;
       }
 
@@ -657,7 +645,7 @@ export class GeoPoint implements GeoPointInterface, LatLonInterface {
    * @param out The vector array to which to write the result.
    * @returns the cartesian representation of the point.
    */
-  public static sphericalToCartesian(point: LatLonInterface, out: Float64Array): Float64Array;
+  public static sphericalToCartesian(point: Readonly<LatLonInterface>, out: Float64Array): Float64Array;
   /**
    * Calculates the cartesian (x, y, z) representation of a point, in units of great-arc radians. By convention,
    * in the cartesian coordinate system the origin is at the center of the Earth, the positive x-axis passes through
@@ -669,7 +657,7 @@ export class GeoPoint implements GeoPointInterface, LatLonInterface {
    */
   public static sphericalToCartesian(lat: number, lon: number, out: Float64Array): Float64Array;
   // eslint-disable-next-line jsdoc/require-jsdoc
-  public static sphericalToCartesian(arg1: LatLonInterface | number, arg2: number | Float64Array, arg3?: Float64Array): Float64Array {
+  public static sphericalToCartesian(arg1: Readonly<LatLonInterface> | number, arg2: number | Float64Array, arg3?: Float64Array): Float64Array {
     const point = GeoPoint.asLatLonInterface(arg1, arg2);
     const theta = (90 - point.lat) * Avionics.Utils.DEG2RAD;
     const phi = point.lon * Avionics.Utils.DEG2RAD;
@@ -695,7 +683,7 @@ export class GeoPoint implements GeoPointInterface, LatLonInterface {
    * points in great-arc radians. Defaults to `GeoPoint.EQUALITY_TOLERANCE`.
    * @returns Whether the two points are equal.
    */
-  public static equals(point1: LatLonInterface, point2: LatLonInterface, tolerance?: number): boolean;
+  public static equals(point1: Readonly<LatLonInterface>, point2: Readonly<LatLonInterface>, tolerance?: number): boolean;
   /**
    * Checks whether two points are equal.
    * @param point1 The first point, in cartesian form.
@@ -707,8 +695,8 @@ export class GeoPoint implements GeoPointInterface, LatLonInterface {
   public static equals(point1: ReadonlyFloat64Array, point2: ReadonlyFloat64Array, tolerance?: number): boolean;
   // eslint-disable-next-line jsdoc/require-jsdoc
   public static equals(
-    arg1: LatLonInterface | ReadonlyFloat64Array | number,
-    arg2: LatLonInterface | ReadonlyFloat64Array | number,
+    arg1: Readonly<LatLonInterface> | ReadonlyFloat64Array | number,
+    arg2: Readonly<LatLonInterface> | ReadonlyFloat64Array | number,
     arg3?: number,
     arg4?: number,
     arg5?: number
@@ -718,7 +706,7 @@ export class GeoPoint implements GeoPointInterface, LatLonInterface {
     } else if (typeof arg1 === 'number') {
       return GeoPoint.distance(arg1, arg2 as number, arg3 as number, arg4 as number) <= (arg5 ?? GeoPoint.EQUALITY_TOLERANCE);
     } else {
-      return GeoPoint.distance(arg1 as LatLonInterface, arg2 as LatLonInterface) <= (arg3 ?? GeoPoint.EQUALITY_TOLERANCE);
+      return GeoPoint.distance(arg1 as Readonly<LatLonInterface>, arg2 as Readonly<LatLonInterface>) <= (arg3 ?? GeoPoint.EQUALITY_TOLERANCE);
     }
   }
 
@@ -737,7 +725,7 @@ export class GeoPoint implements GeoPointInterface, LatLonInterface {
    * @param point2 The second point.
    * @returns The great-circle distance between the two points, in great-arc radians.
    */
-  public static distance(point1: LatLonInterface, point2: LatLonInterface): number;
+  public static distance(point1: Readonly<LatLonInterface>, point2: Readonly<LatLonInterface>): number;
   /**
    * Calculates the great-circle distance between two points.
    * @param point1 The first point, in cartesian form.
@@ -746,7 +734,12 @@ export class GeoPoint implements GeoPointInterface, LatLonInterface {
    */
   public static distance(point1: ReadonlyFloat64Array, point2: ReadonlyFloat64Array): number;
   // eslint-disable-next-line jsdoc/require-jsdoc
-  public static distance(arg1: LatLonInterface | ReadonlyFloat64Array | number, arg2: LatLonInterface | ReadonlyFloat64Array | number, arg3?: number, arg4?: number): number {
+  public static distance(
+    arg1: Readonly<LatLonInterface> | ReadonlyFloat64Array | number,
+    arg2: Readonly<LatLonInterface> | ReadonlyFloat64Array | number,
+    arg3?: number,
+    arg4?: number
+  ): number {
     if (arg1 instanceof Float64Array) {
       return Vec3Math.unitAngle(arg1, arg2 as Float64Array);
     } else {
@@ -758,10 +751,10 @@ export class GeoPoint implements GeoPointInterface, LatLonInterface {
         lat2 = arg3 as number;
         lon2 = arg4 as number;
       } else {
-        lat1 = (arg1 as LatLonInterface).lat;
-        lon1 = (arg1 as LatLonInterface).lon;
-        lat2 = (arg2 as LatLonInterface).lat;
-        lon2 = (arg2 as LatLonInterface).lon;
+        lat1 = (arg1 as Readonly<LatLonInterface>).lat;
+        lon1 = (arg1 as Readonly<LatLonInterface>).lon;
+        lat2 = (arg2 as Readonly<LatLonInterface>).lat;
+        lon2 = (arg2 as Readonly<LatLonInterface>).lon;
       }
 
       lat1 *= Avionics.Utils.DEG2RAD;
@@ -792,7 +785,7 @@ export class GeoPoint implements GeoPointInterface, LatLonInterface {
    * @param point2 The second point.
    * @returns The distance along the rhumb line connecting the two points, in great-arc radians.
    */
-  public static distanceRhumb(point1: LatLonInterface, point2: LatLonInterface): number;
+  public static distanceRhumb(point1: Readonly<LatLonInterface>, point2: Readonly<LatLonInterface>): number;
   /**
    * Calculates the distance along the rhumb line connecting this point with another point.
    * @param point1 The first point, in cartesian form.
@@ -801,7 +794,12 @@ export class GeoPoint implements GeoPointInterface, LatLonInterface {
    */
   public static distanceRhumb(point1: ReadonlyFloat64Array, point2: ReadonlyFloat64Array): number;
   // eslint-disable-next-line jsdoc/require-jsdoc
-  public static distanceRhumb(arg1: LatLonInterface | ReadonlyFloat64Array | number, arg2: LatLonInterface | ReadonlyFloat64Array | number, arg3?: number, arg4?: number): number {
+  public static distanceRhumb(
+    arg1: Readonly<LatLonInterface> | ReadonlyFloat64Array | number,
+    arg2: Readonly<LatLonInterface> | ReadonlyFloat64Array | number,
+    arg3?: number,
+    arg4?: number
+  ): number {
     let lat1, lon1, lat2, lon2;
 
     if (typeof arg1 === 'number') {
@@ -818,10 +816,10 @@ export class GeoPoint implements GeoPointInterface, LatLonInterface {
       lat2 = point2.lat;
       lon2 = point2.lon;
     } else {
-      lat1 = (arg1 as LatLonInterface).lat;
-      lon1 = (arg1 as LatLonInterface).lon;
-      lat2 = (arg2 as LatLonInterface).lat;
-      lon2 = (arg2 as LatLonInterface).lon;
+      lat1 = (arg1 as Readonly<LatLonInterface>).lat;
+      lon1 = (arg1 as Readonly<LatLonInterface>).lon;
+      lat2 = (arg2 as Readonly<LatLonInterface>).lat;
+      lon2 = (arg2 as Readonly<LatLonInterface>).lon;
     }
 
     const deltaLat = lat2 - lat1;

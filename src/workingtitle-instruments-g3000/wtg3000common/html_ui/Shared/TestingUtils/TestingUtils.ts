@@ -6,7 +6,10 @@ import {
 } from '@microsoft/msfs-sdk';
 import { Fms } from '@microsoft/msfs-garminsdk';
 
-/** A set of functions for modifying a flight plan in the simplest way possible. */
+/**
+ * A set of functions for modifying a flight plan in the simplest way possible.
+ * @deprecated Do not use this class. It will be removed in a future update.
+ */
 export class TestingUtils {
 
   /**

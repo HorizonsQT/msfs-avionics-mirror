@@ -46,7 +46,7 @@ export class Epic2FacilityWaypointCache implements FacilityWaypointCache {
   private addToCache(key: string, waypoint: FacilityWaypoint): void {
     this.cache.set(key, waypoint);
     if (this.cache.size > this.size) {
-      this.cache.delete(this.cache.keys().next().value);
+      this.cache.delete(this.cache.keys().next().value!);
     }
   }
 

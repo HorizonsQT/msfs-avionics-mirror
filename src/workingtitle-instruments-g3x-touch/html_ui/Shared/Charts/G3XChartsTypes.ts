@@ -2,7 +2,6 @@ import { ChartMetadata, ChartPage, IcaoValue } from '@microsoft/msfs-sdk';
 
 /**
  * Data describing an electronic chart page.
- * @experimental
  */
 export interface G3XChartsPageData {
   /** The metadata associated with the page's parent chart. */
@@ -20,7 +19,6 @@ export interface G3XChartsPageData {
 
 /**
  * Data describing the electronic charts available for a selected airport.
- * @experimental
  */
 export interface G3XChartsAirportSelectionData {
   /** The ICAO of the selected airport. */
@@ -50,7 +48,6 @@ export interface G3XChartsAirportSelectionData {
 
 /**
  * Data describing a selected electronic charts page.
- * @experimental
  */
 export interface G3XChartsPageSelectionData {
   /** The ID of the charts source that provided the page. */

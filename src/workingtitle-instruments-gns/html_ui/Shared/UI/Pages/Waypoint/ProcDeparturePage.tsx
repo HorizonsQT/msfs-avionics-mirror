@@ -473,13 +473,14 @@ export class ProcDeparturePage extends WaypointPage<ProcDeparturePageProps> {
             oneWayRunway = RunwayUtils.matchOneWayRunway(airport, runwayTransition.runwayNumber, runwayTransition.runwayDesignation);
           }
         }
-
       }
 
-      this.props.fms.insertDeparture(airport, this.selectedDeparture, this.selectedRunway ?? -1, this.selectedTransition ?? -1, oneWayRunway);
+      const success = await this.props.fms.loadDeparture(airport, this.selectedDeparture, this.selectedRunway ?? -1, this.selectedTransition ?? -1, oneWayRunway);
 
-      ViewService.back();
-      ViewService.open('FPL', false, 0);
+      if (success) {
+        ViewService.back();
+        ViewService.open('FPL', false, 0);
+      }
     }
   }
 

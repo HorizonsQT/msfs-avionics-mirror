@@ -1,3 +1,5 @@
+import { ReadonlyLifecycle } from './Lifecycle';
+
 /**
  * A subscription to a source of notifications.
  *
@@ -46,4 +48,10 @@ export interface Subscription {
    * source and will throw an error when attempting to pause or resume it.
    */
   destroy(): void;
+
+  /**
+   * Attaches a lifecycle to the subscription.
+   * @param lifecycle The lifecycle to attach.
+   */
+  withLifecycle(lifecycle: ReadonlyLifecycle): this;
 }

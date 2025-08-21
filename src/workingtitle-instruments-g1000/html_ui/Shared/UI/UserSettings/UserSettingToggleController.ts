@@ -1,4 +1,4 @@
-import { Subject, UserSettingManager, UserSettingRecord } from '@microsoft/msfs-sdk';
+import { PropertyTypeOf, Subject, ToNonNullable, UserSettingManager, UserSettingRecord } from '@microsoft/msfs-sdk';
 
 import { UserSettingController } from './UserSettingController';
 
@@ -27,13 +27,13 @@ export class UserSettingToggleController<T extends UserSettingRecord, K extends 
   constructor(
     public readonly settingManager: UserSettingManager<T>,
     public readonly settingName: K,
-    public readonly values: NonNullable<T[K]>[]
+    public readonly values: ToNonNullable<PropertyTypeOf<T, K>>[]
   ) {
     super(settingManager, settingName);
   }
 
   // eslint-disable-next-line jsdoc/require-jsdoc
-  protected onSettingChanged(value: NonNullable<T[K]>): void {
+  protected onSettingChanged(value: ToNonNullable<PropertyTypeOf<T, K>>): void {
     this.selectedIndexSub.set(this.values.indexOf(value));
   }
 

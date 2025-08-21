@@ -3,7 +3,8 @@ import {
   Subscription, UserSetting, VerticalData
 } from '@microsoft/msfs-sdk';
 
-import { WT21FmsUtils } from '../Systems/FMS/WT21FmsUtils';
+import { WTLineFmsUtils } from '@microsoft/msfs-wtlinesdk';
+
 import { WT21_PFD_MFD_Colors } from '../WT21_Colors';
 import { WT21MapWaypointIconPriority } from './MapSystemCommon';
 import { MapWaypointsDisplay } from './MapUserSettings';
@@ -92,16 +93,16 @@ export class FlightPathWaypointLabel extends MapCullableLocationTextLabel {
     if (showAlt) {
       switch (constraint.altDesc) {
         case AltitudeRestrictionType.At:
-          altText = WT21FmsUtils.parseAltitudeForDisplay(constraint.altitude1, transitionAltitude);
+          altText = WTLineFmsUtils.parseAltitudeForDisplay(constraint.altitude1, transitionAltitude);
           break;
         case AltitudeRestrictionType.AtOrAbove:
-          altText = `${WT21FmsUtils.parseAltitudeForDisplay(constraint.altitude1, transitionAltitude)}A`;
+          altText = `${WTLineFmsUtils.parseAltitudeForDisplay(constraint.altitude1, transitionAltitude)}A`;
           break;
         case AltitudeRestrictionType.AtOrBelow:
-          altText = `${WT21FmsUtils.parseAltitudeForDisplay(constraint.altitude1, transitionAltitude)}B`;
+          altText = `${WTLineFmsUtils.parseAltitudeForDisplay(constraint.altitude1, transitionAltitude)}B`;
           break;
         case AltitudeRestrictionType.Between:
-          altText = `${WT21FmsUtils.parseAltitudeForDisplay(constraint.altitude2, transitionAltitude)}A${WT21FmsUtils.parseAltitudeForDisplay(constraint.altitude1, transitionAltitude)}B`;
+          altText = `${WTLineFmsUtils.parseAltitudeForDisplay(constraint.altitude2, transitionAltitude)}A${WTLineFmsUtils.parseAltitudeForDisplay(constraint.altitude1, transitionAltitude)}B`;
           break;
         default:
           return altText;

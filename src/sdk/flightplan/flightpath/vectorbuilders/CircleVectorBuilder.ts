@@ -1,4 +1,4 @@
-import { GeoCircle } from '../../../geo/GeoCircle';
+import { GeoCircle, ReadonlyGeoCircle } from '../../../geo/GeoCircle';
 import { LatLonInterface } from '../../../geo/GeoInterfaces';
 import { GeoPoint } from '../../../geo/GeoPoint';
 import { MathUtils } from '../../../math/MathUtils';
@@ -33,7 +33,7 @@ export class CircleVectorBuilder {
   public build(
     vectors: FlightPathVector[],
     index: number,
-    circle: GeoCircle,
+    circle: ReadonlyGeoCircle,
     start: ReadonlyFloat64Array | LatLonInterface,
     end: ReadonlyFloat64Array | LatLonInterface,
     flags = 0,

@@ -1,4 +1,3 @@
-export * from './DefaultsUserSettings';
 export * from './FgpUserSettings';
 export * from './FmcUserSettings';
 export * from './MFDUserSettings';

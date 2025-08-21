@@ -1,6 +1,6 @@
 import { DefaultUserSettingManager, EventBus } from '@microsoft/msfs-sdk';
 
-import { WT21NavSourceNames } from './WT21NavIndicators';
+import { WTLineNavSourceNames } from '@microsoft/msfs-wtlinesdk';
 
 const navigationSettings = [
   {
@@ -13,11 +13,11 @@ const navigationSettings = [
   },
   {
     name: 'bearingPointer1Source',
-    defaultValue: false as WT21NavSourceNames[number] | false,
+    defaultValue: false as WTLineNavSourceNames[number] | false,
   },
   {
     name: 'bearingPointer2Source',
-    defaultValue: false as WT21NavSourceNames[number] | false,
+    defaultValue: false as WTLineNavSourceNames[number] | false,
   },
 ] as const;
 

@@ -1,4 +1,4 @@
-/// <reference types="@microsoft/msfs-types/coherent/facilities" />
+/// <reference types="@microsoft/msfs-types/coherent/facilities" preserve="true" />
 
 export * from './Epic2AvionicsPlugin';
 export * from './Epic2FsInstrument';

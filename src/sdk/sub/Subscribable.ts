@@ -58,8 +58,10 @@ export interface Subscribable<T> extends Accessible<T> {
    * @param map The function to use to transform inputs.
    * @param paused Whether the new subscription should be initialized as paused. Defaults to `false`.
    * @returns The new subscription.
+   * @template OI The input type of the mutable subscribable to which to pipe.
+   * @template OV The value type of the mutable subscribable to which to pipe.
    */
-  pipe<M>(to: MutableSubscribable<any, M>, map: (fromVal: T, toVal: M) => M, paused?: boolean): Subscription;
+  pipe<OI, OV = unknown>(to: MutableSubscribable<OV, OI>, map: (fromVal: T, toVal: OV) => OI, paused?: boolean): Subscription;
 }
 
 /**
