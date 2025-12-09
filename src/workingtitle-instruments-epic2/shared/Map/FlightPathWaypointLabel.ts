@@ -31,7 +31,8 @@ export class FlightPathWaypointLabel extends MapCullableLocationTextLabel {
   private phase = VerticalFlightPhase.Climb;
   private transitionAltitude = -1;
   private transitionLevel = -1;
-  private altitudeText: string[] = [];
+  private altitude1Text?: string;
+  private altitude2Text?: string;
 
   private isDisplayed = true;
 
@@ -172,26 +173,29 @@ export class FlightPathWaypointLabel extends MapCullableLocationTextLabel {
     }
 
     if (needsUpdate) {
-      this.altitudeText = this.getAltitudeConstraints();
+      this.updateAltitudeTexts();
     }
   }
 
   /**
-   * Formats an altitude constraints for display on a waypoint label.
-   * @returns List of formatted altitude constraints.
+   * Formats the altitude constraints for display on a waypoint label.
    */
-  private getAltitudeConstraints(): string[] {
+  private updateAltitudeTexts(): void {
     const transAltMetres = UnitType.METER.convertFrom(this.phase === VerticalFlightPhase.Climb ? this.transitionAltitude : this.transitionLevel, UnitType.FOOT);
 
     switch (this.altDesc) {
       case AltitudeRestrictionType.Between:
-        return this.phase === VerticalFlightPhase.Climb
-          ? [this.formatAltitude(this.altitude2, transAltMetres), this.formatAltitude(this.altitude1, transAltMetres)]
-          : [this.formatAltitude(this.altitude1, transAltMetres), this.formatAltitude(this.altitude2, transAltMetres)];
+        this.altitude1Text = this.formatAltitude(this.altitude1, transAltMetres);
+        this.altitude2Text = this.formatAltitude(this.altitude2, transAltMetres);
+        break;
       case AltitudeRestrictionType.Unused:
-        return [];
+        this.altitude1Text = undefined;
+        this.altitude2Text = undefined;
+        break;
       default:
-        return [this.formatAltitude(this.altitude1, transAltMetres)];
+        this.altitude1Text = this.formatAltitude(this.altitude1, transAltMetres);
+        this.altitude2Text = undefined;
+        break;
     }
   }
 
@@ -222,21 +226,21 @@ export class FlightPathWaypointLabel extends MapCullableLocationTextLabel {
 
     const [offsetX] = this.offset.get();
 
-    if (this.altDesc === AltitudeRestrictionType.Between) {
+    if (this.altDesc === AltitudeRestrictionType.Between && this.altitude1Text && this.altitude2Text) {
       // There are two constraints to be rendered in two lines. Take the length of the longer one.
-      const maxTextLength = Math.max(this.altitudeText[0].length, this.altitudeText[1].length);
+      const maxTextLength = Math.max(this.altitude1Text.length, this.altitude2Text.length);
       // Increase offset because we render two lines of text
       const x = centerX - 3 * offsetX;
       // Keep text lines tight vertically
       const lineOffset = MULTI_LINE_COEFF * this.lineHeight;
-      this.renderText(context, x, centerY - lineOffset, this.altitudeText[1], 'right');
-      this.renderText(context, x, centerY + lineOffset, this.altitudeText[0], 'right');
+      this.renderText(context, x, centerY - lineOffset, this.altitude1Text, 'right');
+      this.renderText(context, x, centerY + lineOffset, this.altitude2Text, 'right');
       this.drawConstraintBar(context, x, centerY, maxTextLength * FlightPathWaypointLabel.CHAR_WIDTH);
-    } else {
+    } else if (this.altitude1Text) {
       // There is only one altitude constraint text to be rendered.
       const x = centerX - 2 * offsetX;
-      this.renderText(context, x, centerY, this.altitudeText[0], 'right');
-      this.drawConstraintBar(context, x, centerY, this.altitudeText[0].length * FlightPathWaypointLabel.CHAR_WIDTH);
+      this.renderText(context, x, centerY, this.altitude1Text, 'right');
+      this.drawConstraintBar(context, x, centerY, this.altitude1Text.length * FlightPathWaypointLabel.CHAR_WIDTH);
     }
   }
 

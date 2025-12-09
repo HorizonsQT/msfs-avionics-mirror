@@ -6,6 +6,7 @@ export * from './Accessible';
 export * from './AccessibleUtils';
 export * from './ArraySubject';
 export * from './BasicLifecycle';
+export * from './CachedValue';
 export * from './CombinedSubject';
 export * from './ComputedSubject';
 export * from './FilteredMapSubject';

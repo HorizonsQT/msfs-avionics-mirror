@@ -98,6 +98,7 @@ export class MapTrafficIntruderIcon extends AbstractMapTrafficIntruderIcon {
 
     if (
       !isTARA
+      && !isNaN(this.intruder.relativePositionVec[2])
       && (
         this.intruder.relativePositionVec[2] > this.trafficModule.altitudeRestrictionAbove.get().asUnit(UnitType.METER)
         || this.intruder.relativePositionVec[2] < -this.trafficModule.altitudeRestrictionBelow.get().asUnit(UnitType.METER)
@@ -427,7 +428,8 @@ export class MapTrafficIntruderIcon extends AbstractMapTrafficIntruderIcon {
    * @param alertLevel The alert level assigned to this view's intruder.
    */
   private drawIconVSArrow(context: CanvasRenderingContext2D, alertLevel: TcasAlertLevel): void {
-    const showArrow = MapTrafficIntruderIcon.VERTICAL_SPEED_THRESHOLD.compare(Math.abs(this.intruder.velocityVec[2]), UnitType.MPS) <= 0;
+    const showArrow = !isNaN(this.intruder.velocityVec[2])
+      && MapTrafficIntruderIcon.VERTICAL_SPEED_THRESHOLD.compare(Math.abs(this.intruder.velocityVec[2]), UnitType.MPS) <= 0;
 
     if (!showArrow) {
       return;
@@ -468,6 +470,10 @@ export class MapTrafficIntruderIcon extends AbstractMapTrafficIntruderIcon {
    * @param alertLevel The alert level assigned to this view's intruder.
    */
   private drawIconAltitudeLabel(context: CanvasRenderingContext2D, alertLevel: TcasAlertLevel): void {
+    if (isNaN(this.intruder.relativePositionVec[2]) || this.intruder.altitude.isNaN()) {
+      return;
+    }
+
     const isRelative = this.trafficModule.isAltitudeRelative.get();
     const isAltitudeAbove = this.intruder.relativePositionVec[2] >= 0;
     const altitudeFeet = this.trafficModule.isAltitudeRelative.get()

@@ -1,15 +1,16 @@
 import {
-  AdcEvents, AltitudeSelectEvents, AltitudeSelectManager, AltitudeSelectManagerOptions, APAltitudeModes, APEvents, APLateralModes,
-  APModePressEvent, APStateManager, APVerticalModes, Autopilot, ConsumerSubject, ConsumerValue, DirectorState,
-  EventBus, FlightPlanner, MappedSubject, MetricAltitudeSettingsManager, MinimumsMode, NavSourceType, ObjectSubject,
-  PlaneDirector,
-  RadioUtils, SetSubject, SimVarValueType, Subject, UnitType, VNavAltCaptureType, VNavState
+  AdcEvents, AltitudeSelectEvents, AltitudeSelectManager, AltitudeSelectManagerOptions, APAltitudeModes, APEvents,
+  APLateralModes, APModePressEvent, APStateManager, APVerticalModes, Autopilot, ConsumerSubject, ConsumerValue,
+  DirectorState, EventBus, FlightPlanner, MappedSubject, MetricAltitudeSettingsManager, MinimumsMode, NavSourceType,
+  ObjectSubject, PlaneDirector, RadioUtils, SetSubject, SimVarValueType, Subject, UnitType, VNavAltCaptureType,
+  VNavState
 } from '@microsoft/msfs-sdk';
 
 import { MinimumsDataProvider } from '../minimums/MinimumsDataProvider';
 import { GarminAPVars } from './data/GarminAPEvents';
 import { FmaData, FmaDataEvents, FmaVNavState } from './FmaData';
 import { GarminAPConfigInterface } from './GarminAPConfigInterface';
+import { GarminAPUtils } from './GarminAPUtils';
 import { GarminVNavManager2 } from './vnav/GarminVNavManager2';
 
 /**
@@ -77,18 +78,7 @@ export class GarminAutopilot extends Autopilot<GarminAPConfigInterface> {
 
   protected readonly isAltSelectInitialized = ConsumerValue.create(null, true);
 
-  protected readonly fmaData = ObjectSubject.create<FmaData>({
-    verticalActive: APVerticalModes.NONE,
-    verticalArmed: APVerticalModes.NONE,
-    verticalApproachArmed: APVerticalModes.NONE,
-    verticalAltitudeArmed: APAltitudeModes.NONE,
-    altitudeCaptureArmed: false,
-    altitudeCaptureValue: -1,
-    lateralActive: APLateralModes.NONE,
-    lateralArmed: APLateralModes.NONE,
-    lateralModeFailed: false,
-    vnavState: FmaVNavState.OFF
-  });
+  protected readonly fmaData = ObjectSubject.create<FmaData>(GarminAPUtils.createEmptyFmaData());
 
   protected readonly fmaDataPublisher = this.bus.getPublisher<FmaDataEvents>();
   protected needPublishFmaData = false;
@@ -102,6 +92,13 @@ export class GarminAutopilot extends Autopilot<GarminAPConfigInterface> {
   protected readonly isApproachModeOn = Subject.create(false);
 
   protected isApproachModeCommandedOn = false;
+
+  protected lateralModeReversionFromMode: number | null = null;
+  protected lateralModeReversionToMode: number | null = null;
+
+  protected verticalModeReversionFromMode: number | null = null;
+  protected verticalModeReversionFromAltitudeMode: APAltitudeModes | null = null;
+  protected verticalModeReversionToMode: number | null = null;
 
   /**
    * Creates a new instance of GarminAutopilot.
@@ -287,6 +284,7 @@ export class GarminAutopilot extends Autopilot<GarminAPConfigInterface> {
   protected onAfterUpdate(): void {
     this.updateApproachModeState();
     this.updateNavModeState();
+    this.updateModeReversionState();
     this.updateFma();
   }
 
@@ -340,6 +338,41 @@ export class GarminAutopilot extends Autopilot<GarminAPConfigInterface> {
   }
 
   /**
+   * Updates this autopilot's mode reversion state.
+   */
+  protected updateModeReversionState(): void {
+    if (!this.stateManager.apMasterOn.get() && !this.stateManager.isAnyFlightDirectorOn.get()) {
+      // If flight director is not on, then reset all mode reversions.
+
+      this.lateralModeReversionFromMode = null;
+      this.lateralModeReversionToMode = null;
+      this.verticalModeReversionFromMode = null;
+      this.verticalModeReversionFromAltitudeMode = null;
+      this.verticalModeReversionToMode = null;
+    } else {
+      // If flight director is on, then reset mode reversions if the corresponding active mode is not either NONE
+      // or the mode to which the original mode reverted.
+
+      if (this.lateralModeReversionToMode !== null) {
+        const lateralActiveMode = this.apValues.lateralActive.get();
+        if (lateralActiveMode !== this.lateralModeReversionToMode && lateralActiveMode !== APLateralModes.NONE) {
+          this.lateralModeReversionFromMode = null;
+          this.lateralModeReversionToMode = null;
+        }
+      }
+
+      if (this.verticalModeReversionToMode !== null) {
+        const verticalActiveMode = this.apValues.verticalActive.get();
+        if (verticalActiveMode !== this.verticalModeReversionToMode && verticalActiveMode !== APVerticalModes.NONE) {
+          this.verticalModeReversionFromMode = null;
+          this.verticalModeReversionFromAltitudeMode = null;
+          this.verticalModeReversionToMode = null;
+        }
+      }
+    }
+  }
+
+  /**
    * Publishes data for the FMA.
    */
   protected updateFma(): void {
@@ -364,6 +397,9 @@ export class GarminAutopilot extends Autopilot<GarminAPConfigInterface> {
     fmaData.set('lateralActive', this.apValues.lateralActive.get());
     fmaData.set('lateralArmed', this.apValues.lateralArmed.get());
     fmaData.set('lateralModeFailed', this.lateralModeFailed);
+    fmaData.set('lateralReversionFromMode', this.lateralModeReversionFromMode);
+    fmaData.set('verticalReversionFromMode', this.verticalModeReversionFromMode);
+    fmaData.set('verticalAltitudeReversionFromMode', this.verticalModeReversionFromAltitudeMode);
     fmaData.set('vnavState', fmaVNavState);
 
     if (this.needPublishFmaData) {
@@ -595,5 +631,67 @@ export class GarminAutopilot extends Autopilot<GarminAPConfigInterface> {
     }
 
     super.checkModes();
+  }
+
+  /** @inheritDoc */
+  protected handleLateralActiveModeReversion(mode: number): void {
+    // For backward compatibility.
+    if (mode !== APLateralModes.NONE) {
+      this.lateralModeFailed = true;
+    }
+
+    // Immediately set the active lateral mode to NONE and attempt to activate the NONE director. We do this in order
+    // to guarantee that the reverted mode is not left as the active lateral mode.
+    this.apValues.lateralActive.set(APLateralModes.NONE);
+    this.lateralModes.get(APLateralModes.NONE)?.activate();
+
+    // Immediately deactivate the armed lateral mode, if there is one. We do this to guarantee that during a
+    // reversion, the armed mode ends up as either the default lateral mode (see below) or NONE.
+    const lateralArmedMode = this.apValues.lateralArmed.get();
+    if (lateralArmedMode !== APLateralModes.NONE) {
+      this.lateralModes.get(lateralArmedMode)?.deactivate();
+      this.apValues.lateralArmed.set(APLateralModes.NONE);
+    }
+
+    // Attempt to arm the default lateral mode. If the default lateral mode is NONE, then we can skip arming because
+    // we've already activated the NONE director above.
+    const modeToArm = this.getDefaultLateralMode();
+    if (modeToArm !== APLateralModes.NONE) {
+      this.lateralModes.get(modeToArm)?.arm();
+    }
+
+    if (mode !== APLateralModes.NONE) {
+      this.lateralModeReversionFromMode = mode;
+      this.lateralModeReversionToMode = modeToArm;
+    }
+  }
+
+  /** @inheritDoc */
+  protected handleVerticalActiveModeReversion(mode: number): void {
+    // Immediately set the active vertical mode to NONE and attempt to activate the NONE director. We do this in
+    // order to guarantee that the reverted mode is not left as the active vertical mode.
+    this.apValues.verticalActive.set(APVerticalModes.NONE);
+    this.verticalModes.get(APVerticalModes.NONE)?.activate();
+
+    // Immediately deactivate the armed vertical mode, if there is one. We do this to guarantee that during a
+    // reversion, the armed mode ends up as either the default vertical mode (see below) or NONE.
+    const verticalArmedMode = this.apValues.verticalArmed.get();
+    if (verticalArmedMode !== APLateralModes.NONE) {
+      this.verticalModes.get(verticalArmedMode)?.deactivate();
+      this.apValues.verticalArmed.set(APLateralModes.NONE);
+    }
+
+    // Attempt to arm the default vertical mode. If the default vertical mode is NONE, then we can skip arming
+    // because we've already activated the NONE director above.
+    const modeToArm = this.getDefaultVerticalMode();
+    if (modeToArm !== APVerticalModes.NONE) {
+      this.verticalModes.get(modeToArm)?.arm();
+    }
+
+    if (mode !== APVerticalModes.NONE) {
+      this.verticalModeReversionFromMode = mode;
+      this.verticalModeReversionFromAltitudeMode = this.verticalAltitudeArmed;
+      this.verticalModeReversionToMode = modeToArm;
+    }
   }
 }

@@ -11,6 +11,7 @@ export * from './BasePublishers';
 export * from './Backplane';
 export * from './Brakes';
 export * from './Clock';
+export * from './ContactPointPublisher';
 export * from './ControlSurfaces';
 export * from './Hydraulics';
 export * from './Electrical';

@@ -1,9 +1,9 @@
 import { SimVarValueType } from '../../data/SimVars';
 import { NavSourceType } from '../../instruments/NavProcessor';
-import { MathUtils } from '../../math/MathUtils';
 import { Accessible } from '../../sub/Accessible';
 import { Subject } from '../../sub/Subject';
 import { Value } from '../../sub/Value';
+import { APDataItem, APDataProvider } from '../APDataProvider';
 import { APValues } from '../APValues';
 import { LNavRollSteerComputer, LNavRollSteerComputerDataProvider } from '../lnav/LNavRollSteerComputer';
 import { LNavRollSteerCommand, LNavSteerCommand } from '../lnav/LNavTypes';
@@ -113,8 +113,11 @@ export type APGpsSteerDirectorOptions = {
  * An autopilot GPS roll-steering director. This director converts GPS steering commands into roll-steering commands
  * in order to drive flight director bank commands. This director also sets the `AUTOPILOT NAV1 LOCK` SimVar state to
  * true (1) when it is armed or activated, and to false (0) when it is deactivated.
+ * 
+ * The director requires valid bank data to arm or activate.
  */
 export class APGpsSteerDirector implements PlaneDirector {
+  /** @inheritDoc */
   public state: DirectorState;
 
   /** @inheritDoc */
@@ -146,6 +149,8 @@ export class APGpsSteerDirector implements PlaneDirector {
 
   private readonly lnavRollSteerComputerDataProvider: DirectorLNavRollSteerComputerDataProvider;
   private readonly lnavRollSteerComputer: LNavRollSteerComputer;
+
+  private readonly bank = this.apValues.dataProvider.getItem('bank');
 
   /**
    * Creates a new instance of APGpsSteerDirector.
@@ -207,7 +212,7 @@ export class APGpsSteerDirector implements PlaneDirector {
         );
     });
 
-    this.lnavRollSteerComputerDataProvider = new DirectorLNavRollSteerComputerDataProvider(this.steerCommand);
+    this.lnavRollSteerComputerDataProvider = new DirectorLNavRollSteerComputerDataProvider(this.apValues.dataProvider, this.steerCommand);
     this.lnavRollSteerComputer = new LNavRollSteerComputer(
       this.lnavRollSteerComputerDataProvider,
       {
@@ -222,8 +227,20 @@ export class APGpsSteerDirector implements PlaneDirector {
     this.state = DirectorState.Inactive;
   }
 
+  /**
+   * Checks whether the data required for this director to function are valid.
+   * @returns Whether the data required for this director to function are valid.
+   */
+  private isDataValid(): boolean {
+    return this.bank.isValueValid();
+  }
+
   /** @inheritDoc */
   public activate(): void {
+    if (this.state === DirectorState.Active || !this.isDataValid()) {
+      return;
+    }
+
     this.state = DirectorState.Active;
     this.onActivate && this.onActivate();
     this.isNavLock.set(true);
@@ -231,18 +248,24 @@ export class APGpsSteerDirector implements PlaneDirector {
 
   /** @inheritDoc */
   public arm(): void {
-    if (this.state === DirectorState.Inactive) {
-      this.updateCallbackState(null);
-      if (this.canArmFunc(this.apValues, this.callbackState)) {
-        this.state = DirectorState.Armed;
-        this.onArm && this.onArm();
-        this.isNavLock.set(true);
-      }
+    if (this.state !== DirectorState.Inactive || !this.isDataValid()) {
+      return;
+    }
+
+    this.updateCallbackState(null);
+    if (this.canArmFunc(this.apValues, this.callbackState)) {
+      this.state = DirectorState.Armed;
+      this.onArm && this.onArm();
+      this.isNavLock.set(true);
     }
   }
 
   /** @inheritDoc */
   public deactivate(): void {
+    if (this.state === DirectorState.Inactive) {
+      return;
+    }
+
     this.state = DirectorState.Inactive;
     this.onDeactivate && this.onDeactivate();
     this.isNavLock.set(false);
@@ -251,8 +274,18 @@ export class APGpsSteerDirector implements PlaneDirector {
 
   /** @inheritDoc */
   public update(): void {
+    if (this.state === DirectorState.Inactive) {
+      return;
+    }
+
+    if (!this.isDataValid()) {
+      this.deactivate();
+      return;
+    }
+
     this.lnavRollSteerComputerDataProvider.update();
     this.lnavRollSteerComputer.update(Date.now());
+
     this.updateCallbackState(this.lnavRollSteerComputer.steerCommand.get());
 
     if (this.state === DirectorState.Armed) {
@@ -300,12 +333,6 @@ export class APGpsSteerDirector implements PlaneDirector {
  * An implementation of {@link LNavRollSteerComputerDataProvider} used by {@link APGpsSteerDirector}.
  */
 class DirectorLNavRollSteerComputerDataProvider implements LNavRollSteerComputerDataProvider {
-  // TODO: Move this stuff into a central data provider for the autopilot.
-  private readonly velocityXSimVarId = SimVar.GetRegisteredId('VELOCITY WORLD X', SimVarValueType.Knots, '');
-  private readonly velocityZSimVarId = SimVar.GetRegisteredId('VELOCITY WORLD Z', SimVarValueType.Knots, '');
-
-  private readonly headingSimVarId = SimVar.GetRegisteredId('PLANE HEADING DEGREES TRUE', SimVarValueType.Degree, '');
-
   /** @inheritDoc */
   public readonly lnavSteerCommand: Accessible<Readonly<LNavSteerCommand>>;
 
@@ -321,32 +348,36 @@ class DirectorLNavRollSteerComputerDataProvider implements LNavRollSteerComputer
   /** @inheritDoc */
   public readonly heading = this._heading as Accessible<number | null>;
 
+  private readonly gsSource: APDataItem<number>;
+  private readonly trackSource: APDataItem<number>;
+  private readonly headingSource: APDataItem<number>;
+
   /**
    * Creates a new instance of DirectorLNavRollSteerComputerDataProvider.
+   * @param apDataProvider A provider of data for the autopilot.
    * @param steerCommand The LNAV steering command from which this provider sources data.
    */
-  public constructor(steerCommand: Accessible<Readonly<APGpsSteerDirectorSteerCommand>>) {
+  public constructor(apDataProvider: APDataProvider, steerCommand: Accessible<Readonly<APGpsSteerDirectorSteerCommand>>) {
     this.lnavSteerCommand = steerCommand;
+
+    this.gsSource = apDataProvider.getItem('ground_speed');
+    this.trackSource = apDataProvider.getItem('ground_track_true');
+    this.headingSource = apDataProvider.getItem('heading_true');
   }
 
   /**
    * Updates this provider's data.
    */
   public update(): void {
-    let heading: number | undefined;
-
-    const velocityEW = SimVar.GetSimVarValueFastReg(this.velocityXSimVarId);
-    const velocityNS = SimVar.GetSimVarValueFastReg(this.velocityZSimVarId);
-
-    const gs = Math.hypot(velocityEW, velocityNS);
+    const gs = this.gsSource.getValue();
     this._gs.set(gs);
 
     if (gs > 1) {
-      this._track.set(MathUtils.normalizeAngleDeg(Math.atan2(velocityEW, velocityNS) * Avionics.Utils.RAD2DEG));
+      this._track.set(this.trackSource.getValue());
     } else {
-      this._track.set(heading = SimVar.GetSimVarValueFastReg(this.headingSimVarId));
+      this._track.set(this.headingSource.getValue());
     }
 
-    this._heading.set(heading ?? SimVar.GetSimVarValueFastReg(this.headingSimVarId));
+    this._heading.set(this.headingSource.getValue());
   }
 }

@@ -1010,7 +1010,7 @@ export class FlightPlanner<ID extends string = any> {
         // We need to explicitly set any optional properties on the vertical data to undefined. This is because we want
         // to set every vertical data property on the flight plan leg to what was received from the sync event, and
         // plan.setLegVerticalData() only sets the *enumerable* properties of the vertical data object passed to it.
-        const verticalData = Object.assign({ fpa: undefined }, data.leg.verticalData);
+        const verticalData = Object.assign({ alongTrackOffset: undefined, fpa: undefined }, data.leg.verticalData);
         plan.setLegVerticalData(data.segmentIndex, data.legIndex, verticalData, false);
         break;
       }

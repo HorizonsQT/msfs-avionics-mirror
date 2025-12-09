@@ -524,8 +524,7 @@ export class GNSMapController extends MapSystemController<GNSMapModules, GNSMapL
    * @param isActive Whether or not OBS is active.
    */
   private onObsActiveChanged(isActive: boolean): void {
-    this.context.getLayer('flightPlan0')?.setVisible(!isActive);
-    this.context.getLayer('flightPlan1')?.setVisible(!isActive);
+    this.context.getLayer(MapSystemKeys.FlightPlan)?.setVisible(!isActive);
     this.context.getLayer(GNSMapKeys.Obs)?.setVisible(isActive);
   }
 

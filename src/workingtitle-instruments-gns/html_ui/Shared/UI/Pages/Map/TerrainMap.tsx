@@ -153,13 +153,13 @@ export class TerrainMap extends Page<TerrainMapProps> {
       mapContext.getLayer(MapSystemKeys.Airspace).setVisible(true);
       mapContext.getLayer(MapSystemKeys.NearestWaypoints).setVisible(true);
       mapContext.getLayer(GNSMapKeys.Runways).setVisible(true);
-      mapContext.getLayer(`${MapSystemKeys.FlightPlan}0` as any).setVisible(true);
+      mapContext.getLayer(MapSystemKeys.FlightPlan)!.setVisible(true);
       mapContext.getLayer(MapSystemKeys.TextLayer).setVisible(true);
     } else {
       mapContext.getLayer(MapSystemKeys.Airspace).setVisible(false);
       mapContext.getLayer(MapSystemKeys.NearestWaypoints).setVisible(false);
       mapContext.getLayer(GNSMapKeys.Runways).setVisible(false);
-      mapContext.getLayer(`${MapSystemKeys.FlightPlan}0` as any).setVisible(false);
+      mapContext.getLayer(MapSystemKeys.FlightPlan)!.setVisible(false);
       mapContext.getLayer(MapSystemKeys.TextLayer).setVisible(false);
     }
   }

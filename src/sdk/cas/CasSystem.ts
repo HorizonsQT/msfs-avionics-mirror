@@ -52,7 +52,9 @@ export type CasActiveMessage = {
   /** Whether this message's alert is currently suppressed. Used for Boeing CAN/RCL */
   suppressed: boolean;
 
-  /** The last time this message's alert was activated. */
+  /**
+   * The last real-world (operating system) time this message's alert was activated.
+   */
   lastActive: number;
 
   /** This message's currently active suffixes. */
@@ -189,6 +191,20 @@ type ScheduledAlert = {
   initialAcknowledge: boolean;
 };
 
+/** Options for the CAS System. */
+export interface CasSystemOptions {
+  /**
+   * A sorting function for the casActiveMessageSubject array.
+   * If not defined, then messages are sorted by priority (from first to last: Warning, Caution, Priority, SafeOp),
+   * and messages with the same priority are sorted by the real-world (operating system) time at which their associated
+   * alerts were last activated (later times first).
+   * @param a The first message to compare.
+   * @param b The second message to compare.
+   * @returns a negative number if `a` should be first, or a positive number if `b` should be first, or 0 if the order should be unchanged.
+   */
+  sortActiveMessages?: (a: Readonly<CasActiveMessage>, b: Readonly<CasActiveMessage>) => number;
+}
+
 /**
  * A system for CAS management.
  *
@@ -200,6 +216,25 @@ type ScheduledAlert = {
  * instrument will cause duplicated events to be published to the topics defined by {@link CasStateEvents}.
  */
 export class CasSystem {
+  // All alert priority types, in order of decreasing precedence.
+  private static readonly ALL_PRIORITY_TYPES = [
+    AnnunciationType.Warning,
+    AnnunciationType.Caution,
+    AnnunciationType.Advisory,
+    AnnunciationType.SafeOp,
+  ];
+
+  private static readonly DEFAULT_ACTIVE_MESSAGE_SORT = (a: Readonly<CasActiveMessage>, b: Readonly<CasActiveMessage>): number => {
+    if (a.uuid && b.uuid && a.lastActive !== undefined && b.lastActive !== undefined) {
+      if (a.priority === b.priority) {
+        return b.lastActive - a.lastActive;
+      }
+      return a.priority - b.priority;
+    } else {
+      return 0;
+    }
+  };
+
   private readonly bus: EventBus;
   private readonly casSubscriber: EventSubscriber<CasEvents>;
   private readonly casPublisher: Publisher<CasEvents>;
@@ -231,36 +266,32 @@ export class CasSystem {
 
   private prevDisplayedCasMessages: CasActiveMessage[] = [];
 
+  private activeMessageSort: (a: Readonly<CasActiveMessage>, b: Readonly<CasActiveMessage>) => number;
   /** The displayable CAS messages sorted by the standard sort order of priority, state, and age. */
-  // TODO Add the ability to specify alternate sorting logic.
-  private _casActiveMessageSubject = SortedMappedSubscribableArray.create<CasActiveMessage>(
-    this.displayedCasMessages,
-    (a, b) => {
-      if (a.uuid && b.uuid && a.lastActive !== undefined && b.lastActive !== undefined) {
-        if (a.priority === b.priority) {
-          return b.lastActive - a.lastActive;
-        }
-        return a.priority - b.priority;
-      } else {
-        return 0;
-      }
-    },
-    (a, b) => a.uuid === b.uuid
-  );
-  public readonly casActiveMessageSubject = this._casActiveMessageSubject as SubscribableArray<CasActiveMessage>;
+  private _casActiveMessageSubject: SortedMappedSubscribableArray<CasActiveMessage>;
+  public readonly casActiveMessageSubject: SubscribableArray<CasActiveMessage>;
 
   /**
    * Create a CasSystem.
    * @param bus The event bus.
    * @param primary Whether or not this is the system responsible for managing alerts at the sim level.
+   * @param options Options for the CAS system. See {@link CasSystemOptions}.
    */
-  constructor(bus: EventBus, primary = false) {
+  constructor(bus: EventBus, primary = false, options?: Readonly<Partial<CasSystemOptions>>) {
     this.bus = bus;
     this.casSubscriber = this.bus.getSubscriber<CasEvents>();
     this.casPublisher = this.bus.getPublisher<CasEvents>();
     this.casStatePublisher = this.bus.getPublisher<CasStateEvents>();
 
     this.isPrimary = primary;
+
+    this.activeMessageSort = options?.sortActiveMessages ?? CasSystem.DEFAULT_ACTIVE_MESSAGE_SORT;
+    this._casActiveMessageSubject = SortedMappedSubscribableArray.create<CasActiveMessage>(
+      this.displayedCasMessages,
+      this.activeMessageSort,
+      (a, b) => a.uuid === b.uuid
+    );
+    this.casActiveMessageSubject = this._casActiveMessageSubject;
 
     this.setMasterStatus(AnnunciationType.Caution, false);
     this.setMasterStatus(AnnunciationType.Warning, false);
@@ -344,10 +375,14 @@ export class CasSystem {
    * @param priority The type of messages which shall be suppressed.
    */
   private suppressType(priority: AnnunciationType): void {
-    for (const [, message] of this.allMessages.get(priority) || []) {
-      message.suppressed = true;
+    const messages = this.allMessages.get(priority);
+    if (messages) {
+      for (const message of messages.values()) {
+        message.suppressed = true;
+      }
+
+      this.refreshDisplayedAlerts();
     }
-    this.refreshDisplayedAlerts();
   }
 
   /**
@@ -355,10 +390,14 @@ export class CasSystem {
    * @param priority The type of messages which shall be suppressed.
    */
   private unsuppressAllSuppressed(priority: AnnunciationType): void {
-    for (const [, message] of this.allMessages.get(priority) || []) {
-      message.suppressed = false;
+    const messages = this.allMessages.get(priority);
+    if (messages) {
+      for (const message of messages.values()) {
+        message.suppressed = false;
+      }
+
+      this.refreshDisplayedAlerts();
     }
-    this.refreshDisplayedAlerts();
   }
 
   /**
@@ -457,20 +496,19 @@ export class CasSystem {
             alert.timeRemaining -= deltaTime;
             if (alert.timeRemaining <= 0) {
               uuidMap.delete(priority);
-              this.activateAlert({ uuid: uuid }, priority, alert.initialAcknowledge);
+              this.activateAlert({ uuid }, priority, alert.initialAcknowledge);
             }
           }
         }
 
         // And then suffixed ones.
         for (const [uuid, uuidMap] of this.scheduledSuffixedAlerts) {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           for (const [suffix, suffixMap] of uuidMap) {
             for (const [priority, alert] of suffixMap) {
               alert.timeRemaining -= deltaTime;
               if (alert.timeRemaining <= 0) {
                 suffixMap.delete(priority);
-                this.activateAlert({ uuid: uuid, suffix: suffix }, priority, alert.initialAcknowledge);
+                this.activateAlert({ uuid, suffix }, priority, alert.initialAcknowledge);
               }
             }
           }
@@ -786,66 +824,65 @@ export class CasSystem {
     let unackedWarnings = false;
     let unackedCautions = false;
 
-    for (const priority of [
-      AnnunciationType.Warning,
-      AnnunciationType.Caution,
-      AnnunciationType.Advisory,
-      AnnunciationType.SafeOp
-    ]) {
+    for (const priority of CasSystem.ALL_PRIORITY_TYPES) {
       // Go through the UUIDs of all active messages at this priority.
-      for (const [uuid, message] of this.allMessages.get(priority) || []) {
-        // If the message is currently inhibited or suppressed, skip over it.
-        if (message.inhibited || message.suppressed) {
-          continue;
-        }
-        // In the simple case we have no suffixes.   In which case we either add
-        // the message to the displayed array or continue.
-        if (message.suffixes === undefined) {
-          if (!unsuffixedDisplayedKeys.has(uuid)) {
-            unsuffixedDisplayedKeys.add(uuid);
-            this.displayedCasMessages.insert(message);
-            if (!message.acknowledged) {
-              switch (priority) {
-                case AnnunciationType.Warning:
-                  unackedWarnings = true; break;
-                case AnnunciationType.Caution:
-                  unackedCautions = true; break;
+      const messages = this.allMessages.get(priority);
+      if (messages) {
+        for (const [uuid, message] of messages) {
+          // If the message is currently inhibited or suppressed, skip over it.
+          if (message.inhibited || message.suppressed) {
+            continue;
+          }
+
+          // In the simple case we have no suffixes.   In which case we either add
+          // the message to the displayed array or continue.
+          if (message.suffixes === undefined) {
+            if (!unsuffixedDisplayedKeys.has(uuid)) {
+              unsuffixedDisplayedKeys.add(uuid);
+              this.displayedCasMessages.insert(message);
+              if (!message.acknowledged) {
+                switch (priority) {
+                  case AnnunciationType.Warning:
+                    unackedWarnings = true; break;
+                  case AnnunciationType.Caution:
+                    unackedCautions = true; break;
+                }
               }
             }
-          }
-        } else {
-          // We do have suffixes to worry about.  Yay.  Let's store all the ones
-          // that are supposed to be displayed at this level and reset the list
-          // in our message.
-          const origSuffixes = message.suffixes;
-          message.suffixes = [];
-          // Now we go through the active suffixes and see if they've already been
-          // displayed at a higher priority.
-          for (const suffix of origSuffixes) {
-            const suffixesDisplayed = suffixedDisplayedKeys.get(uuid);
-            if (suffixesDisplayed === undefined) {
-              // First time we've seen any suffix for this UUID
-              suffixedDisplayedKeys.set(uuid, new Set<string>([suffix]));
-              message.suffixes.push(suffix);
-            } else {
-              // We've already displayed some suffix for this UID.  But is is the one
-              // we're working with now?
-              if (!suffixesDisplayed.has(suffix)) {
-                suffixesDisplayed.add(suffix);
+          } else {
+            // We do have suffixes to worry about.  Yay.  Let's store all the ones
+            // that are supposed to be displayed at this level and reset the list
+            // in our message.
+            const origSuffixes = message.suffixes;
+            message.suffixes = [];
+            // Now we go through the active suffixes and see if they've already been
+            // displayed at a higher priority.
+            for (const suffix of origSuffixes) {
+              const suffixesDisplayed = suffixedDisplayedKeys.get(uuid);
+              if (suffixesDisplayed === undefined) {
+                // First time we've seen any suffix for this UUID
+                suffixedDisplayedKeys.set(uuid, new Set<string>([suffix]));
                 message.suffixes.push(suffix);
+              } else {
+                // We've already displayed some suffix for this UID.  But is is the one
+                // we're working with now?
+                if (!suffixesDisplayed.has(suffix)) {
+                  suffixesDisplayed.add(suffix);
+                  message.suffixes.push(suffix);
+                }
               }
             }
-          }
-          // Now, assuming we added back at least one suffix we want to display this
-          // message, so add it to the array.
-          if (message.suffixes.length > 0) {
-            this.displayedCasMessages.insert(message);
-            if (!message.acknowledged) {
-              switch (priority) {
-                case AnnunciationType.Warning:
-                  unackedWarnings = true; break;
-                case AnnunciationType.Caution:
-                  unackedCautions = true; break;
+            // Now, assuming we added back at least one suffix we want to display this
+            // message, so add it to the array.
+            if (message.suffixes.length > 0) {
+              this.displayedCasMessages.insert(message);
+              if (!message.acknowledged) {
+                switch (priority) {
+                  case AnnunciationType.Warning:
+                    unackedWarnings = true; break;
+                  case AnnunciationType.Caution:
+                    unackedCautions = true; break;
+                }
               }
             }
           }

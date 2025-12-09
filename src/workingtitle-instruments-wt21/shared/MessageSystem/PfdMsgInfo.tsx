@@ -45,19 +45,19 @@ export class WT21_PFD_MsgInfo extends DisplayComponent<PfdMsgInfoProps> {
 
     if (this.props.instrumentType === WT21InstrumentType.Pfd) {
       this.messageBotRight.set(bot ? bot.content : '');
-      this.messageBotRightRef.instance.classList.toggle('yellow-text', bot && bot.level === MESSAGE_LEVEL.Yellow);
-      this.messageBotRightRef.instance.classList.toggle('msg-info-blink', bot?.isBlinking);
+      this.messageBotRightRef.instance.classList.toggle('yellow-text', bot?.level === MESSAGE_LEVEL.Yellow);
+      this.messageBotRightRef.instance.classList.toggle('msg-info-blink', bot?.isBlinking === true);
 
       // If it's a message that should be right aligned, put it in the topRight element instead
       if (top?.content && rightAlignedMessages.includes(top.content)) {
         this.messageTopRight.set(top ? top.content : '');
-        this.messageTopRightRef.instance.classList.toggle('yellow-text', top && top.level === MESSAGE_LEVEL.Yellow);
-        this.messageTopRightRef.instance.classList.toggle('msg-info-blink', top?.isBlinking);
+        this.messageTopRightRef.instance.classList.toggle('yellow-text', top?.level === MESSAGE_LEVEL.Yellow);
+        this.messageTopRightRef.instance.classList.toggle('msg-info-blink', top?.isBlinking === true);
         this.messageTopLeft.set('');
       } else {
         this.messageTopLeft.set(top ? top.content : '');
-        this.messageTopLeftRef.instance.classList.toggle('yellow-text', top && top.level === MESSAGE_LEVEL.Yellow);
-        this.messageTopLeftRef.instance.classList.toggle('msg-info-blink', top?.isBlinking);
+        this.messageTopLeftRef.instance.classList.toggle('yellow-text', top?.level === MESSAGE_LEVEL.Yellow);
+        this.messageTopLeftRef.instance.classList.toggle('msg-info-blink', top?.isBlinking === true);
         this.messageTopRight.set('');
       }
 
@@ -76,13 +76,13 @@ export class WT21_PFD_MsgInfo extends DisplayComponent<PfdMsgInfoProps> {
 
     if (this.props.instrumentType === WT21InstrumentType.Mfd) {
       this.messageMfdTopRight.set(mfd ? mfd.content : '');
-      this.messageMfdTopRightRef.instance.classList.toggle('yellow-text', mfd && mfd.level === MESSAGE_LEVEL.Yellow);
-      this.messageMfdTopRightRef.instance.classList.toggle('msg-info-blink', mfd?.isBlinking);
+      this.messageMfdTopRightRef.instance.classList.toggle('yellow-text', mfd?.level === MESSAGE_LEVEL.Yellow);
+      this.messageMfdTopRightRef.instance.classList.toggle('msg-info-blink', mfd?.isBlinking === true);
     }
 
     this.messageMap.set(map ? map.content : '');
-    this.messageMapRef.instance.classList.toggle('yellow-text', map && map.level === MESSAGE_LEVEL.Yellow);
-    this.messageMapRef.instance.classList.toggle('msg-info-blink', map?.isBlinking);
+    this.messageMapRef.instance.classList.toggle('yellow-text', map?.level === MESSAGE_LEVEL.Yellow);
+    this.messageMapRef.instance.classList.toggle('msg-info-blink', map?.isBlinking === true);
   };
 
   /** @inheritdoc */

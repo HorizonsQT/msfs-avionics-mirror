@@ -13,9 +13,9 @@ export default [
       name: 'mfd',
       globals: {
         '@microsoft/msfs-sdk': 'msfssdk',
-      }
+      },
     },
     external: ['@microsoft/msfs-sdk'],
-    plugins: [css({ output: 'WTUns1.css' }), resolve()]
+    plugins: [css({ output: 'WTUns1.css' }), resolve()],
   }
 ];

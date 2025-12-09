@@ -1,8 +1,10 @@
 import {
-  MapAirspaceLayer, MapAirspaceModule, MapAirspaceRenderManager, MapBingLayer, MapClockUpdateController, MapCullableTextLabelManager, MapCullableTextLayer,
-  MapDataIntegrityModule, MapFlightPlanModule, MapFollowAirplaneController, MapFollowAirplaneModule, MapOwnAirplaneIconModule,
-  MapOwnAirplaneLayer, MapOwnAirplanePropsController, MapOwnAirplanePropsModule, MapRotationController, MapRotationModule, MapSystemFlightPlanLayer,
-  MapSystemIconFactory, MapSystemKeys, MapSystemLabelFactory, MapSystemPlanRenderer, MapSystemWaypointsLayer, MapSystemWaypointsRenderer,
+  FacilityLoader, MapAirspaceLayer, MapAirspaceModule, MapAirspaceRenderManager, MapBingLayer,
+  MapClockUpdateController, MapCullableTextLabelManager, MapCullableTextLayer, MapDataIntegrityModule,
+  MapFlightPlanModule, MapFollowAirplaneController, MapFollowAirplaneModule, MapOwnAirplaneIconModule,
+  MapOwnAirplaneLayer, MapOwnAirplanePropsController, MapOwnAirplanePropsModule, MapRotationController,
+  MapRotationModule, MapSyncedCanvasLayer, MapSystemIconFactory, MapSystemKeys, MapSystemLabelFactory,
+  MapSystemPlanRenderer, MapSystemSharedFlightPlanLayer, MapSystemWaypointsLayer, MapSystemWaypointsRenderer,
   MapTerrainColorsModule, MapTrafficModule, MapWaypointDisplayModule, MapWxrModule, ResourceModerator
 } from '@microsoft/msfs-sdk';
 
@@ -124,10 +126,10 @@ export interface GNSMapLayers {
   [MapSystemKeys.TextLayer]: MapCullableTextLayer;
 
   /** The map layer that displays the flight plan. */
-  ['flightPlan0']: MapSystemFlightPlanLayer;
+  [MapSystemKeys.FlightPlan]?: MapSystemSharedFlightPlanLayer;
 
-  /** The map layer that displays direct-to random flight plan. */
-  ['flightPlan1']: MapSystemFlightPlanLayer;
+  /** The map layer that displays flight plan waypoints. */
+  [MapSystemKeys.FlightPlanWaypoints]?: MapSyncedCanvasLayer;
 
   /** A layer that display the own airplane icon. */
   [MapSystemKeys.OwnAirplaneIcon]?: MapOwnAirplaneLayer;
@@ -158,6 +160,9 @@ export interface GNSMapLayers {
  * Properties on the GNS map system context.
  */
 export interface GNSMapContextProps {
+  /** A facility loader. */
+  [MapSystemKeys.FacilityLoader]: FacilityLoader;
+
   /** A text label manager for rendering map labels. */
   [MapSystemKeys.TextManager]: MapCullableTextLabelManager;
 
@@ -178,6 +183,12 @@ export interface GNSMapContextProps {
 
   /** A waypoint renderer for the system waypoints. */
   [MapSystemKeys.WaypointRenderer]: MapSystemWaypointsRenderer;
+
+  /**
+   * Bitflags describing the requested data to be loaded in airport facilities retrieved by the map for rendering
+   * purposes.
+   */
+  [MapSystemKeys.WaypointRendererAirportDataFlags]?: number;
 
   /** A flight plan renderer for displaying flight plans. */
   [MapSystemKeys.FlightPathRenderer]: MapSystemPlanRenderer;

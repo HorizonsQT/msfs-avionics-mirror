@@ -37,6 +37,17 @@ export interface MapAbstractNearestWaypointsLayerProps<R extends MapWaypointRend
   /** The waypoint renderer to use. */
   waypointRenderer: R;
 
+  /**
+   * A function which retrieves a facility for a given ICAO. If not defined, then the layer will use its facility
+   * loader's `tryGetFacility()` method to retrieve facilities, using the facility type defined by the ICAO and
+   * requesting all possible data for airport facilities.
+   * @param facilityLoader The facility loader used by the layer. 
+   * @param icao The ICAO for which to retrieve a facility.
+   * @returns A Promise which is fulfilled with the facility for the specified ICAO, or `null` if a facility could not
+   * be retrieved.
+   */
+  facilityForIcao?: (facilityLoader: FacilityLoader, icao: IcaoValue) => Promise<Facility | null>;
+
   /** A function which retrieves a waypoint for a facility. */
   waypointForFacility: (facility: Facility) => MapWaypointRendererType<R>;
 
@@ -92,6 +103,8 @@ export class MapNearestWaypointsLayer
   private readonly searchDebounceDelay = this.props.searchDebounceDelay ?? 500;
 
   private readonly facLoader = this.props.facilityLoader ?? new FacilityLoader(FacilityRepository.getRepository(this.props.bus));
+
+  private readonly facilityForIcaoFunc = this.props.facilityForIcao ?? this.defaultFacilityForIcao.bind(this);
 
   private facilitySearches?: {
     /** A nearest airport search session. */
@@ -204,6 +217,17 @@ export class MapNearestWaypointsLayer
     if (this.isInit) {
       this._tryRefreshAllSearches(this.getSearchCenter(), this.searchRadius);
     }
+  }
+
+  /**
+   * Retrieves a facility for a given ICAO.
+   * @param facilityLoader The facility loader used by this layer. 
+   * @param icao The ICAO for which to retrieve a facility.
+   * @returns A Promise which is fulfilled with the facility for the specified ICAO, or `null` if a facility could not
+   * be retrieved.
+   */
+  private defaultFacilityForIcao(facilityLoader: FacilityLoader, icao: IcaoValue): Promise<Facility | null> {
+    return facilityLoader.tryGetFacility(ICAO.getFacilityTypeFromValue(icao), icao);
   }
 
   /** @inheritdoc */
@@ -449,7 +473,7 @@ export class MapNearestWaypointsLayer
     this.icaosToRender.add(uid);
 
     try {
-      const facility = await this.facLoader.tryGetFacility(ICAO.getFacilityTypeFromValue(icao), icao);
+      const facility = await this.facilityForIcaoFunc(this.facLoader, icao);
 
       if (facility) {
         if (!this.icaosToRender.has(uid)) {
@@ -486,7 +510,7 @@ export class MapNearestWaypointsLayer
     let facility: Facility | null = null;
 
     try {
-      facility = await this.facLoader.tryGetFacility(ICAO.getFacilityTypeFromValue(icao), icao);
+      facility = await this.facilityForIcaoFunc(this.facLoader, icao);
     } catch {
       // noop
     }

@@ -1,0 +1,40 @@
+/**
+ * Legacy enum to provide backwards-compatibility with the WT21 FMS_MESSAGE_ID
+ *
+ * @deprecated this only serves for backward compatibility
+ */
+export enum WTLineLegacyMessageIDs {
+  RESET_INITIAL_POS,
+  INITIALIZE_POSITION,
+  NO_FLIGHT_PLAN,
+  FPLN_DISCONTINUITY,
+  DISCONTINUITY,
+  CHECK_SPEED,
+  CHK_ALT_SEL,
+  HOLD,
+  TOD,
+  OCEANIC,
+  TERM,
+  LV_TERM,
+  LPV_TERM,
+  APPR,
+  GPS_APPR,
+  LV_APPR,
+  LPV_APPR,
+  SEQ_INHB,
+  LOC_WILL_BE_TUNED,
+  CHECK_LOC_TUNING,
+  PATH_BELOW_AC,
+  NO_VPATH_VECTORS,
+  NO_VPATH_CONDITION,
+  NO_VPATH_PILOT_CMD,
+  NO_VPATH_TAE,
+  NO_VPATH_XTK,
+  NO_VPATH_THIS_LEG,
+  CHECK_FPLN_ALT,
+  DECELERATE,
+  UNABLE_NEXT_ALT,
+  KBINPUTACTIVE,
+  DLFPLNLOADED,
+  DLFPLNFAIL,
+}

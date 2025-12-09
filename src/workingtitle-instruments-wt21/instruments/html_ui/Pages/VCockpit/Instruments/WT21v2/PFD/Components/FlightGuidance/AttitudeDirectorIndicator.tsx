@@ -69,8 +69,8 @@ export class AttitudeDirectorIndicator extends DisplayComponent<AttitudeDirector
       this.ahrsSubscriptions = [];
 
       this.ahrsSubscriptions.push(
-        ahrs.on(`ahrs_pitch_deg_${ahrsIndex}`).withPrecision(2).handle(this.onUpdatePitch),
-        ahrs.on(`ahrs_roll_deg_${ahrsIndex}`).withPrecision(3).handle(this.onUpdateRoll),
+        ahrs.on(`ahrs_pitch_deg_${ahrsIndex}`).withPrecision(1).handle(this.onUpdatePitch),
+        ahrs.on(`ahrs_roll_deg_${ahrsIndex}`).withPrecision(1).handle(this.onUpdateRoll),
         ahrs.on(`ahrs_state_${ahrsIndex}`).whenChanged().handle(this.onAhrsStateChanged.bind(this)),
         ahrs.on(`ahrs_attitude_data_valid_${ahrsIndex}`).whenChanged().handle(this.onAttitudeValidityChanged.bind(this)),
       );

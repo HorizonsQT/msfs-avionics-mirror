@@ -46,9 +46,11 @@ export class AdsbSensitivityParameters {
 
   /**
    * Selects a sensitivity level for a specified environment.
-   * @param altitude The indicated altitude of the own airplane.
-   * @param cdiScalingLabel The CDI scaling sensitivity of the own airplane.
-   * @param radarAltitude The radar altitude of the own airplane.
+   * @param altitude The pressure altitude of the own airplane, or `NaN` if the pressure altitude is not known.
+   * @param cdiScalingLabel The CDI scaling sensitivity of the own airplane, or `undefined` if the sensitivity is not
+   * known.
+   * @param radarAltitude The radar altitude of the own airplane, or `NaN` if the radar altitude is not known. Defaults
+   * to `NaN`.
    * @returns The sensitivity level for the specified environment.
    */
   public selectLevel(
@@ -56,8 +58,8 @@ export class AdsbSensitivityParameters {
     cdiScalingLabel?: CDIScaleLabel,
     radarAltitude?: NumberUnitInterface<UnitFamily.Distance>
   ): number {
-    const altFeet = altitude.asUnit(UnitType.FOOT);
-    const radarAltFeet = radarAltitude?.asUnit(UnitType.FOOT);
+    const altFeet = altitude.isNaN() ? undefined : altitude.asUnit(UnitType.FOOT);
+    const radarAltFeet = (!radarAltitude || radarAltitude.isNaN()) ? undefined : radarAltitude.asUnit(UnitType.FOOT);
 
     let isApproach = false;
     switch (cdiScalingLabel) {
@@ -73,7 +75,8 @@ export class AdsbSensitivityParameters {
 
     let level: number;
     if (
-      (radarAltFeet === undefined || radarAltFeet > 2350)
+      altFeet !== undefined
+      && (radarAltFeet === undefined || radarAltFeet > 2350)
       && (!isApproach && cdiScalingLabel !== CDIScaleLabel.Terminal)
     ) {
       if (altFeet > 42000) {
@@ -88,8 +91,11 @@ export class AdsbSensitivityParameters {
         level = 2;
       }
     } else if (
-      cdiScalingLabel === CDIScaleLabel.Terminal
-      || (radarAltFeet !== undefined && radarAltFeet > 1000)
+      altFeet !== undefined
+      && (
+        cdiScalingLabel === CDIScaleLabel.Terminal
+        || (radarAltFeet !== undefined && radarAltFeet > 1000)
+      )
     ) {
       level = 1;
     } else {
@@ -101,14 +107,16 @@ export class AdsbSensitivityParameters {
 
   /**
    * Selects Traffic Advisory sensitivity settings for a specified environment.
-   * @param altitude The indicated altitude of the own airplane.
-   * @param cdiScalingLabel The CDI scaling sensitivity of the own airplane.
-   * @param radarAltitude The radar altitude of the own airplane.
+   * @param altitude The pressure altitude of the own airplane, or `NaN` if the pressure altitude is not known.
+   * @param cdiScalingLabel The CDI scaling sensitivity of the own airplane, or `undefined` if the sensitivity is not
+   * known.
+   * @param radarAltitude The radar altitude of the own airplane, or `NaN` if the radar altitude is not known. Defaults
+   * to `NaN`.
    * @returns Traffic Advisory sensitivity settings for the specified environment.
    */
   public selectTA(
     altitude: NumberUnitInterface<UnitFamily.Distance>,
-    cdiScalingLabel: CDIScaleLabel,
+    cdiScalingLabel?: CDIScaleLabel,
     radarAltitude?: NumberUnitInterface<UnitFamily.Distance>
   ): TcasTcaParameters {
     return AdsbSensitivityParameters.TA_LEVELS[this.selectLevel(altitude, cdiScalingLabel, radarAltitude)];

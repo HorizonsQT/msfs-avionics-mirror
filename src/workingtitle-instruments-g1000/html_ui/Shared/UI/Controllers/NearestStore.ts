@@ -1,7 +1,7 @@
 import {
   AirportClassMask, AirportFacility, AirportUtils, ArraySubject, FacilityFrequency, FacilityFrequencyType, FacilityLoader, FacilitySearchType, FacilityType,
-  GeoPoint, GeoPointSubject, MagVar, NearestAirportSearchSession, NearestIcaoSearchSessionDataType, NearestSearchResults, RunwaySurfaceCategory, RunwayUtils, Subject,
-  Subscribable, UnitType
+  GeoPoint, GeoPointSubject, ICAO, IcaoValue, MagVar, NearestAirportSearchSession, NearestIcaoSearchSessionDataType, NearestSearchResults,
+  RunwaySurfaceCategory, RunwayUtils, Subject, Subscribable, UnitType
 } from '@microsoft/msfs-sdk';
 
 import { AirportSize } from '@microsoft/msfs-garminsdk';
@@ -121,10 +121,16 @@ export class NearestStore {
   public readonly planeHeading = Subject.create(0);
 
   public loader?: FacilityLoader;
-  private session?: NearestAirportSearchSession<NearestIcaoSearchSessionDataType.StringV1>;
+  private session?: NearestAirportSearchSession<NearestIcaoSearchSessionDataType.Struct>;
   private filter: AirportFilter;
+  /** Map of old facility ICAO (V1) to airport. Excludes facilities that don't fit in the old ICAO format. */
   public nearestFacilities = new Map<string, AirportFacility>();
+  /** Map of facility uid to airport. */
+  private nearestFacilitiesByUid = new Map<string, AirportFacility>();
+  /** Map of old facility ICAO (V1) to airport. Excludes facilities that don't fit in the old ICAO format. */
   public nearestAirports = new Map<string, NearbyAirport>();
+  /** Map of facility uid to airport. */
+  private nearestAirportsByUid = new Map<string, NearbyAirport>();
   public nearestSubjects = new Array<Subject<NearbyAirport>>();
   public readonly nearestSubjectList = ArraySubject.create<Subject<NearbyAirport>>();
 
@@ -172,6 +178,7 @@ export class NearestStore {
   public setFilter(runwayLength: number, surfaceType: SurfaceTypeOptions): void {
     this.filter.minLength = runwayLength;
     this.filter.surfaceType = surfaceType;
+    this.nearestAirportsByUid.clear();
     this.nearestAirports.clear();
     this.searchNearest();
   }
@@ -181,7 +188,7 @@ export class NearestStore {
    */
   public searchNearest(): void {
     if (!this.session) {
-      this.loader?.startNearestSearchSession(FacilitySearchType.Airport)
+      this.loader?.startNearestSearchSessionWithIcaoStructs(FacilitySearchType.Airport)
         .then(session => {
           this.session = session;
           this.session.setAirportFilter(false, AirportClassMask.SoftSurface | AirportClassMask.HardSurface | AirportClassMask.AllWater);
@@ -203,13 +210,20 @@ export class NearestStore {
    * @param results The results from a nearest search.
    * @returns A promise that resolves when the nearest list is updated.
    */
-  private updateNearestFacilities(results: NearestSearchResults<string, string>): Promise<void> {
+  private updateNearestFacilities(results: NearestSearchResults<IcaoValue, IcaoValue>): Promise<void> {
     // The results of a search contains only the elements added or removed from the last
     // search in the session.   So we need to keep track of everythign that's been returned
     // in this session and add and delete as needed.
     for (const icao of results.removed) {
-      this.nearestFacilities.delete(icao);
-      this.nearestAirports.delete(icao);
+      const uid = ICAO.getUid(icao);
+      this.nearestFacilitiesByUid.delete(uid);
+      this.nearestAirportsByUid.delete(uid);
+
+      const oldIcao = ICAO.tryValueToStringV1(icao);
+      if (oldIcao !== ICAO.EMPTY_V1) {
+        this.nearestFacilities.delete(oldIcao);
+        this.nearestAirports.delete(oldIcao);
+      }
     }
 
     // Get facility information for all the newly added airports.  The facility loader
@@ -223,7 +237,13 @@ export class NearestStore {
       Promise.all(searches).then(facilities => {
         for (const facility of facilities) {
           if (facility) {
-            this.nearestFacilities.set(facility.icao, facility);
+            const uid = ICAO.getUid(facility.icaoStruct);
+            this.nearestFacilitiesByUid.set(uid, facility);
+
+            const oldIcao = ICAO.tryValueToStringV1(facility.icaoStruct);
+            if (oldIcao !== ICAO.EMPTY_V1) {
+              this.nearestFacilities.set(oldIcao, facility);
+            }
           }
         }
         resolve();
@@ -237,11 +257,19 @@ export class NearestStore {
    */
   private updateNearestAirports(): void {
     for (const facility of this.filter.filter(this.nearestFacilities.values())) {
-      const nearest = this.nearestAirports.get(facility.icao);
+      const uid = ICAO.getUid(facility.icaoStruct);
+      let nearest = this.nearestAirportsByUid.get(uid);
       if (nearest) {
-        this.nearestAirports.set(facility.icao, this.updateNearbyAirport(nearest) || this.createNearbyAirport(facility));
+        this.updateNearbyAirport(nearest);
       } else {
-        this.nearestAirports.set(facility.icao, this.createNearbyAirport(facility));
+        nearest = this.createNearbyAirport(facility);
+      }
+
+      this.nearestAirportsByUid.set(uid, nearest);
+
+      const oldIcao = ICAO.tryValueToStringV1(facility.icaoStruct);
+      if (oldIcao !== ICAO.EMPTY_V1) {
+        this.nearestAirports.set(oldIcao, nearest);
       }
     }
   }
@@ -252,7 +280,7 @@ export class NearestStore {
    * @returns An array of nearby airports sorted by distance.
    */
   private get nearestByDistance(): Array<NearbyAirport> {
-    return [...this.nearestAirports.values()].sort(
+    return [...this.nearestAirportsByUid.values()].sort(
       (a, b) => {
         return a.distance - b.distance;
       }
@@ -347,7 +375,7 @@ export class NearestStore {
    * @returns An updated airport or undefined.
    */
   public updateNearbyAirport(airport: NearbyAirport): NearbyAirport | undefined {
-    const facility = airport.facility && this.nearestFacilities.get(airport.facility.icao);
+    const facility = airport.facility && this.nearestFacilitiesByUid.get(ICAO.getUid(airport.facility.icaoStruct));
     if (facility) {
       const newAirport = {
         facility: {} as AirportFacility,

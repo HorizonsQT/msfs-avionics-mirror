@@ -6,11 +6,13 @@ export * from './managers';
 export * from './vnav';
 
 export * from './APConfig';
+export * from './APDataProvider';
 export * from './APStates';
 export * from './APTypes';
 export * from './APValues';
 export * from './Autopilot';
 export * from './AutopilotDriver';
+export * from './DefaultAPDataProvider';
 export * from './VerticalNavigation';
 export * from './GpsSynchronizer';
 export * from './APModeVars';

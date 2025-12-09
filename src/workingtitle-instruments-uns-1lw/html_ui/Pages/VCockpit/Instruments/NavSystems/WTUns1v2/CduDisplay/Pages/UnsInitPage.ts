@@ -111,12 +111,17 @@ export class UnsInitPage extends UnsFmcPage {
       this.fms.pposAccepted.set(true);
       return true;
     },
+
+    onSelected: async () => {
+      this.fms.pposAccepted.set(true);
+      return true;
+    }
   }).bindWrappedData(this.fms.pposAccepted);
 
   public readonly cursorPath: UnsCduCursorPath = {
     initialPosition: this.AcceptField,
     rules: new Map([
-        [this.AcceptField, this.AcceptField],
+      [this.AcceptField, this.AcceptField],
     ]),
   };
 

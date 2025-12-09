@@ -1,32 +1,27 @@
 .fma {
   position: relative;
+  height: 48px;
   background: linear-gradient(to bottom, rgb(4, 4, 12), rgb(24, 28, 43));
   border: solid 1px rgb(133, 133, 133);
   border-top: none;
   border-radius: 0 0 8px 8px;
-  padding: var(--fma-padding-vertical) 0px;
   display: flex;
   flex-flow: row nowrap;
   justify-content: center;
-  align-items: stretch;
 
-  --fma-padding-vertical: 2px;
+  --fma-content-height: 40px;
+  --fma-content-margin-top: 2px;
 
   --fma-large-font-size: 18px;
   --fma-large-line-height: 1em;
   --fma-small-font-size: 15px;
   --fma-small-line-height: 0.8em;
-
-  /* Computed vars */
-
-  --fma-padded-height: calc(100% - 2 * var(--fma-padding-vertical))
 }
 
 .fma-separator {
-  position: relative;
-  top: var(--fma-padding-vertical);
-  height: var(--fma-padded-height);
+  align-self: stretch;
   width: 0px;
+  margin: 2px 0px;
   border-left: groove 1px black;
 }
 
@@ -49,12 +44,15 @@
 .fma-autothrottle {
   position: relative;
   width: 120px;
-  height: var(--fma-padded-height);
-  margin: 0px 3px;
+  /* Avoid using relative (e.g. x%) heights to allow this element to be a layout boundary. */
+  height: var(--fma-content-height);
+  margin: var(--fma-content-margin-top) 3px 0px;
   display: flex;
   flex-flow: column nowrap;
   justify-content: space-between;
   align-items: stretch;
+  /* Force overflow clipping to allow this element to be a layout boundary. */
+  overflow: hidden;
 }
 
 .fma-autothrottle-top {
@@ -83,23 +81,29 @@
 .fma-lateral {
   position: relative;
   width: 75px;
-  height: var(--fma-padded-height);
-  margin: 0px 3px;
+  /* Avoid using relative (e.g. x%) heights to allow this element to be a layout boundary. */
+  height: var(--fma-content-height);
+  margin: var(--fma-content-margin-top) 3px 0px;
   display: flex;
   flex-flow: column nowrap;
   justify-content: space-between;
   align-items: center;
+  /* Force overflow clipping to allow this element to be a layout boundary. */
+  overflow: hidden;
 }
 
 .fma-center {
   position: relative;
   width: 88px;
-  height: var(--fma-padded-height);
-  margin: 0px 3px;
+  /* Avoid using relative (e.g. x%) heights to allow this element to be a layout boundary. */
+  height: var(--fma-content-height);
+  margin: var(--fma-content-margin-top) 3px 0px;
   display: flex;
   flex-flow: column nowrap;
   justify-content: space-between;
   align-items: stretch;
+  /* Force overflow clipping to allow this element to be a layout boundary. */
+  overflow: hidden;
 }
 
 .fma-center-top {
@@ -125,12 +129,15 @@
 .fma-vertical {
   position: relative;
   width: 177px;
-  height: var(--fma-padded-height);
-  margin: 0px 3px;
+  /* Avoid using relative (e.g. x%) heights to allow this element to be a layout boundary. */
+  height: var(--fma-content-height);
+  margin: var(--fma-content-margin-top) 3px 0px;
   display: flex;
   flex-flow: row nowrap;
   justify-content: space-between;
   align-items: stretch;
+  /* Force overflow clipping to allow this element to be a layout boundary. */
+  overflow: hidden;
 }
 
 .fma-vertical-col {

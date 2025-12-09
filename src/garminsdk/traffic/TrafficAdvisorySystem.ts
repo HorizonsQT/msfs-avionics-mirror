@@ -52,7 +52,12 @@ export class TrafficAdvisorySystem extends Tcas<GarminTcasIntruder, TasSensitivi
     realTimeUpdateFreq = TrafficAdvisorySystem.DEFAULT_REAL_TIME_UPDATE_FREQ,
     simTimeUpdateFreq = TrafficAdvisorySystem.DEFAULT_SIM_TIME_UPDATE_FREQ
   ) {
-    super(bus, tfcInstrument, maxIntruderCount, realTimeUpdateFreq, simTimeUpdateFreq);
+    super(bus, tfcInstrument, {
+      maxIntruderCount,
+      realTimeUpdateFreq,
+      simTimeUpdateFreq,
+      hasActiveSurveillance: true,
+    });
   }
 
   /** @inheritdoc */
@@ -105,22 +110,22 @@ export class TrafficAdvisorySystem extends Tcas<GarminTcasIntruder, TasSensitivi
     if (this.adsb) {
       this.sensitivity.update(
         this.adsb.getOperatingMode(),
-        this.ownAirplaneSubs.altitude.get(),
-        this.ownAirplaneSubs.groundSpeed.get(),
+        this.ownAirplaneDataProvider.pressureAltitude.get(),
+        this.ownAirplaneDataProvider.groundSpeed.get(),
         this.cdiScalingLabel,
-        this.supportsRadarAltitude ? this.ownAirplaneSubs.radarAltitude.get() : undefined
+        this.supportsRadarAltitude ? this.ownAirplaneDataProvider.radarAltitude.get() : undefined
       );
     } else {
       this.sensitivity.update(
-        this.ownAirplaneSubs.groundSpeed.get(),
-        this.supportsRadarAltitude ? this.ownAirplaneSubs.radarAltitude.get() : undefined
+        this.ownAirplaneDataProvider.groundSpeed.get(),
+        this.supportsRadarAltitude ? this.ownAirplaneDataProvider.radarAltitude.get() : undefined
       );
     }
   }
 
   /** @inheritdoc */
   protected canIssueTrafficAdvisory(simTime: number, intruder: GarminTcasIntruder): boolean {
-    if (this.ownAirplaneSubs.isOnGround.get()) {
+    if (this.ownAirplaneDataProvider.isOnGround.get()) {
       return false;
     }
 
@@ -134,7 +139,7 @@ export class TrafficAdvisorySystem extends Tcas<GarminTcasIntruder, TasSensitivi
 
   /** @inheritdoc */
   protected canCancelTrafficAdvisory(simTime: number, intruder: GarminTcasIntruder): boolean {
-    if (this.ownAirplaneSubs.isOnGround.get()) {
+    if (this.ownAirplaneDataProvider.isOnGround.get()) {
       return true;
     }
 
@@ -167,15 +172,22 @@ export class TasSensitivityParameters {
 
   /**
    * Selects a sensitivity level for a specified environment.
-   * @param groundSpeed The ground speed of the own airplane.
-   * @param radarAltitude The radar altitude of the own airplane.
+   * @param groundSpeed The ground speed of the own airplane, or `NaN` if the ground speed is not known.
+   * @param radarAltitude The radar altitude of the own airplane, or `NaN` if the radar altitude is not known. Defaults
+   * to `NaN`.
    * @returns The sensitivity level for the specified environment.
    */
   public selectLevel(
     groundSpeed: NumberUnitInterface<UnitFamily.Speed>,
     radarAltitude?: NumberUnitInterface<UnitFamily.Distance>
   ): number {
-    if ((radarAltitude?.compare(2000, UnitType.FOOT) ?? 1) < 0 || groundSpeed.compare(120, UnitType.KNOT) < 0) {
+    const radarAltFeet = !radarAltitude || radarAltitude.isNaN() ? undefined : radarAltitude.asUnit(UnitType.FOOT);
+    const groundSpeedKnots = groundSpeed.isNaN() ? undefined : groundSpeed.asUnit(UnitType.KNOT);
+
+    if (
+      (radarAltFeet !== undefined && radarAltFeet < 2000)
+      || (groundSpeedKnots !== undefined && groundSpeedKnots < 120)
+    ) {
       return 0;
     } else {
       return 1;
@@ -184,8 +196,9 @@ export class TasSensitivityParameters {
 
   /**
    * Selects Proximity Advisory sensitivity settings for a specified environment.
-   * @param groundSpeed The ground speed of the own airplane.
-   * @param radarAltitude The radar altitude of the own airplane.
+   * @param groundSpeed The ground speed of the own airplane, or `NaN` if the ground speed is not known.
+   * @param radarAltitude The radar altitude of the own airplane, or `NaN` if the radar altitude is not known. Defaults
+   * to `NaN`.
    * @returns Proximity Advisory sensitivity settings for the specified environment.
    */
   public selectPA(
@@ -199,8 +212,9 @@ export class TasSensitivityParameters {
 
   /**
    * Selects Traffic Advisory sensitivity settings for a specified environment.
-   * @param groundSpeed The ground speed of the own airplane.
-   * @param radarAltitude The radar altitude of the own airplane.
+   * @param groundSpeed The ground speed of the own airplane, or `NaN` if the ground speed is not known.
+   * @param radarAltitude The radar altitude of the own airplane, or `NaN` if the radar altitude is not known. Defaults
+   * to `NaN`.
    * @returns Traffic Advisory sensitivity settings for the specified environment.
    */
   public selectTA(
@@ -280,8 +294,9 @@ export class TasSensitivity implements TcasSensitivity {
 
   /**
    * Updates the sensitivity without ADS-B support.
-   * @param groundSpeed The ground speed of the own airplane.
-   * @param radarAltitude The radar altitude of the own airplane.
+   * @param groundSpeed The ground speed of the own airplane, or `NaN` if the ground speed is not known.
+   * @param radarAltitude The radar altitude of the own airplane, or `NaN` if the radar altitude is not known. Defaults
+   * to `NaN`.
    */
   public update(
     groundSpeed: NumberUnitInterface<UnitFamily.Speed>,
@@ -290,10 +305,11 @@ export class TasSensitivity implements TcasSensitivity {
   /**
    * Updates the sensitivity with ADS-B support.
    * @param adsbMode The ADS-B operating mode.
-   * @param altitude The indicated altitude of the own airplane.
-   * @param groundSpeed The ground speed of the own airplane.
+   * @param altitude The pressure altitude of the own airplane, or `NaN` if the pressure altitude is not known.
+   * @param groundSpeed The ground speed of the own airplane, or `NaN` if the ground speed is not known.
    * @param cdiScalingLabel The CDI scaling sensitivity of the own airplane.
-   * @param radarAltitude The radar altitude of the own airplane.
+   * @param radarAltitude The radar altitude of the own airplane, or `NaN` if the radar altitude is not known. Defaults
+   * to `NaN`.
    */
   public update(
     adsbMode: AdsbOperatingMode,

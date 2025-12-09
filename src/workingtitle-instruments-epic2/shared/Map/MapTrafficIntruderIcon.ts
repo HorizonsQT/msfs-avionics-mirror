@@ -72,8 +72,11 @@ export class MapTrafficIntruderIcon extends AbstractMapTrafficIntruderIcon {
       const altitudeMeters = this.intruder.relativePositionVec[2];
 
       if (
-        altitudeMeters > this.trafficModule.altitudeRestrictionAbove.get().asUnit(UnitType.METER)
-        || altitudeMeters < -this.trafficModule.altitudeRestrictionBelow.get().asUnit(UnitType.METER)
+        !isNaN(altitudeMeters)
+        && (
+          altitudeMeters > this.trafficModule.altitudeRestrictionAbove.get().asUnit(UnitType.METER)
+          || altitudeMeters < -this.trafficModule.altitudeRestrictionBelow.get().asUnit(UnitType.METER)
+        )
       ) {
         return;
       }
@@ -81,8 +84,14 @@ export class MapTrafficIntruderIcon extends AbstractMapTrafficIntruderIcon {
 
     context.translate(projectedPos[0], projectedPos[1]);
 
-    this.drawIconAltitudeLabel(context, alertLevel);
-    this.drawIconVSArrow(context, alertLevel);
+    if (
+      !isNaN(this.intruder.velocityVec[2])
+      && !isNaN(this.intruder.relativePositionVec[2])
+      && !this.intruder.altitude.isNaN()
+    ) {
+      this.drawIconVSArrow(context, alertLevel);
+      this.drawIconAltitudeLabel(context, alertLevel);
+    }
 
     if (this.epic2TrafficModule.motionVectorVisible.get() && this.intruder.isBearingDisplayDataValid) {
       this.drawAdsbMotionVector(context, projection);
@@ -265,11 +274,12 @@ export class MapTrafficIntruderIcon extends AbstractMapTrafficIntruderIcon {
    */
   private drawIconVSArrow(context: CanvasRenderingContext2D, alertLevel: TcasAlertLevel): void {
     const showArrow = MapTrafficIntruderIcon.VERTICAL_SPEED_THRESHOLD.compare(Math.abs(this.intruder.velocityVec[2]), UnitType.MPS) <= 0;
-    const isAltitudeAbove = this.intruder.relativePositionVec[2] >= 0;
 
     if (!showArrow) {
       return;
     }
+
+    const isAltitudeAbove = this.intruder.relativePositionVec[2] >= 0;
 
     const vsSign = Math.sign(this.intruder.velocityVec[2]);
 

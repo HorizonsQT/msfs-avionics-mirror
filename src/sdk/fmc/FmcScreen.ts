@@ -55,6 +55,31 @@ export interface FmcScreenOptions {
 }
 
 /**
+ * A definition describing an FMC page.
+ */
+type PageDefinition<P extends AbstractFmcPage, E> = {
+  /** The page's constructor. */
+  ctor: PageConstructor<P>;
+
+  /** The route event bound to the page. */
+  routeEvent?: keyof E & string;
+
+  /** The default props to pass to the page. */
+  defaultTypedParameters?: object;
+};
+
+/**
+ * A definition describing an FMC page extension.
+ */
+type PageExtensionDefinition<P extends AbstractFmcPage> = {
+  /** The contructor for the extension's parent page. */
+  pageCtor: PageConstructor<P>;
+
+  /** The constructor for the extension. */
+  extensionCtor: new (page: P) => FmcPageExtension<P>;
+};
+
+/**
  * An FMC screen.
  *
  * This is the main object used to encapsulate an FMC screen and its rendering.
@@ -82,11 +107,11 @@ export class FmcScreen<P extends AbstractFmcPage = AbstractFmcPage, E = Record<s
 
   protected currentlyDisplayedPage: P | null = null;
 
-  private pendingPageAdditions: Record<string, [PageConstructor<P>, (keyof E & string) | undefined, any]> = {};
+  private readonly pendingPageAdditions = new Map<string, PageDefinition<P, E>>();
 
-  private pendingPageReplacements: Record<string, [PageConstructor<P>, (keyof E & string) | undefined, any]> = {};
+  private readonly pendingPageReplacements = new Map<string, PageDefinition<P, E>>();
 
-  private attachedPageExtensions = [] as [PageConstructor<P>, new (page: P) => FmcPageExtension<P>][];
+  private readonly attachedPageExtensions = [] as PageExtensionDefinition<P>[];
 
   /**
    * Ctor
@@ -116,8 +141,8 @@ export class FmcScreen<P extends AbstractFmcPage = AbstractFmcPage, E = Record<s
    * Processes page replacement calls made by plugins. Must be called after plugins are initialized, and before stock routes are added.
    */
   public processPluginPageAdditions(): void {
-    for (const [route, [pageCtor, routeEvent, initialTypedParameters]] of Object.entries(this.pendingPageAdditions)) {
-      this.addPageRoute(route, pageCtor, routeEvent, initialTypedParameters);
+    for (const [route, pageDef] of this.pendingPageAdditions) {
+      this.addPageRoute(route, pageDef.ctor, pageDef.routeEvent, pageDef.defaultTypedParameters as any);
     }
   }
 
@@ -125,8 +150,8 @@ export class FmcScreen<P extends AbstractFmcPage = AbstractFmcPage, E = Record<s
    * Processes page replacement calls made by plugins. Must be called after plugins are initialized, and after stock routes are added.
    */
   public processPluginPageReplacements(): void {
-    for (const [route, [pageCtor, routeEvent, initialTypedParameters]] of Object.entries(this.pendingPageReplacements)) {
-      this.addPageRoute(route, pageCtor, routeEvent, initialTypedParameters);
+    for (const [route, pageDef] of this.pendingPageReplacements) {
+      this.addPageRoute(route, pageDef.ctor, pageDef.routeEvent, pageDef.defaultTypedParameters as any);
     }
   }
 
@@ -302,7 +327,7 @@ export class FmcScreen<P extends AbstractFmcPage = AbstractFmcPage, E = Record<s
     routeEvent?: keyof E & string,
     defaultTypedParameters?: T,
   ): void {
-    this.pendingPageAdditions[route] = [page, routeEvent, defaultTypedParameters];
+    this.pendingPageAdditions.set(route, { ctor: page, routeEvent, defaultTypedParameters });
   }
 
   /** @inheritDoc */
@@ -312,12 +337,12 @@ export class FmcScreen<P extends AbstractFmcPage = AbstractFmcPage, E = Record<s
     routeEvent?: keyof E & string,
     defaultTypedParameters?: T,
   ): void {
-    this.pendingPageReplacements[route] = [page, routeEvent, defaultTypedParameters];
+    this.pendingPageReplacements.set(route, { ctor: page, routeEvent, defaultTypedParameters });
   }
 
   /** @inheritDoc */
-  public attachPageExtension(pageClass: PageConstructor<P>, extensionCtor: new(...args: any[]) => AbstractFmcPageExtension<P>): void {
-    this.attachedPageExtensions.push([pageClass, extensionCtor]);
+  public attachPageExtension(pageClass: PageConstructor<P>, extensionCtor: new (...args: any[]) => AbstractFmcPageExtension<P>): void {
+    this.attachedPageExtensions.push({ pageCtor: pageClass, extensionCtor });
   }
 
   /**
@@ -381,9 +406,9 @@ export class FmcScreen<P extends AbstractFmcPage = AbstractFmcPage, E = Record<s
 
     const pageInstance = this.pageFactory.createPage(page, this.bus, this, initialProps, this.acceptPageOutput.bind(this));
 
-    for (const [pageTarget, extension] of this.attachedPageExtensions) {
-      if (pageInstance instanceof pageTarget) {
-        pageInstance.acceptPageExtension(new extension(pageInstance));
+    for (const { pageCtor, extensionCtor } of this.attachedPageExtensions) {
+      if (pageInstance instanceof pageCtor) {
+        pageInstance.acceptPageExtension(new extensionCtor(pageInstance));
       }
     }
 

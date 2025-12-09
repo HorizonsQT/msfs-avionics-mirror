@@ -143,6 +143,7 @@ export class MapSharedCanvasLayer extends MapLayer<MapCanvasLayerProps<any>> {
           ref={this.canvasLayerRef}
           model={this.props.model}
           mapProjection={this.props.mapProjection}
+          class={this.props.class}
         />
         {this.props.children}
       </>

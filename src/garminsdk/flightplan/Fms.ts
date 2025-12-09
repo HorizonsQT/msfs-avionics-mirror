@@ -1685,7 +1685,7 @@ export class Fms<ID extends string = any> {
           // the same runway. If we did, then skip the procedure runway leg since we don't want to duplicate the
           // runway leg. If we did not, then replace the origin leg we added with the procedure runway leg (converted
           // to using our own runway leg format).
-          if (!runway || runway.designation !== runway.designation) {
+          if (!departureRunway || runway.designation !== departureRunway.designation) {
             insertProcedureObject.procedureLegs.splice(0, 1, FmsUtils.buildRunwayLeg(facility, runway, true));
           }
         } else {
@@ -2043,11 +2043,11 @@ export class Fms<ID extends string = any> {
             continue;
           }
 
-          // If the procedure runway leg is the first leg, then check if we already added an origin runway leg for
-          // the same runway. If we did, then skip the procedure runway leg since we don't want to duplicate the
-          // runway leg. If we did not, then replace the origin leg we added with the procedure runway leg (converted
-          // to using our own runway leg format).
-          if (!runway || runway.designation !== runway.designation) {
+          // If the procedure runway leg is the last leg, then check if we are going to add an arrival runway leg for
+          // the same runway later. If we are, then skip the procedure runway leg since we don't want to duplicate the
+          // runway leg. If we did not, then add the procedure runway leg (converted to using our own runway leg
+          // format) and set a flag to make sure we don't duplicate the runway leg later.
+          if (!arrivalRunway || runway.designation !== arrivalRunway.designation) {
             insertProcedureObject.procedureLegs.push(FmsUtils.buildRunwayLeg(facility, runway, true));
             didAddRunwayLeg = true;
           }

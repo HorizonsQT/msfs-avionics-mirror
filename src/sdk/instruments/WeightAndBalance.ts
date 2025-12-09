@@ -52,11 +52,5 @@ export class WeightBalanceSimvarPublisher extends SimVarPublisher<WeightBalanceE
     ]);
 
     super(simvars, bus, pacer);
-
-  }
-
-  /** @inheritdoc */
-  public onUpdate(): void {
-    super.onUpdate();
   }
 }

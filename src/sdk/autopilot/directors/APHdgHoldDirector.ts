@@ -1,7 +1,5 @@
 import { EventBus } from '../../data/EventBus';
 import { NavMath } from '../../geo/NavMath';
-import { AhrsEvents } from '../../instruments/Ahrs';
-import { Subscription } from '../../sub/Subscription';
 import { APValues } from '../APValues';
 import { DirectorState, PlaneDirector } from './PlaneDirector';
 
@@ -24,35 +22,38 @@ export type APHdgHoldDirectorOptions = {
 };
 
 /**
- * An autopilot heading hold director.
- * Levels the wings upon activation, and then holds the captured heading
+ * An autopilot director that generates flight director bank commands to level the wings upon activation and then hold
+ * the resultant magnetic heading once the wings are level.
+ * 
+ * The director requires valid bank and magnetic heading data to arm or activate.
  */
 export class APHdgHoldDirector implements PlaneDirector {
   /** bank angle below which we capture the heading */
   private static readonly MIN_BANK_THRESHOLD = 1;
 
+  /** @inheritDoc */
   public state: DirectorState;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
   public onActivate?: () => void;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
   public onArm?: () => void;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
+  public onDeactivate?: () => void;
+
+  /** @inheritDoc */
   public driveBank?: (bank: number, rate?: number) => void;
-
-  private currentHeading = 0;
-  private currentBank = 0;
-
-  private readonly currentBankSub: Subscription;
-  private readonly currentHeadingSub: Subscription;
 
   private readonly maxBankAngleFunc: () => number;
   private readonly driveBankFunc: (bank: number) => void;
 
   /** heading captured at wings level, or null if not yet captured */
   private capturedHeading: number | null = null;
+
+  private readonly bank = this.apValues.dataProvider.getItem('bank');
+  private readonly headingMagnetic = this.apValues.dataProvider.getItem('heading_magnetic');
 
   /**
    * Creates an instance of the heading hold director.
@@ -65,9 +66,6 @@ export class APHdgHoldDirector implements PlaneDirector {
     private readonly apValues: APValues,
     options?: Readonly<APHdgHoldDirectorOptions>
   ) {
-    this.currentBankSub = bus.getSubscriber<AhrsEvents>().on('roll_deg').withPrecision(1).handle((bank) => this.currentBank = bank);
-    this.currentHeadingSub = bus.getSubscriber<AhrsEvents>().on('hdg_deg').withPrecision(0).handle((h) => this.currentHeading = h);
-
     const maxBankAngleOpt = options?.maxBankAngle ?? undefined;
     switch (typeof maxBankAngleOpt) {
       case 'number':
@@ -105,79 +103,85 @@ export class APHdgHoldDirector implements PlaneDirector {
     }
 
     this.state = DirectorState.Inactive;
-
-    this.pauseSubs();
-  }
-  onDeactivate?: (() => void) | undefined;
-  setPitch?: ((pitch: number) => void) | undefined;
-  drivePitch?: ((pitch: number, adjustForAoa?: boolean | undefined, adjustForVerticalWind?: boolean | undefined, rate?: number | undefined) => void) | undefined;
-
-  /** Resumes Subscriptions. */
-  private resumeSubs(): void {
-    this.currentHeadingSub.resume(true);
-    this.currentBankSub.resume(true);
-  }
-
-  /** Pauses Subscriptions. */
-  private pauseSubs(): void {
-    this.currentHeadingSub.pause();
-    this.currentBankSub.pause();
   }
 
   /**
-   * Activates this director.
+   * Checks whether the data required for this director to function are valid.
+   * @returns Whether the data required for this director to function are valid.
    */
+  private isDataValid(): boolean {
+    return this.bank.isValueValid() && this.headingMagnetic.isValueValid();
+  }
+
+  /** @inheritDoc */
   public activate(): void {
-    this.resumeSubs();
+    if (this.state === DirectorState.Active || !this.isDataValid()) {
+      return;
+    }
+
     this.state = DirectorState.Active;
-    this.capturedHeading = null;
+
     if (this.onActivate !== undefined) {
       this.onActivate();
     }
+
+    this.capturedHeading = null;
+
     SimVar.SetSimVarValue('AUTOPILOT HEADING LOCK', 'Bool', true);
   }
 
-  /**
-   * Arms this director.
-   * This director has no armed mode, so it activates immediately.
-   */
+  /** @inheritDoc */
   public arm(): void {
     if (this.state == DirectorState.Inactive) {
       this.activate();
     }
   }
 
-  /**
-   * Deactivates this director.
-   */
+  /** @inheritDoc */
   public deactivate(): void {
-    this.state = DirectorState.Inactive;
-    SimVar.SetSimVarValue('AUTOPILOT HEADING LOCK', 'Bool', false);
-
-    this.pauseSubs();
-  }
-
-  /**
-   * Updates this director.
-   */
-  public update(): void {
-    if (this.state === DirectorState.Active) {
-      if (this.capturedHeading === null && Math.abs(this.currentBank) < APHdgHoldDirector.MIN_BANK_THRESHOLD) {
-        this.capturedHeading = this.currentHeading;
-      }
-
-      this.driveBankFunc(this.capturedHeading !== null ? this.desiredBank(this.capturedHeading) : 0);
+    if (this.state === DirectorState.Inactive) {
+      return;
     }
+
+    this.state = DirectorState.Inactive;
+
+    if (this.onDeactivate !== undefined) {
+      this.onDeactivate();
+    }
+
+    SimVar.SetSimVarValue('AUTOPILOT HEADING LOCK', 'Bool', false);
+  }
+
+  /** @inheritDoc */
+  public update(): void {
+    if (this.state !== DirectorState.Active) {
+      return;
+    }
+
+    if (!this.isDataValid()) {
+      this.deactivate();
+      return;
+    }
+
+    const currentHeading = this.headingMagnetic.getValue();
+
+    if (this.capturedHeading === null && Math.abs(this.bank.getValue()) < APHdgHoldDirector.MIN_BANK_THRESHOLD) {
+      this.capturedHeading = currentHeading;
+    }
+
+    this.driveBankFunc(this.capturedHeading !== null ? this.desiredBank(currentHeading, this.capturedHeading) : 0);
   }
 
   /**
-   * Gets a desired bank from a Target Selected Heading.
-   * @param targetHeading The target heading.
-   * @returns The desired bank angle.
+   * Gets the desired bank angle from given current and target heading values.
+   * @param currentHeading The airplane's current heading, in degrees.
+   * @param targetHeading The target heading, in degrees.
+   * @returns The desired bank angle, in degrees. Positive values indicate leftward bank. Negative values indicate
+   * rightward bank.
    */
-  private desiredBank(targetHeading: number): number {
-    const turnDirection = NavMath.getTurnDirection(this.currentHeading, targetHeading);
-    const headingDiff = Math.abs(NavMath.diffAngle(this.currentHeading, targetHeading));
+  private desiredBank(currentHeading: number, targetHeading: number): number {
+    const turnDirection = NavMath.getTurnDirection(currentHeading, targetHeading);
+    const headingDiff = Math.abs(NavMath.diffAngle(currentHeading, targetHeading));
 
     let baseBank = Math.min(1.25 * headingDiff, this.maxBankAngleFunc());
     baseBank *= (turnDirection === 'left' ? 1 : -1);

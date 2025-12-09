@@ -1,11 +1,12 @@
 {
   "name": "workingtitle-aircraft-sr22t",
-  "version": "2.0.0",
+  "version": "2.1.6",
   "description": "Working Title MSFS SR22T",
   "scripts": {
-    "build": "npm run build:compile && npm run build:rollup",
+    "build": "npm run build:compile && npm run build:rollup && npm run build:extras",
     "build:compile": "npx tsc",
-    "build:rollup": "robocopy src *.css build/Plugins /s & npx rollup -c rollup.config.mjs"
+    "build:rollup": "robocopy src *.css build/Plugins /s & npx rollup -c rollup.config.mjs",
+    "build:extras": "robocopy assets * dist/workingtitle-aircraft-sr22t/SimObjects/Airplanes/Asobo_SR22/common/panel/Instruments/G1000/Plugins/Assets /s"
   },
   "repository": {
     "type": "git",
@@ -14,14 +15,16 @@
   "author": "Working Title Simulations, LLC",
   "license": "Modified MIT",
   "devDependencies": {
+    "@microsoft/msfs-garminsdk": "2.3.4",
+    "@microsoft/msfs-sdk": "2.3.3",
+    "@microsoft/msfs-ts-transformer": "^1.0.0",
     "@microsoft/msfs-types": "1.14.6",
-    "@microsoft/msfs-garminsdk": "2.1.1",
-    "@microsoft/msfs-sdk": "2.1.1",
-    "@microsoft/msfs-wtg1000": "2.0.12",
+    "@microsoft/msfs-wtg1000": "2.1.9",
     "@rollup/plugin-image": "^3.0.2",
     "@rollup/plugin-node-resolve": "^15.0.1",
     "rollup": "^4.7.23",
     "rollup-plugin-import-css": "^3.1.0",
-    "typescript": "5.3.3"
+    "ts-patch": "^3.3.0",
+    "typescript": "5.8.3"
   }
 }

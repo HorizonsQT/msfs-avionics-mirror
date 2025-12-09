@@ -21,14 +21,17 @@
       "*": [
         "/*"
       ]
-    }
+    },
+    "plugins": [
+      { "transform": "@microsoft/msfs-ts-transformer" },
+    ],
   },
   "include": [
     "./**/*.ts",
-    "./**/*.tsx"
+    "./**/*.tsx",
   ],
   "exclude": [
     "build",
-    "dist"
-  ]
+    "dist",
+  ],
 }

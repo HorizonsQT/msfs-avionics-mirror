@@ -1,6 +1,7 @@
 import {
-  AdsbOperatingMode, AhrsEvents, ConsumerValue, EventBus, MappedSubject, NumberUnitInterface, Tcas, TcasAlertLevel, TcasIISensitivityParameters,
-  TcasOperatingMode, TcasSensitivity, TcasSensitivityParameters, TrafficContact, TrafficInstrument, UnitFamily, UnitType
+  AdsbOperatingMode, AhrsEvents, ConsumerValue, EventBus, MappedSubject, NumberUnitInterface, SubscribableUtils, Tcas,
+  TcasAlertLevel, TcasIISensitivityParameters, TcasOperatingMode, TcasSensitivity, TcasSensitivityParameters,
+  TrafficContact, TrafficInstrument, UnitFamily, UnitType
 } from '@microsoft/msfs-sdk';
 
 import { AcasSystemDefinition } from '../AvionicsConfig';
@@ -27,10 +28,10 @@ export class Epic2TcasII extends Tcas<Epic2TcasIntruder, Epic2TcasIISensitivity>
 
   private readonly raAltitudeInhibitFlag = MappedSubject.create(
     ([radarAlt, isClimbing]): boolean => {
-      return radarAlt < (isClimbing ? 900 : 1100);
+      return isFinite(radarAlt) && radarAlt < (isClimbing ? 900 : 1100);
     },
-    this.ownAirplaneSubs.radarAltitude.map(radarAlt => Math.round(radarAlt.asUnit(UnitType.FOOT))),
-    this.ownAirplaneSubs.verticalSpeed.map(verticalSpeed => verticalSpeed.number >= 0)
+    this.ownAirplaneDataProvider.radarAltitude.map(radarAlt => Math.round(radarAlt.asUnit(UnitType.FOOT)), SubscribableUtils.NUMERIC_NAN_EQUALITY),
+    this.ownAirplaneDataProvider.verticalSpeed.map(verticalSpeed => verticalSpeed.number >= 0)
   );
 
   public readonly maxAngleForBearing = this.config.bearingCone.maxElevation;
@@ -46,7 +47,12 @@ export class Epic2TcasII extends Tcas<Epic2TcasIntruder, Epic2TcasIISensitivity>
    * @param config An ACAS System configuration
    */
   constructor(bus: EventBus, tfcInstrument: TrafficInstrument, public readonly adsb: Epic2Adsb | null, private readonly config: AcasSystemDefinition) {
-    super(bus, tfcInstrument, Epic2TcasII.MAX_INTRUDER_COUNT, Epic2TcasII.REAL_TIME_UPDATE_FREQ, Epic2TcasII.SIM_TIME_UPDATE_FREQ);
+    super(bus, tfcInstrument, {
+      maxIntruderCount: Epic2TcasII.MAX_INTRUDER_COUNT,
+      realTimeUpdateFreq: Epic2TcasII.REAL_TIME_UPDATE_FREQ,
+      simTimeUpdateFreq: Epic2TcasII.SIM_TIME_UPDATE_FREQ,
+      hasActiveSurveillance: true,
+    });
   }
 
   /** @inheritdoc */
@@ -56,7 +62,7 @@ export class Epic2TcasII extends Tcas<Epic2TcasIntruder, Epic2TcasIISensitivity>
     this.bus.getSubscriber<Epic2LNavDataEvents>().on('lnavdata_flight_area')
       .whenChanged().handle(label => { this.cdiScalingLabel = label; });
 
-    this.settings.whenSettingChanged('trafficOperatingMode').handle(mode => {
+    this.settings.getSetting('trafficOperatingMode').sub(mode => {
       switch (mode) {
         case TcasOperatingModeSetting.On:
         case TcasOperatingModeSetting.Standby:
@@ -73,7 +79,7 @@ export class Epic2TcasII extends Tcas<Epic2TcasIntruder, Epic2TcasIISensitivity>
           }
           break;
       }
-    });
+    }, true);
 
     this.raAltitudeInhibitFlag.sub(inhibit => {
       if (this.settings.getSetting('trafficOperatingMode').value === TcasOperatingModeSetting.TA_RA) {
@@ -83,14 +89,14 @@ export class Epic2TcasII extends Tcas<Epic2TcasIntruder, Epic2TcasIISensitivity>
 
     this.adsb?.init();
 
-    this.settings.whenSettingChanged('trafficAdsbEnabled').handle(adsbEnabled => {
+    this.settings.getSetting('trafficAdsbEnabled').sub(adsbEnabled => {
       const len = this.intrudersSorted.length;
       for (let i = 0; i < len; i++) {
         const intruder = this.intrudersSorted[i];
 
         intruder.updateBearingDisplayCapabilities(adsbEnabled, this.minAngleForBearing, this.maxAngleForBearing);
       }
-    });
+    }, true);
   }
 
   /** @inheritdoc */
@@ -128,15 +134,15 @@ export class Epic2TcasII extends Tcas<Epic2TcasIntruder, Epic2TcasIISensitivity>
   protected updateSensitivity(): void {
     this.sensitivity.update(
       this.adsb?.getOperatingMode() ?? AdsbOperatingMode.Standby,
-      this.ownAirplaneSubs.altitude.get(),
+      this.ownAirplaneDataProvider.pressureAltitude.get(),
       this.cdiScalingLabel,
-      this.ownAirplaneSubs.radarAltitude.get()
+      this.ownAirplaneDataProvider.radarAltitude.get()
     );
   }
 
   /** @inheritdoc */
   protected canIssueTrafficAdvisory(simTime: number, intruder: Epic2TcasIntruder): boolean {
-    if (this.ownAirplaneSubs.isOnGround.get()) {
+    if (this.ownAirplaneDataProvider.isOnGround.get()) {
       return false;
     }
 
@@ -150,7 +156,7 @@ export class Epic2TcasII extends Tcas<Epic2TcasIntruder, Epic2TcasIISensitivity>
 
   /** @inheritdoc */
   protected canCancelTrafficAdvisory(simTime: number, intruder: Epic2TcasIntruder): boolean {
-    if (this.ownAirplaneSubs.isOnGround.get()) {
+    if (this.ownAirplaneDataProvider.isOnGround.get()) {
       return true;
     }
 
@@ -204,7 +210,7 @@ export class Epic2TcasIISensitivity implements TcasSensitivity {
   /**
    * Updates the sensitivity.
    * @param adsbMode The ADS-B operating mode.
-   * @param altitude The indicated altitude of the own airplane.
+   * @param altitude The pressure altitude of the own airplane.
    * @param flightArea The active flight area.
    * @param radarAltitude The radar altitude of the own airplane.
    */
@@ -229,4 +235,3 @@ export class Epic2TcasIISensitivity implements TcasSensitivity {
     this.activeParams = adsbMode === AdsbOperatingMode.Standby ? this.tcasIIParams : this.adsbParams;
   }
 }
-

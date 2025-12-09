@@ -1,5 +1,5 @@
-/// <reference types="@microsoft/msfs-types/js/avionics" />
-/// <reference types="@microsoft/msfs-types/js/simvar" />
+/// <reference types="@microsoft/msfs-types/js/avionics" preserve="true" />
+/// <reference types="@microsoft/msfs-types/js/simvar" preserve="true" />
 
 export * from './Sr22tCAS/Sr22tCASPlugin';
 export * from './Sr22tGpsAboveGroundLevelAltitude/Sr22tGpsAboveGroundLevelAltitudePlugin';

@@ -1,5 +1,7 @@
 .altimeter {
   position: relative;
+  /* NOTE: force overflow clipping to allow this element to be a layout boundary. */
+  overflow: hidden;
 
   /* Button vars */
 
@@ -129,12 +131,14 @@
 /* ---- Top container displays ---- */
 
 .altimeter-top-container {
+  /* NOTE: Avoid using relative (e.g. x%) heights and force overflow clipping to allow this element to be a layout boundary. */
   position: absolute;
   top: 0%;
   left: 0%;
   width: 100%;
   height: var(--altimeter-top-box-height);
   transform: rotateX(0deg);
+  overflow: hidden;
 }
 
 .altimeter-selectedalt-button {
@@ -267,12 +271,14 @@
 /* ---- Bottom container displays ---- */
 
 .altimeter-bottom-container {
+  /* NOTE: Avoid using relative (e.g. x%) heights and force overflow clipping to allow this element to be a layout boundary. */
   position: absolute;
   left: 0%;
   bottom: 0%;
   width: 100%;
   height: var(--altimeter-bottom-box-height);
   transform: rotateX(0deg);
+  overflow: hidden;
 }
 
 .altimeter-baro-button {

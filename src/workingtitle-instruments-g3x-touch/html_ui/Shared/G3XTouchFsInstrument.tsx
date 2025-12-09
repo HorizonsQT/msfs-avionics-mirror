@@ -240,7 +240,13 @@ export abstract class G3XTouchFsInstrument implements FsInstrument {
   protected readonly backlightPublisher = new G3XBacklightPublisher(this.bus);
 
   protected readonly apInstrument = new AutopilotInstrument(this.bus);
-  protected readonly trafficInstrument = new TrafficInstrument(this.bus, { realTimeUpdateFreq: 2, simTimeUpdateFreq: 1, contactDeprecateTime: 10 });
+  protected readonly trafficInstrument = new TrafficInstrument(this.bus, {
+    syncRole: this.isPrimary ? 'primary' : 'replica',
+    syncId: 'g3x',
+    realTimeUpdateFreq: 2,
+    simTimeUpdateFreq: 1,
+    contactDeprecateTime: 10
+  });
   protected readonly trafficAvionicsSystem = this.config.traffic.resolve()(this.bus, this.trafficInstrument, 10000);
   protected readonly trafficSystem = this.trafficAvionicsSystem?.trafficSystem ?? null;
 
@@ -581,6 +587,7 @@ export abstract class G3XTouchFsInstrument implements FsInstrument {
         def.type === 'internal'
           ? {
             channelCount: 12,
+            sbasChannelCount: 1,
             satInUseMaxCount: 12,
             satInUsePdopTarget: 2,
             satInUseOptimumCount: 5

@@ -3,7 +3,7 @@ import { LatLonInterface } from '../../../geo/GeoInterfaces';
 import { UnitType } from '../../../math';
 import { DefaultFacilityWaypointCache } from '../../../navigation/DefaultFacilityWaypointCache';
 import {
-  AirportFacility, FacilitySearchType, FacilityType, IntersectionFacility, NdbFacility, VorFacility
+  AirportFacility, AirportFacilityDataFlags, Facility, FacilitySearchType, FacilityType, IntersectionFacility, NdbFacility, VorFacility
 } from '../../../navigation/Facilities';
 import { NearestIcaoSearchSession, NearestIcaoSearchSessionDataType } from '../../../navigation/FacilityClient';
 import {
@@ -11,6 +11,8 @@ import {
   NearestVorSearchSession
 } from '../../../navigation/FacilityLoader';
 import { FacilityWaypointCache } from '../../../navigation/FacilityWaypointCache';
+import { IcaoValue } from '../../../navigation/Icao';
+import { ICAO } from '../../../navigation/IcaoUtils';
 import { FacilityWaypoint, FacilityWaypointUtils, Waypoint, WaypointTypes } from '../../../navigation/Waypoint';
 import { FSComponent, VNode } from '../../FSComponent';
 import { MapLayer, MapLayerProps, MapNearestWaypointsLayer, MapProjection, MapSyncedCanvasLayer } from '../../map';
@@ -54,6 +56,13 @@ export interface MapSystemWaypointsLayerProps extends MapLayerProps<MapSystemWay
 
   /** An optional waypoint cache to use with this layer. Will default to DefaultFacilityWaypointCache if not supplied. */
   waypointCache?: FacilityWaypointCache;
+
+  /**
+   * Bitflags describing the requested data to be loaded in airport facilities retrieved by the layer. This controls
+   * what data are available from the airport waypoints that the layer registers with the waypoint renderer. Defaults
+   * to {@link AirportFacilityDataFlags.All}.
+   */
+  airportFacilityDataFlags?: number;
 }
 
 /**
@@ -66,6 +75,8 @@ export class MapSystemWaypointsLayer extends MapLayer<MapSystemWaypointsLayerPro
   private readonly displayModule = this.props.model.getModule(MapSystemKeys.NearestWaypoints);
 
   private readonly waypointCache = this.props.waypointCache ?? DefaultFacilityWaypointCache.getCache(this.props.bus);
+
+  private readonly airportFacilityDataFlags = this.props.airportFacilityDataFlags ?? AirportFacilityDataFlags.All;
 
   private readonly searchItemLimits = {
     [FacilitySearchType.Airport]: 500,
@@ -149,6 +160,17 @@ export class MapSystemWaypointsLayer extends MapLayer<MapSystemWaypointsLayerPro
   }
 
   /**
+   * Retrieves a facility for a given ICAO.
+   * @param facilityLoader The facility loader used by this layer. 
+   * @param icao The ICAO for which to retrieve a facility.
+   * @returns A Promise which is fulfilled with the facility for the specified ICAO, or `null` if a facility could not
+   * be retrieved.
+   */
+  private facilityForIcao(facilityLoader: FacilityLoader, icao: IcaoValue): Promise<Facility | null> {
+    return facilityLoader.tryGetFacility(ICAO.getFacilityTypeFromValue(icao), icao, this.airportFacilityDataFlags);
+  }
+
+  /**
    * Initializes this layer's waypoint renderer.
    * @param renderer This layer's waypoint renderer.
    * @param canvasLayer The canvas layer to which to draw the waypoints.
@@ -215,6 +237,7 @@ export class MapSystemWaypointsLayer extends MapLayer<MapSystemWaypointsLayerPro
         bus={this.props.bus}
         facilityLoader={this.props.facilityLoader}
         waypointRenderer={this.props.waypointRenderer}
+        facilityForIcao={this.facilityForIcao.bind(this)}
         waypointForFacility={(facility): Waypoint => this.waypointCache.get(facility)}
         initRenderer={this.initWaypointRenderer.bind(this)}
         registerWaypoint={this.registerWaypoint.bind(this)}

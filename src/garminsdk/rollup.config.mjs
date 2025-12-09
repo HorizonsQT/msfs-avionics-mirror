@@ -8,16 +8,17 @@ export default [
       file: 'dist/garminsdk.js',
       format: 'iife',
       name: 'garminsdk',
+      sourcemap: true,
       globals: {
         '@microsoft/msfs-sdk': 'msfssdk'
-      }
+      },
     },
     plugins: [resolve()],
-    external: ['@microsoft/msfs-sdk']
+    external: ['@microsoft/msfs-sdk'],
   },
   {
     input: "build/index.d.ts",
     output: [{ file: "dist/garminsdk.d.ts", format: "es" }],
     plugins: [dts()],
   }
-]
+];

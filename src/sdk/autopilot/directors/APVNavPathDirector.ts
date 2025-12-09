@@ -5,6 +5,8 @@ import { SimpleMovingAverage } from '../../math/SimpleMovingAverage';
 import { Accessible } from '../../sub/Accessible';
 import { Subscribable } from '../../sub/Subscribable';
 import { SubscribableUtils } from '../../sub/SubscribableUtils';
+import { APDataItem } from '../APDataProvider';
+import { APValues } from '../APValues';
 import { VNavVars } from '../vnav/VNavEvents';
 import { VNavUtils } from '../vnav/VNavUtils';
 import { DirectorState, PlaneDirector } from './PlaneDirector';
@@ -47,10 +49,13 @@ export type APVNavPathDirectorOptions = {
 };
 
 /**
- * A VNAV Path autopilot director.
+ * An autopilot director that generates flight director pitch commands to track a VNAV path.
+ * 
+ * If the director is created with access to an {@link APValues} object, then the director requires valid pitch data to
+ * arm or activate.
  */
 export class APVNavPathDirector implements PlaneDirector {
-
+  /** @inheritDoc */
   public state: DirectorState;
 
   /** @inheritDoc */
@@ -78,12 +83,25 @@ export class APVNavPathDirector implements PlaneDirector {
   protected readonly getFpaFunc: () => number;
   protected readonly getDeviationFunc: () => number;
 
+  private readonly pitch?: APDataItem<number>;
+
+  private readonly getGroundSpeedFunc: () => number;
+
+  /**
+   * Creates a new instance of APVNavPathDirector.
+   * @param apValues Autopilot values from this director's parent autopilot.
+   * @param options Options with which to configure the director.
+   */
+  public constructor(apValues: APValues, options?: Readonly<APVNavPathDirectorOptions>);
   /**
    * Creates a new instance of APVNavPathDirector.
    * @param bus The event bus.
    * @param options Options with which to configure the director.
+   * @deprecated Please use the overload that takes an {@link APValues} object instead.
    */
-  public constructor(bus: EventBus, options?: Readonly<APVNavPathDirectorOptions>) {
+  public constructor(bus: EventBus, options?: Readonly<APVNavPathDirectorOptions>);
+  // eslint-disable-next-line jsdoc/require-jsdoc
+  public constructor(arg1: APValues | EventBus, options?: Readonly<APVNavPathDirectorOptions>) {
     if (options?.guidance) {
       this.guidance = options.guidance;
 
@@ -108,36 +126,75 @@ export class APVNavPathDirector implements PlaneDirector {
       this.getDeviationFunc = SimVar.GetSimVarValue.bind(undefined, this.deviationSimVar, SimVarValueType.Feet);
     }
 
+    if (arg1 instanceof EventBus) {
+      this.getGroundSpeedFunc = SimVar.GetSimVarValue.bind(undefined, 'GROUND VELOCITY', SimVarValueType.Knots);
+    } else {
+      this.getGroundSpeedFunc = () => arg1.dataProvider.getItem('ground_speed').getActualValue();
+    }
+
     this.state = DirectorState.Inactive;
+  }
+
+  /**
+   * Checks whether the data required for this director to function are valid.
+   * @returns Whether the data required for this director to function are valid.
+   */
+  private isDataValid(): boolean {
+    return this.pitch === undefined || this.pitch.isValueValid();
   }
 
   /** @inheritDoc */
   public activate(): void {
+    if (this.state === DirectorState.Active || !this.isDataValid()) {
+      return;
+    }
+
     this.state = DirectorState.Active;
-    SimVar.SetSimVarValue('AUTOPILOT PITCH HOLD', 'Bool', 0);
+
     if (this.onActivate !== undefined) {
       this.onActivate();
     }
+
+    SimVar.SetSimVarValue('AUTOPILOT PITCH HOLD', 'Bool', 0);
   }
 
   /** @inheritDoc */
   public arm(): void {
-    if (this.state === DirectorState.Inactive) {
-      this.state = DirectorState.Armed;
-      if (this.onArm !== undefined) {
-        this.onArm();
-      }
+    if (this.state !== DirectorState.Inactive || !this.isDataValid()) {
+      return;
+    }
+
+    this.state = DirectorState.Armed;
+
+    if (this.onArm !== undefined) {
+      this.onArm();
     }
   }
 
   /** @inheritDoc */
   public deactivate(): void {
+    if (this.state === DirectorState.Inactive) {
+      return;
+    }
+
     this.state = DirectorState.Inactive;
-    this.onDeactivate && this.onDeactivate();
+
+    if (this.onDeactivate !== undefined) {
+      this.onDeactivate();
+    }
   }
 
   /** @inheritDoc */
   public update(): void {
+    if (this.state === DirectorState.Inactive) {
+      return;
+    }
+
+    if (!this.isDataValid()) {
+      this.deactivate();
+      return;
+    }
+
     if (this.state === DirectorState.Active) {
       if (!this.isGuidanceValidFunc()) {
         this.deactivate();
@@ -158,7 +215,7 @@ export class APVNavPathDirector implements PlaneDirector {
     // Deviation is positive if the path lies above the airplane.
     const deviation = this.getDeviationFunc();
 
-    const groundSpeed = SimVar.GetSimVarValue('GROUND VELOCITY', SimVarValueType.Knots);
+    const groundSpeed = this.getGroundSpeedFunc();
 
     const fpaPercentage = Math.max(deviation / (VNavUtils.getPathErrorDistance(groundSpeed) * -1), -1) + 1;
 

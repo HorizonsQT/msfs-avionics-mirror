@@ -173,7 +173,10 @@ export class G3XTrafficMapBuilder {
           GarminFacilityWaypointCache.getCache(context.bus),
           renderer,
           MapWaypointRenderRole.FlightPlanInactive,
-          MapWaypointRenderRole.FlightPlanActive
+          MapWaypointRenderRole.FlightPlanActive,
+          {
+            airportFacilityDataFlags: context[MapSystemKeys.WaypointRendererAirportDataFlags],
+          }
         );
       };
 
@@ -202,6 +205,7 @@ export class G3XTrafficMapBuilder {
     }
 
     return mapBuilder.with(TrafficMapBuilder.build, optionsToUse)
+      .withContext(MapSystemKeys.WaypointRendererAirportDataFlags, () => G3XMapUtils.AIRPORT_DATA_FLAGS)
       .withModule(GarminMapKeys.Traffic, () => new G3XMapTrafficModule(options.trafficSystem))
       .withInit<{ [GarminMapKeys.Traffic]: G3XMapTrafficModule }>('trafficSourceInit', context => {
         context.model.getModule(GarminMapKeys.Traffic).source.set(options.trafficSource);

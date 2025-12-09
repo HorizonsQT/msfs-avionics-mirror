@@ -257,6 +257,7 @@ export class G3XWaypointMapBuilder {
       .withContext(MapSystemKeys.FacilityLoader, context => {
         return options.facilityLoader ?? new FacilityLoader(FacilityRepository.getRepository(context.bus));
       })
+      .withContext(MapSystemKeys.WaypointRendererAirportDataFlags, () => G3XMapUtils.AIRPORT_DATA_FLAGS)
       .withModule(GarminMapKeys.WaypointSelection, () => new WaypointMapSelectionModule())
       .withModule(GarminMapKeys.Units, () => new MapUnitsModule(options.unitsSettingManager))
       .with(GarminMapBuilder.range,
@@ -386,7 +387,10 @@ export class G3XWaypointMapBuilder {
               GarminFacilityWaypointCache.getCache(context.bus),
               renderer,
               MapWaypointRenderRole.FlightPlanInactive,
-              MapWaypointRenderRole.FlightPlanActive
+              MapWaypointRenderRole.FlightPlanActive,
+              {
+                airportFacilityDataFlags: context[MapSystemKeys.WaypointRendererAirportDataFlags],
+              }
             );
           },
           pathRendererFactory: () => new DefaultFlightPathPlanRenderer(),

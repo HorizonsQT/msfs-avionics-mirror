@@ -93,6 +93,8 @@ export class WaypointSelection extends GNSUiControl<WaypointSelectionProps> {
           return;
         }
       }
+
+      icaos = icaos.filter(icao => ICAO.getIdent(icao).trim().length <= this.props.length);
       const facilityIdent = ICAO.getIdent(icaos[0]).trim();
       const matchingIcaos = exactOnly
         ? icaos.filter(icao => ICAO.getIdent(icao).trim() === ident)

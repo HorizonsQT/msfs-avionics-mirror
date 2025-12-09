@@ -124,9 +124,7 @@ export class G3XPitchLadder extends HorizonLayer<G3XPitchLadderProps> {
   private needRebuildLadder = false;
   private needReposition = false;
 
-  private showSub?: Subscription;
-  private clipBoundsSub?: Subscription;
-  private isChevronsEnabledSub?: Subscription;
+  private readonly subscriptions: Subscription[] = [];
 
   /** @inheritdoc */
   protected onVisibilityChanged(isVisible: boolean): void {
@@ -137,10 +135,11 @@ export class G3XPitchLadder extends HorizonLayer<G3XPitchLadderProps> {
   public onAttached(): void {
     super.onAttached();
 
-    this.showSub = this.props.show.sub(this.setVisible.bind(this), true);
-    this.clipBoundsSub = this.clipBounds.sub(() => {
-      this.needUpdateClip = true;
-    }, true);
+    this.subscriptions.push(
+      this.props.show.sub(this.setVisible.bind(this), true),
+      this.props.isSVTEnabled.sub(() => { this.needRebuildLadder = true; }, true),
+      this.clipBounds.sub(() => { this.needUpdateClip = true; }, true),
+    );
 
     this.needUpdateClip = true;
     this.needRebuildLadder = true;
@@ -216,7 +215,7 @@ export class G3XPitchLadder extends HorizonLayer<G3XPitchLadderProps> {
     const pitchOffset = this.props.projection.getPitch() * this.pitchResolution;
 
     this.transform.transform.getChild(0).set(-bounds[0], -bounds[1], 0, 0.1, 0.1);
-    this.transform.transform.getChild(1).set(-this.props.projection.getRoll());
+    this.transform.transform.getChild(1).set(-this.props.projection.getRoll(), 0.1);
     this.transform.transform.getChild(2).set(pitchOffset, 0.1);
     this.transform.resolve();
   }
@@ -365,9 +364,9 @@ export class G3XPitchLadder extends HorizonLayer<G3XPitchLadderProps> {
 
   /** @inheritdoc */
   public destroy(): void {
-    this.showSub?.destroy();
-    this.clipBoundsSub?.destroy();
-    this.isChevronsEnabledSub?.destroy();
+    for (const sub of this.subscriptions) {
+      sub.destroy();
+    }
 
     super.destroy();
   }

@@ -1,9 +1,11 @@
 import {
-  ActiveLegType, AdcPublisher, AhrsPublisher, AirportFacility, APRadioNavInstrument, Autopilot, AutopilotInstrument, ClockPublisher,
-  DefaultFlightPathAnticipatedDataCalculator, EISPublisher, EventBus, FacilityLoader, FacilityRepository, FacilityType, FacilityUtils,
-  FlightPathAirplaneSpeedMode, FlightPathAirplaneWindMode, FlightPathCalculator, FlightPlanner, FlightPlannerEvents, FlightPlanRouteManager,
-  FlightTimerInstrument, FlightTimerPublisher, FSComponent, FsInstrument, GNSSPublisher, GpsSynchronizer, HEventPublisher, ICAO, InstrumentBackplane,
-  NavComSimVarPublisher, SimVarValueType, SmoothingPathCalculator, Subject, VNode
+  ActiveLegType, AdcPublisher, AhrsPublisher, AirportFacility, APRadioNavInstrument, Autopilot, AutopilotInstrument,
+  ClockPublisher, DefaultFlightPathAnticipatedDataCalculator, EISPublisher, EventBus, FacilityLoader,
+  FacilityRepository, FacilityType, FacilityUtils, FlightPathAirplaneSpeedMode, FlightPathAirplaneWindMode,
+  FlightPathCalculator, FlightPlanner, FlightPlannerEvents, FlightPlanRouteManager, FlightPlanRouteUtils,
+  FlightTimerInstrument, FlightTimerPublisher, FSComponent, FsInstrument, GNSSPublisher, GpsSynchronizer,
+  HEventPublisher, ICAO, InstrumentBackplane, NavComSimVarPublisher, NearestContext, SimVarValueType,
+  SmoothingPathCalculator, Subject, UnitType, VNode, Wait,
 } from '@microsoft/msfs-sdk';
 
 import { UnsAPConfig } from './Autopilot/UnsAPConfig';
@@ -277,11 +279,19 @@ export class WTUns1FsInstrument implements FsInstrument {
 
     if (this.flightPlanRouteSyncManager) {
       this.flightPlanRouteSyncManager.init(routeManager, new UnsFlightPlanRouteLoader(this.fms));
+
+      // Always load the synced avionics route, or the EFB route if a synced route does not exist, on flight start.
+      const routeToLoad = routeManager.syncedAvionicsRoute.get() ?? routeManager.efbRoute.get();
+
+      if (!FlightPlanRouteUtils.isRouteEmpty(routeToLoad, false)) {
+        await this.flightPlanRouteSyncManager.loadRoute(routeToLoad);
+      } else {
+        // If the synced route is empty, then try and insert the nearest airport as origin
+        this.tryInsertNearestAirportAsOrigin();
+      }
     }
 
     this.nearestContext.init();
-
-    // await UnsDevFlightPlan.insertDevPlan(this.fms);
 
     this.initFlightPlanSubs();
 
@@ -297,6 +307,36 @@ export class WTUns1FsInstrument implements FsInstrument {
       this.renderComponents(),
       document.getElementById('Electricity'),
     );
+  }
+
+  /**
+   * Tries to insert the nearest airport as the flight plan origin
+   */
+  private tryInsertNearestAirportAsOrigin(): void {
+    // When the nearest context is initialized, wait for nearest airport to be available and then insert it into the plan
+    // if it's less than 3NM away
+    NearestContext.onInitialized(async (instance) => {
+      await Wait.awaitCondition(() => instance.airports.length !== 0, 500, 15_000).catch(() => {
+        console.error('[WTUns1FsInstrument](tryInsertNearestAirportAsOrigin) Wait for nearest airports took longer than 15s and timed out');
+      });
+
+      // ...but if by that time an airport was manually selected, don't bother
+      if (this.fms.getPrimaryFlightPlan().originAirportIcao !== undefined) {
+        return;
+      }
+
+      const nearestAirport = instance.getNearest(FacilityType.Airport);
+
+      if (!nearestAirport) {
+        return;
+      }
+
+      const distanceToArp = this.fms.pposSub.get().distance(nearestAirport);
+
+      if (UnitType.NMILE.convertFrom(distanceToArp, UnitType.GA_RADIAN) < 3) {
+        this.fms.setOrigin(nearestAirport);
+      }
+    });
   }
 
   /**

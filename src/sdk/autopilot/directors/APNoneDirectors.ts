@@ -10,10 +10,23 @@ export class APNoneVerticalDirector implements PlaneDirector {
   public state = DirectorState.Inactive;
 
   /** @inheritdoc */
+  public onActivate?: (() => void) | undefined;
+
+  /** @inheritdoc */
+  public onArm?: (() => void) | undefined;
+
+  /** @inheritdoc */
+  public onDeactivate?: (() => void) | undefined;
+
+  /** @inheritdoc */
   public drivePitch?: (pitch: number, adjustForAoa?: boolean, adjustForVerticalWind?: boolean) => void;
 
   /** @inheritdoc */
   public activate(): void {
+    if (this.state === DirectorState.Active) {
+      return;
+    }
+
     this.state = DirectorState.Active;
 
     Coherent.call('apSetAutopilotMode', MSFSAPStates.Alt, 0);
@@ -39,22 +52,21 @@ export class APNoneVerticalDirector implements PlaneDirector {
 
   /** @inheritdoc */
   public deactivate(): void {
+    if (this.state === DirectorState.Inactive) {
+      return;
+    }
+
     this.state = DirectorState.Inactive;
+
+    if (this.onDeactivate !== undefined) {
+      this.onDeactivate();
+    }
   }
 
   /** @inheritdoc */
   public update(): void {
     /** No-op */
   }
-
-  /** @inheritdoc */
-  public onActivate?: (() => void) | undefined;
-
-  /** @inheritdoc */
-  public onArm?: (() => void) | undefined;
-
-  /** @inheritdoc */
-  public onDeactivate?: (() => void) | undefined;
 }
 
 /**
@@ -66,10 +78,23 @@ export class APNoneLateralDirector implements PlaneDirector {
   public state = DirectorState.Inactive;
 
   /** @inheritdoc */
+  public onActivate?: (() => void) | undefined;
+
+  /** @inheritdoc */
+  public onArm?: (() => void) | undefined;
+
+  /** @inheritdoc */
+  public onDeactivate?: (() => void) | undefined;
+
+  /** @inheritdoc */
   public setBank?: (bank: number) => void;
 
   /** @inheritdoc */
   public activate(): void {
+    if (this.state === DirectorState.Active) {
+      return;
+    }
+
     this.state = DirectorState.Active;
 
     Coherent.call('apSetAutopilotMode', MSFSAPStates.Bank, 0);
@@ -92,20 +117,19 @@ export class APNoneLateralDirector implements PlaneDirector {
 
   /** @inheritdoc */
   public deactivate(): void {
+    if (this.state === DirectorState.Inactive) {
+      return;
+    }
+
     this.state = DirectorState.Inactive;
+
+    if (this.onDeactivate !== undefined) {
+      this.onDeactivate();
+    }
   }
 
   /** @inheritdoc */
   public update(): void {
     /** No-op */
   }
-
-  /** @inheritdoc */
-  public onActivate?: (() => void) | undefined;
-
-  /** @inheritdoc */
-  public onArm?: (() => void) | undefined;
-
-  /** @inheritdoc */
-  public onDeactivate?: (() => void) | undefined;
 }

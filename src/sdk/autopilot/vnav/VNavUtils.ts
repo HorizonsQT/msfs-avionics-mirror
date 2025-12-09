@@ -1,5 +1,8 @@
 import { FlightPlan, FlightPlanLegIterator, FlightPlanUtils, LegDefinition, SpeedConstraint } from '../../flightplan';
-import { BitFlags, UnitType } from '../../math';
+import { BitFlags } from '../../math/BitFlags';
+import { MathUtils } from '../../math/MathUtils';
+import { UnitType } from '../../math/NumberUnit';
+
 import { AltitudeRestrictionType, FixTypeFlags, LegType } from '../../navigation';
 import {
   AltitudeConstraintDetails, SpeedConstraintDetails, TocBocDetails, TodBodDetails, VNavConstraint, VNavLeg,
@@ -10,6 +13,74 @@ import {
  * A utility class for working with VNAV.
  */
 export class VNavUtils {
+  /**
+   * Gets a vertical flight plan's legs.
+   * @param verticalPlan The vertical flight plan for which to get legs.
+   * @param reverse Whether to get the legs in reverse order. Defaults to `false`.
+   * @param startIndex The global leg index of the leg at which to start, inclusive. Defaults to `0` if `reverse` is
+   * `false` or `verticalPlan.length - 1` if `reverse` is `true`.
+   * @param endIndex The global leg index of the leg at which to end, exclusive. Defaults to `verticalPlan.length` if
+   * `reverse` is `false` or `-1` if `reverse` is `true`.
+   * @returns A generator which yields the specified vertical flight plan's legs.
+   */
+  public static planLegs(verticalPlan: VerticalFlightPlan, reverse = false, startIndex?: number, endIndex?: number): Generator<VNavLeg, void> {
+    return reverse ? VNavUtils.planLegsReverse(verticalPlan, startIndex, endIndex) : VNavUtils.planLegsForward(verticalPlan, startIndex, endIndex);
+  }
+
+  /**
+   * Gets a vertical flight plan's legs in forward order.
+   * @param verticalPlan The vertical flight plan for which to get legs.
+   * @param startIndex The global leg index of the leg at which to start, inclusive. Defaults to `0`.
+   * @param endIndex The global leg index of the leg at which to end, exclusive. Defaults to `verticalPlan.length`.
+   * @yields The specified vertical flight plan's legs in forward order.
+   */
+  private static *planLegsForward(verticalPlan: VerticalFlightPlan, startIndex = 0, endIndex = verticalPlan.length): Generator<VNavLeg, void> {
+    endIndex = Math.min(verticalPlan.length, endIndex);
+
+    for (let i = 0; i < verticalPlan.segments.length; i++) {
+      const segment = verticalPlan.segments[i];
+
+      if (segment !== undefined && segment.legs.length > 0) {
+        const end = Math.min(segment.legs.length, endIndex - segment.offset);
+
+        if (end <= 0) {
+          return;
+        }
+
+        for (let l = Math.max(0, startIndex - segment.offset); l < end; l++) {
+          yield segment.legs[l];
+        }
+      }
+    }
+  }
+
+  /**
+   * Gets a vertical flight plan's legs in reverse order.
+   * @param verticalPlan The vertical flight plan for which to get legs.
+   * @param startIndex The global leg index of the leg at which to start, inclusive. Defaults to
+   * `verticalPlan.length - 1`.
+   * @param endIndex The global leg index of the leg at which to end, exclusive. Defaults to `-1`.
+   * @yields The specified vertical flight plan's legs in reverse order.
+   */
+  private static *planLegsReverse(verticalPlan: VerticalFlightPlan, startIndex = verticalPlan.length - 1, endIndex = -1): Generator<VNavLeg, void> {
+    endIndex = Math.max(-1, endIndex);
+
+    for (let i = verticalPlan.segments.length - 1; i > -1; i--) {
+      const segment = verticalPlan.segments[i];
+
+      if (segment !== undefined && segment.legs.length > 0) {
+        const end = Math.max(-1, endIndex - segment.offset);
+
+        if (end >= segment.legs.length) {
+          return;
+        }
+
+        for (let l = Math.min(segment.legs.length - 1, startIndex - segment.offset); l > end; l--) {
+          yield segment.legs[l];
+        }
+      }
+    }
+  }
 
   /**
    * Checks if a constraint is a user-created constraint.
@@ -268,34 +339,284 @@ export class VNavUtils {
   }
 
   /**
-   * Gets the distance from the current location in the plan to the constraint.
-   * @param constraint The vnav constraint to calculate the distance to.
-   * @param lateralPlan The lateral flight plan.
-   * @param activeLegIndex The current active leg index.
-   * @param distanceAlongLeg The current distance along leg.
-   * @returns the distance to the constraint, or positive infinity if a discontinuity exists between the ppos and the constraint.
+   * Gets the distance from one constraint to another, in meters, calculated using vertical flight plan leg distances.
+   * Positive distances indicate the TO constraint is located past the FROM constraint, and negative distances indicate
+   * the TO constraint is located prior to the FROM constraint.
+   * @param verticalPlan The vertical flight plan containing the constraints between which to measure distance.
+   * @param constraintIndex The index of the constraint to which to calculate distance (the TO constraint).
+   * @param fromConstraintIndex The index of the constraint from which to calculate distance (the FROM constraint). If
+   * this index is greater than or equal to the length of the vertical flight plan's constraints array, then the
+   * distance will be measured from the beginning of the flight plan. Defaults to the index of the constraint
+   * immediately prior to the TO constraint (in flight plan order).
+   * @returns The distance between the two specified constraints, in meters, calculated using vertical flight plan leg
+   * distances.
+   * @throws RangeError if `constraintIndex` is out of bounds.
    */
-  public static getDistanceToConstraint(constraint: VNavConstraint, lateralPlan: FlightPlan, activeLegIndex: number, distanceAlongLeg: number): number {
-    if (activeLegIndex > constraint.index) {
+  public static getConstraintDistanceWithOffsetsFromLegs(verticalPlan: VerticalFlightPlan, constraintIndex: number, fromConstraintIndex = constraintIndex + 1): number {
+    const constraints = verticalPlan.constraints;
+
+    if (constraintIndex < 0 || constraintIndex >= constraints.length) {
+      throw new RangeError();
+    }
+
+    fromConstraintIndex = MathUtils.clamp(fromConstraintIndex, 0, constraints.length);
+
+    if (fromConstraintIndex === constraintIndex) {
       return 0;
     }
 
+    // If fromConstraintIndex is less than constraintIndex, then the FROM constraint lies *after* the TO constraint in
+    // the flight plan (the ordering of constraints in the vertical plan is reversed). Therefore, we can calculate the
+    // distance from the FROM constraint to the TO constraint as the negative of the distance from the TO constraint to
+    // the FROM constraint.
+    if (fromConstraintIndex < constraintIndex) {
+      // NOTE: fromConstraintIndex is less than constraintIndex. The latter is guaranteed to be in bounds and
+      // fromConstraintIndex cannot be negative, so fromConstraintIndex is also guaranteed to be in bounds.
+      return -VNavUtils.getConstraintDistanceWithOffsetsFromLegs(verticalPlan, fromConstraintIndex, constraintIndex);
+    }
+
+    const constraint = constraints[constraintIndex];
+    const fromConstraint = constraints[fromConstraintIndex] as VNavConstraint | undefined;
+
     let distance = 0;
 
-    let index = activeLegIndex;
-    for (const leg of lateralPlan.legs(false, activeLegIndex)) {
-      if (FlightPlanUtils.isDiscontinuityLeg(leg.leg.type)) {
-        return Number.POSITIVE_INFINITY;
-      } else if (leg.calculated !== undefined) {
-        distance += leg.calculated.distanceWithTransitions;
-      }
+    if (fromConstraint) {
+      distance -= fromConstraint.alongTrackOffset ?? 0;
+    }
 
-      if (++index > constraint.index) {
-        break;
+    for (const leg of VNavUtils.planLegs(verticalPlan, false, fromConstraint ? fromConstraint.index + 1 : 0, constraint.index + 1)) {
+      distance += leg.distance;
+    }
+
+    distance += constraints[constraintIndex].alongTrackOffset ?? 0;
+
+    return distance;
+  }
+
+  /**
+   * Gets the distance from the active location in a flight plan to a VNAV constraint, in meters. If the active
+   * location is past the constraint, then the distance is considered to be zero. If the active location is not past
+   * the constraint but there is a discontinuity leg between the two (including if the discontinuity leg contains one
+   * or both of the active location and constraint), then the distance is considered to be positive infinity.
+   * 
+   * The distance calculated by this method is based on the leg distances reported by the lateral flight plan, _not_
+   * the leg distances reported by the vertical flight plan.
+   * @param constraint The VNAV constraint to calculate the distance to.
+   * @param lateralPlan The lateral flight plan that contains the VNAV constraint.
+   * @param activeLegIndex The global index of the flight plan leg containing the active location (the active leg).
+   * @param distanceAlongLeg The along-track distance from the start of the active leg to the active location, in
+   * meters.
+   * @returns The distance from the specified active location to the specified VNAV constraint along the flight plan,
+   * in meters.
+   */
+  public static getDistanceToConstraint(constraint: VNavConstraint, lateralPlan: FlightPlan, activeLegIndex: number, distanceAlongLeg: number): number {
+    if (activeLegIndex < 0) {
+      activeLegIndex = 0;
+      distanceAlongLeg = 0;
+    }
+
+    if (activeLegIndex >= lateralPlan.length) {
+      return 0;
+    }
+
+    let constraintLegIndex = constraint.index;
+    let constraintDistanceToLegEnd = -(constraint.alongTrackOffset ?? 0);
+
+    if (constraintDistanceToLegEnd < 0) {
+      // The constraint is past the end of the constraint leg. We need to iterate forward through the flight plan to
+      // find the leg that contains the constraint.
+
+      let legIndex = constraintLegIndex + 1;
+      for (const leg of lateralPlan.legs(false, legIndex)) {
+        constraintLegIndex = legIndex;
+
+        // Assume that disco legs have an infinite length. Therefore if we encounter one, the constraint is located at
+        // some indeterminate point along the (infinite length) disco leg.
+        if (FlightPlanUtils.isDiscontinuityLeg(leg.leg.type)) {
+          // If the constraint is located in a disco leg, then there are only two possible cases left to consider for
+          // the distance to constraint calculation:
+          // (1) The active leg is at or before the disco leg. Because we assume that disco legs have infinite length,
+          // the distance from the active location to the constraint is infinite.
+          // (2) The active leg is past the disco leg. By convention, the distance from the active location to the
+          // constraint is zero.
+          if (activeLegIndex <= constraintLegIndex) {
+            return Number.POSITIVE_INFINITY;
+          } else {
+            return 0;
+          }
+        }
+
+        if (leg.calculated) {
+          constraintDistanceToLegEnd += leg.calculated.distanceWithTransitions;
+          if (constraintDistanceToLegEnd >= 0) {
+            // The constraint is located within the current leg. We are done with the iteration.
+            break;
+          }
+        }
+
+        ++legIndex;
+      }
+    } else if (constraintDistanceToLegEnd > 0) {
+      // The constraint is prior to the end of the constraint leg. We need to iterate backward through the flight plan
+      // to find the leg that contains the constraint.
+
+      let legIndex = constraintLegIndex;
+      for (const leg of lateralPlan.legs(true, legIndex)) {
+        constraintLegIndex = legIndex;
+
+        // Assume that disco legs have an infinite length. Therefore if we encounter one, the constraint is located at
+        // some indeterminate point along the (infinite length) disco leg.
+        if (FlightPlanUtils.isDiscontinuityLeg(leg.leg.type)) {
+          // If the constraint is located in a disco leg, then there are only two possible cases left to consider for
+          // the distance to constraint calculation:
+          // (1) The active leg is at or before the disco leg. Because we assume that disco legs have infinite length,
+          // the distance from the active location to the constraint is infinite.
+          // (2) The active leg is past the disco leg. By convention, the distance from the active location to the
+          // constraint is zero.
+          if (activeLegIndex <= constraintLegIndex) {
+            return Number.POSITIVE_INFINITY;
+          } else {
+            return 0;
+          }
+        }
+
+        if (leg.calculated) {
+          if (constraintDistanceToLegEnd <= leg.calculated.distanceWithTransitions) {
+            // The constraint is located within the current leg. We are done with the iteration.
+            break;
+          } else {
+            constraintDistanceToLegEnd -= leg.calculated.distanceWithTransitions;
+          }
+        }
+
+        --legIndex;
       }
     }
 
-    distance -= distanceAlongLeg;
+    // If the active leg is past the leg containing the constraint, then by convention the distance from the active
+    // location to the constraint is zero.
+    if (activeLegIndex > constraintLegIndex) {
+      return 0;
+    }
+
+    // Iterate forward through the flight plan starting at the active leg and keep track of the traversed distance
+    // until we reach the constraint.
+
+    let distance = -distanceAlongLeg;
+
+    let legIndex = activeLegIndex;
+    for (const leg of lateralPlan.legs(false, legIndex, constraintLegIndex + 1)) {
+      // Assume that disco legs have an infinite length. Therefore if we encounter one before we reach the constraint,
+      // the distance from the active location to the constraint is infinite. Note that in the case where the disco leg
+      // contains the constraint and/or the active location, we still use this interpretation because the constraint
+      // and/or active location are at indeterminate points along the leg.
+      if (FlightPlanUtils.isDiscontinuityLeg(leg.leg.type)) {
+        return Number.POSITIVE_INFINITY;
+      }
+
+      if (leg.calculated) {
+        distance += leg.calculated.distanceWithTransitions;
+      }
+
+      if (legIndex === constraintLegIndex) {
+        distance -= constraintDistanceToLegEnd;
+        break;
+      }
+
+      ++legIndex;
+    }
+
+    return Math.max(0, distance);
+  }
+
+  /**
+   * Gets the distance from the active location in a flight plan to a VNAV constraint, in meters. Positive distances
+   * indicate the constraint is located after the active location along the flight plan, and negative distances
+   * indicate the constraint is located before the active location.
+   * 
+   * The distance calculated by this method is based on the leg distances reported by the vertical flight plan.
+   * @param verticalPlan The vertical flight plan that contains the VNAV constraint to which to calculate the distance.
+   * @param constraintIndex The index of the VNAV constraint to which to calculate the distance.
+   * @param activeLegIndex The global index of the flight plan leg containing the active location (the active leg).
+   * @param activeDistanceToLegEnd The along-track distance from the active location to the end of the active leg, in
+   * meters.
+   * @returns The distance from the specified active location to the specified VNAV constraint along the flight plan,
+   * in meters.
+   * @throws RangeError if `constraintIndex` is out of bounds.
+   */
+  public static getVerticalPlanDistanceToConstraint(
+    verticalPlan: VerticalFlightPlan,
+    constraintIndex: number,
+    activeLegIndex: number,
+    activeDistanceToLegEnd: number
+  ): number {
+    if (constraintIndex < 0 || constraintIndex >= verticalPlan.constraints.length) {
+      throw new RangeError();
+    }
+
+    const constraint = verticalPlan.constraints[constraintIndex];
+
+    if (activeLegIndex < 0) {
+      activeLegIndex = -1;
+      activeDistanceToLegEnd = 0;
+    }
+
+    if (activeLegIndex >= verticalPlan.length) {
+      activeLegIndex = verticalPlan.length - 1;
+      activeDistanceToLegEnd = 0;
+    }
+
+    const constraintLegIndex = constraint.containingLegIndex ?? constraint.index;
+    const constraintDistanceToLegEnd = constraint.containingLegDistanceToEnd ?? 0;
+
+    let distance = 0;
+
+    if (activeLegIndex <= constraintLegIndex) {
+      // Iterate backward through the flight plan starting at the constraint and keep track of the traversed distance
+      // until we reach the active location.
+
+      // NOTE: activeLegIndex can be -1, and in this case we will never traverse the active leg because it doesn't
+      // exist. However, when activeLegIndex = -1, activeDistanceToLegEnd is always zero, meaning the active location
+      // is located at the beginning of the first leg of the flight plan. Therefore, we will have traversed to the
+      // active location if we traverse to the beginning of the first leg, which we are guaranteed to do in this case.
+
+      distance = -constraintDistanceToLegEnd;
+
+      let legIndex = constraintLegIndex;
+      for (const leg of VNavUtils.planLegs(verticalPlan, true, legIndex, activeLegIndex - 1)) {
+        if (legIndex === activeLegIndex) {
+          distance += activeDistanceToLegEnd;
+          break;
+        } else {
+          distance += leg.distance;
+        }
+
+        --legIndex;
+      }
+    } else {
+      // Iterate backward through the flight plan starting at the active location and keep track of the traversed
+      // distance until we reach the constraint.
+
+      // NOTE: we are guaranteed to traverse the leg containing the constraint because constraintLegIndex is guaranteed
+      // to be in bounds.
+
+      // NOTE: activeLegIndex must be in bounds because constraintLegIndex < activeLegIndex < verticalPlan.length, and
+      // constraintLegIndex is guaranteed to be in bounds.
+
+      distance = activeDistanceToLegEnd;
+
+      let legIndex = activeLegIndex;
+      for (const leg of VNavUtils.planLegs(verticalPlan, true, legIndex, constraintLegIndex - 1)) {
+        if (legIndex === constraintLegIndex) {
+          distance -= constraintDistanceToLegEnd;
+          break;
+        } else {
+          distance -= leg.distance;
+        }
+
+        --legIndex;
+      }
+    }
 
     return distance;
   }
@@ -368,6 +689,60 @@ export class VNavUtils {
   }
 
   /**
+   * Gets the index of the next constraint that is located at or after a query point along the flight plan and
+   * satisfies an optional condition.
+   * @param verticalPlan The vertical flight plan.
+   * @param globalLegIndex The global index of the flight plan leg containing the query point.
+   * @param distanceToLegEnd The distance from the query point to the end of its containing leg, in meters.
+   * @param predicate A function that evaluates whether a constraint satisfies the condition that is required for the
+   * constraint to be selected by this method. The function is called once for each evaluated constraint and should
+   * return `true` if the constraint satisfies the condition and `false` otherwise. If not defined, then constraints
+   * do not need to satisfy any additional condition to be selected by this method.
+   * @returns The index of the next descent constraint that is located at or after the specified query point and
+   * satisifes the specified condition, or `-1` if one could not be found.
+   */
+  public static getNextConstraintIndexFromPoint(
+    verticalPlan: VerticalFlightPlan,
+    globalLegIndex: number,
+    distanceToLegEnd: number,
+    predicate?: (constraint: VNavConstraint, constraintIndex: number, verticalPlan: VerticalFlightPlan) => boolean,
+  ): number {
+    if (globalLegIndex >= verticalPlan.length) {
+      return -1;
+    }
+
+    if (globalLegIndex < 0) {
+      globalLegIndex = 0;
+      distanceToLegEnd = Infinity;
+    }
+
+    const constraints = verticalPlan.constraints;
+
+    for (let constraintIndex = constraints.length - 1; constraintIndex >= 0; constraintIndex--) {
+      const constraint = constraints[constraintIndex];
+
+      let constraintLegIndex = constraint.index;
+      let constraintDistanceToLegEnd = 0;
+
+      if (constraint.containingLegIndex !== undefined && constraint.containingLegDistanceToEnd !== undefined) {
+        constraintLegIndex = constraint.containingLegIndex;
+        constraintDistanceToLegEnd = constraint.containingLegDistanceToEnd;
+      }
+
+      if (
+        constraintLegIndex > globalLegIndex
+        || (constraintLegIndex === globalLegIndex && constraintDistanceToLegEnd <= distanceToLegEnd)
+      ) {
+        if (!predicate || predicate(constraint, constraintIndex, verticalPlan)) {
+          return constraintIndex;
+        }
+      }
+    }
+
+    return -1;
+  }
+
+  /**
    * Gets the index of the next descent constraint at or after a flight plan leg.
    * @param verticalPlan The vertical flight plan.
    * @param globalLegIndex The global index of the flight plan leg to find the constraint for.
@@ -384,6 +759,27 @@ export class VNavUtils {
     }
 
     return -1;
+  }
+
+  /**
+   * Gets the index of the next descent constraint at or after a query point along the flight plan.
+   * @param verticalPlan The vertical flight plan.
+   * @param globalLegIndex The global index of the flight plan leg containing the query point.
+   * @param distanceToLegEnd The distance from the query point to the end of its containing leg, in meters.
+   * @returns The index of the next descent constraint at or after the specified query point, or `-1` if one could not
+   * be found.
+   */
+  public static getNextDescentConstraintIndexFromPoint(verticalPlan: VerticalFlightPlan, globalLegIndex: number, distanceToLegEnd: number): number {
+    return VNavUtils.getNextConstraintIndexFromPoint(verticalPlan, globalLegIndex, distanceToLegEnd, VNavUtils.isDescentConstraint);
+  }
+
+  /**
+   * Checks whether a constraint is a descent constraint.
+   * @param constraint The constraint to check.
+   * @returns Whether the specified constraint is a descent constraint.
+   */
+  private static isDescentConstraint(constraint: VNavConstraint): boolean {
+    return constraint.type !== 'climb' && constraint.type !== 'missed';
   }
 
   /**
@@ -406,6 +802,27 @@ export class VNavUtils {
   }
 
   /**
+   * Gets the index of the next climb constraint at or after a query point along the flight plan.
+   * @param verticalPlan The vertical flight plan.
+   * @param globalLegIndex The global index of the flight plan leg containing the query point.
+   * @param distanceToLegEnd The distance from the query point to the end of its containing leg, in meters.
+   * @returns The index of the next climb constraint at or after the specified query point, or `-1` if one could not be
+   * found.
+   */
+  public static getNextClimbConstraintIndexFromPoint(verticalPlan: VerticalFlightPlan, globalLegIndex: number, distanceToLegEnd: number): number {
+    return VNavUtils.getNextConstraintIndexFromPoint(verticalPlan, globalLegIndex, distanceToLegEnd, VNavUtils.isClimbConstraint);
+  }
+
+  /**
+   * Checks whether a constraint is a climb constraint.
+   * @param constraint The constraint to check.
+   * @returns Whether the specified constraint is a climb constraint.
+   */
+  private static isClimbConstraint(constraint: VNavConstraint): boolean {
+    return constraint.type === 'climb';
+  }
+
+  /**
    * Gets the index of the next missed approach constraint at or after a flight plan leg.
    * @param verticalPlan The vertical flight plan.
    * @param globalLegIndex The global index of the flight plan leg to find the constraint for.
@@ -425,6 +842,27 @@ export class VNavUtils {
   }
 
   /**
+   * Gets the index of the next missed approach constraint at or after a query point along the flight plan.
+   * @param verticalPlan The vertical flight plan.
+   * @param globalLegIndex The global index of the flight plan leg containing the query point.
+   * @param distanceToLegEnd The distance from the query point to the end of its containing leg, in meters.
+   * @returns The index of the next missed approach constraint at or after the specified query point, or `-1` if one
+   * could not be found.
+   */
+  public static getNextMaprConstraintIndexFromPoint(verticalPlan: VerticalFlightPlan, globalLegIndex: number, distanceToLegEnd: number): number {
+    return VNavUtils.getNextConstraintIndexFromPoint(verticalPlan, globalLegIndex, distanceToLegEnd, VNavUtils.isMaprConstraint);
+  }
+
+  /**
+   * Checks whether a constraint is a missed approach constraint.
+   * @param constraint The constraint to check.
+   * @returns Whether the specified constraint is a missed approach constraint.
+   */
+  private static isMaprConstraint(constraint: VNavConstraint): boolean {
+    return constraint.type === 'missed';
+  }
+
+  /**
    * Gets the next descent constraint with a defined minimum altitude at or after a flight plan leg.
    * @param verticalPlan The vertical flight plan.
    * @param globalLegIndex The global index of the flight plan leg to find the constraint for.
@@ -441,6 +879,29 @@ export class VNavUtils {
     }
 
     return undefined;
+  }
+
+  /**
+   * Gets the index of the next descent constraint with a defined minimum altitude at or after a query point along the
+   * flight plan.
+   * @param verticalPlan The vertical flight plan.
+   * @param globalLegIndex The global index of the flight plan leg containing the query point.
+   * @param distanceToLegEnd The distance from the query point to the end of its containing leg, in meters.
+   * @returns The index of the next descent constraint with a defined minimum altitude at or after the specified query
+   * point, or `-1` if one could not be found.
+   */
+  public static getNextDescentTargetConstraintIndexFromPoint(verticalPlan: VerticalFlightPlan, globalLegIndex: number, distanceToLegEnd: number): number {
+    return VNavUtils.getNextConstraintIndexFromPoint(verticalPlan, globalLegIndex, distanceToLegEnd, VNavUtils.isDescentTargetConstraint);
+  }
+
+  /**
+   * Checks whether a constraint is a descent constraint with a defined minimum altitude.
+   * @param constraint The constraint to check.
+   * @returns Whether the specified constraint is a descent constraint with a defined minimum altitude.
+   */
+  private static isDescentTargetConstraint(constraint: VNavConstraint): boolean {
+    return (constraint.type === 'descent' || constraint.type === 'direct' || constraint.type === 'manual')
+      && constraint.minAltitude > Number.NEGATIVE_INFINITY;
   }
 
   /**
@@ -481,6 +942,28 @@ export class VNavUtils {
     }
 
     return undefined;
+  }
+
+  /**
+   * Gets the index of the next climb constraint with a defined maximum altitude at or after a query point along the
+   * flight plan.
+   * @param verticalPlan The vertical flight plan.
+   * @param globalLegIndex The global index of the flight plan leg containing the query point.
+   * @param distanceToLegEnd The distance from the query point to the end of its containing leg, in meters.
+   * @returns The index of the next climb constraint with a defined maximum altitude at or after the specified query
+   * point, or `-1` if one could not be found.
+   */
+  public static getNextClimbTargetConstraintIndexFromPoint(verticalPlan: VerticalFlightPlan, globalLegIndex: number, distanceToLegEnd: number): number {
+    return VNavUtils.getNextConstraintIndexFromPoint(verticalPlan, globalLegIndex, distanceToLegEnd, VNavUtils.isClimbTargetConstraint);
+  }
+
+  /**
+   * Checks whether a constraint is a climb constraint with a defined maximum altitude.
+   * @param constraint The constraint to check.
+   * @returns Whether the specified constraint is a climb constraint with a defined maximum altitude.
+   */
+  private static isClimbTargetConstraint(constraint: VNavConstraint): boolean {
+    return constraint.type === 'climb' && constraint.maxAltitude < Number.POSITIVE_INFINITY;
   }
 
   /**
@@ -526,6 +1009,28 @@ export class VNavUtils {
     }
 
     return undefined;
+  }
+
+  /**
+   * Gets the index of the next missed approach constraint with a defined maximum altitude at or after a query point
+   * along the flight plan.
+   * @param verticalPlan The vertical flight plan.
+   * @param globalLegIndex The global index of the flight plan leg containing the query point.
+   * @param distanceToLegEnd The distance from the query point to the end of its containing leg, in meters.
+   * @returns The index of the next missed approach constraint with a defined maximum altitude at or after the
+   * specified query point, or `-1` if one could not be found.
+   */
+  public static getNextMaprTargetConstraintIndexFromPoint(verticalPlan: VerticalFlightPlan, globalLegIndex: number, distanceToLegEnd: number): number {
+    return VNavUtils.getNextConstraintIndexFromPoint(verticalPlan, globalLegIndex, distanceToLegEnd, VNavUtils.isMaprTargetConstraint);
+  }
+
+  /**
+   * Checks whether a constraint is a missed approach constraint with a defined maximum altitude.
+   * @param constraint The constraint to check.
+   * @returns Whether the specified constraint is a missed approach constraint with a defined maximum altitude.
+   */
+  private static isMaprTargetConstraint(constraint: VNavConstraint): boolean {
+    return constraint.type === 'missed' && constraint.maxAltitude < Number.POSITIVE_INFINITY;
   }
 
   /**

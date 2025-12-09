@@ -1,10 +1,11 @@
+import { MathUtils } from '../../../math/MathUtils';
 import { NumberUnitInterface, UnitFamily, UnitType } from '../../../math/NumberUnit';
 import { NumberUnitSubject } from '../../../math/NumberUnitSubject';
 import { Subject } from '../../../sub/Subject';
 import { Subscribable } from '../../../sub/Subscribable';
 
 /**
- * A module describing the nominal range of a map.
+ * A module describing the nominal range of a map, as selected from an array of ranges.
  */
 export class MapIndexedRangeModule {
   /** The index of the nominal range. */
@@ -15,10 +16,12 @@ export class MapIndexedRangeModule {
     = Subject.create([UnitType.NMILE.createNumber(1)] as readonly NumberUnitInterface<UnitFamily.Distance>[]);
 
   /** The nominal range. */
-  public readonly nominalRange = NumberUnitSubject.createFromNumberUnit(UnitType.NMILE.createNumber(1)) as Subscribable<NumberUnitInterface<UnitFamily.Distance>>;
+  public readonly nominalRange = NumberUnitSubject.create(UnitType.NMILE.createNumber(1)) as Subscribable<NumberUnitInterface<UnitFamily.Distance>>;
 
-  /** @inheritdoc */
-  constructor() {
+  /**
+   * Creates a new instance of MapIndexedRangeModule.
+   */
+  public constructor() {
     this.nominalRanges.sub(this.onNominalRangesChanged.bind(this));
   }
 
@@ -28,7 +31,7 @@ export class MapIndexedRangeModule {
    */
   private onNominalRangesChanged(array: readonly NumberUnitInterface<UnitFamily.Distance>[]): void {
     const currentIndex = this.nominalRangeIndex.get();
-    this.setNominalRangeIndex(Utils.Clamp(currentIndex, 0, array.length - 1));
+    this.setNominalRangeIndex(MathUtils.clamp(currentIndex, 0, array.length - 1));
   }
 
   /**
@@ -40,7 +43,7 @@ export class MapIndexedRangeModule {
   public setNominalRangeIndex(index: number): NumberUnitInterface<UnitFamily.Distance> {
     const rangeArray = this.nominalRanges.get();
     if (index < 0 || index >= rangeArray.length) {
-      throw new Error('Index out of bounds.');
+      throw new RangeError('Index out of bounds.');
     }
 
     const range = rangeArray[index];

@@ -53,27 +53,35 @@ export type APFLCDirectorOptions = {
   useIndicatedMach?: boolean;
 
   /**
-   * Allows to pass in the FLC computer to be used:
+   * The FLC computer for the director to use to generate pitch commands. If not defined, then a default computer will
+   * be created.
    */
   flcComputer?: GenericFlcComputer;
 };
 
 /**
- * A Flight Level Change autopilot director.
+ * An autopilot director that generates flight director pitch commands to hold an indicated airspeed or mach. Sets the
+ * `AUTOPILOT FLIGHT LEVEL CHANGE` SimVar state to true (1) when it is armed or activated, and to false (0) when it is
+ * deactivated.
+ * 
+ * The director requires valid pitch, indicated airspeed, mach, and indicated altitude data to arm or activate.
  */
 export class APFLCDirector implements PlaneDirector {
-
+  /** @inheritDoc */
   public state: DirectorState;
 
   private readonly flcComputer: GenericFlcComputer;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
   public onActivate?: () => void;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
   public onArm?: () => void;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
+  public onDeactivate?: () => void;
+
+  /** @inheritDoc */
   public drivePitch?: (pitch: number, adjustForAoa?: boolean, adjustForVerticalWind?: boolean) => void;
 
   private readonly setSpeedCommand: APFLCDirectorSetSpeedCommand = {
@@ -87,6 +95,12 @@ export class APFLCDirector implements PlaneDirector {
   private readonly setSpeedOnActivationFunc: (currentIas: number, currentMach: number, isSelectedSpeedInMach: boolean, command: APFLCDirectorSetSpeedCommand) => void;
 
   private readonly useIndicatedMach: boolean;
+
+  private readonly pitch = this.apValues.dataProvider.getItem('pitch');
+  private readonly ias = this.apValues.dataProvider.getItem('ias');
+  private readonly mach = this.apValues.dataProvider.getItem('mach');
+  private readonly pressure = this.apValues.dataProvider.getItem('static_air_pressure');
+  private readonly indicatedAltitude = this.apValues.dataProvider.getItem('indicated_altitude');
 
   /**
    * Creates a new instance of APFLCDirector.
@@ -127,13 +141,26 @@ export class APFLCDirector implements PlaneDirector {
     this.useIndicatedMach = options?.useIndicatedMach ?? false;
 
     this.state = DirectorState.Inactive;
-    this.flcComputer = options?.flcComputer ?? new GenericFlcComputer({ kP: 2, kI: 0, kD: 0, maxOut: 90, minOut: -90 });
+    this.flcComputer = options?.flcComputer ?? new GenericFlcComputer({ kP: 2, kI: 0, kD: 0, maxOut: 90, minOut: -90, apDataProvider: apValues.dataProvider });
   }
 
   /**
-   * Activates this director.
+   * Checks whether the data required for this director to function are valid.
+   * @returns Whether the data required for this director to function are valid.
    */
+  private isDataValid(): boolean {
+    return this.pitch.isValueValid()
+      && this.ias.isValueValid()
+      && this.mach.isValueValid()
+      && this.indicatedAltitude.isValueValid();
+  }
+
+  /** @inheritDoc */
   public activate(): void {
+    if (this.state === DirectorState.Active || !this.isDataValid()) {
+      return;
+    }
+
     this.state = DirectorState.Active;
     this.onActivate && this.onActivate();
 
@@ -143,12 +170,12 @@ export class APFLCDirector implements PlaneDirector {
     this.setSpeedCommand.mach = undefined;
     this.setSpeedCommand.isSelectedSpeedInMach = undefined;
 
-    const ias = SimVar.GetSimVarValue('AIRSPEED INDICATED:1', SimVarValueType.Knots);
+    const ias = this.ias.getValue();
     let mach: number;
     if (this.useIndicatedMach) {
-      mach = AeroMath.casToMach(UnitType.KNOT.convertTo(ias, UnitType.MPS), SimVar.GetSimVarValue('AMBIENT PRESSURE', SimVarValueType.HPA));
+      mach = AeroMath.casToMach(UnitType.KNOT.convertTo(ias, UnitType.MPS), this.pressure.getActualValue());
     } else {
-      mach = SimVar.GetSimVarValue('AIRSPEED MACH', SimVarValueType.Mach);
+      mach = this.mach.getValue();
     }
 
     this.setSpeedOnActivationFunc(
@@ -172,38 +199,49 @@ export class APFLCDirector implements PlaneDirector {
 
     SimVar.SetSimVarValue('AUTOPILOT FLIGHT LEVEL CHANGE', 'Bool', true);
 
-    const currentAltitude = SimVar.GetSimVarValue('INDICATED ALTITUDE', SimVarValueType.Feet);
+    const currentAltitude = this.indicatedAltitude.getValue();
     this.flcComputer.activate(this.apValues.selectedAltitude.get() > currentAltitude);
   }
 
-  /**
-   * Arms this director.
-   * This director can be armed, but it will never automatically activate and remain in the armed state.
-   * Therefore we do not resume subs until activation.
-   */
+  /** @inheritDoc */
   public arm(): void {
+    if (this.state !== DirectorState.Inactive || !this.isDataValid()) {
+      return;
+    }
+
     this.state = DirectorState.Armed;
     this.onArm && this.onArm();
   }
 
-  /**
-   * Deactivates this director.
-   */
+  /** @inheritDoc */
   public deactivate(): void {
+    if (this.state === DirectorState.Inactive) {
+      return;
+    }
+
     this.state = DirectorState.Inactive;
+    this.onDeactivate && this.onDeactivate();
+
     SimVar.SetSimVarValue('AUTOPILOT FLIGHT LEVEL CHANGE', 'Bool', false);
     this.flcComputer.deactivate();
   }
 
-  /**
-   * Updates this director.
-   */
+  /** @inheritDoc */
   public update(): void {
+    if (this.state === DirectorState.Inactive) {
+      return;
+    }
+
+    if (!this.isDataValid()) {
+      this.deactivate();
+      return;
+    }
+
     if (this.state !== DirectorState.Active) {
       return;
     }
 
-    const currentAltitude = SimVar.GetSimVarValue('INDICATED ALTITUDE', SimVarValueType.Feet);
+    const currentAltitude = this.indicatedAltitude.getValue();
     this.flcComputer.setClimbMode(this.apValues.selectedAltitude.get() > currentAltitude);
 
     if (this.apValues.isSelectedSpeedInMach.get()) {
@@ -211,12 +249,12 @@ export class APFLCDirector implements PlaneDirector {
 
       let ias: number;
       if (this.useIndicatedMach) {
-        ias = UnitType.KNOT.convertFrom(AeroMath.machToCas(mach, SimVar.GetSimVarValue('AMBIENT PRESSURE', SimVarValueType.HPA)), UnitType.MPS);
+        ias = UnitType.KNOT.convertFrom(AeroMath.machToCas(mach, this.pressure.getActualValue()), UnitType.MPS);
       } else {
         ias = Simplane.getMachToKias(mach);
         if (!isFinite(ias)) {
           // Sometimes getMachToKias returns a NaN value. If so, fall back to doing the conversion ourselves.
-          ias = UnitType.KNOT.convertFrom(AeroMath.machToCas(mach, SimVar.GetSimVarValue('AMBIENT PRESSURE', SimVarValueType.HPA)), UnitType.MPS);
+          ias = UnitType.KNOT.convertFrom(AeroMath.machToCas(mach, this.pressure.getActualValue()), UnitType.MPS);
         }
       }
 
@@ -228,9 +266,12 @@ export class APFLCDirector implements PlaneDirector {
     this.flcComputer.update();
     const pitchTarget = this.flcComputer.pitchTarget.get();
 
-    // The flcComputer takes care of the aoa adjustment since it needs aoa anyhow,
-    // and there is no vertical wind correction for an FLC mode.
-    pitchTarget !== null && this.drivePitch && this.drivePitch(MathUtils.clamp(pitchTarget, -this.maxPitchUpAngleFunc(), this.maxPitchDownAngleFunc()), false, false);
+    if (pitchTarget !== null) {
+      // The pitch target from the FLC computer does not need to be adjusted for AOA or vertical wind.
+      this.drivePitch && this.drivePitch(MathUtils.clamp(pitchTarget, -this.maxPitchUpAngleFunc(), this.maxPitchDownAngleFunc()), false, false);
+    } else {
+      this.deactivate();
+    }
   }
 
   /**

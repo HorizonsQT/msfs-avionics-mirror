@@ -40,7 +40,6 @@ export class BrakeSimvarPublisher extends SimVarPublisher<BrakeEvents> {
    * @param pacer An optional pacer to use to control the rate of publishing
    */
   public constructor(bus: EventBus, pacer: PublishPacer<BrakeEvents> | undefined = undefined) {
-
     const simvars = new Map<keyof BrakeEvents, SimVarDefinition>([
       ['brake_position_left', { name: 'BRAKE LEFT POSITION', type: SimVarValueType.Percent }],
       ['brake_position_right', { name: 'BRAKE RIGHT POSITION', type: SimVarValueType.Percent }],
@@ -54,11 +53,5 @@ export class BrakeSimvarPublisher extends SimVarPublisher<BrakeEvents> {
     ]);
 
     super(simvars, bus, pacer);
-
-  }
-
-  /** @inheritdoc */
-  public onUpdate(): void {
-    super.onUpdate();
   }
 }

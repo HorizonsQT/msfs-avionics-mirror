@@ -5,7 +5,12 @@ import { ClippedPathStream } from '../../../graphics/path/ClippedPathStream';
 import { GeoCylindricalClippedPathStream } from '../../../graphics/path/GeoCylindricalClippedPathStream';
 import { NullPathStream } from '../../../graphics/path/PathStream';
 import { VecNSubject } from '../../../math/VectorSubject';
-import { DefaultFacilityWaypointCache, Facility, FacilityLoader, FacilityRepository, FlightPathWaypoint, ICAO, LegType, Waypoint } from '../../../navigation';
+import { DefaultFacilityWaypointCache } from '../../../navigation/DefaultFacilityWaypointCache';
+import { AirportFacilityDataFlags, Facility, LegType } from '../../../navigation/Facilities';
+import { FacilityLoader } from '../../../navigation/FacilityLoader';
+import { FacilityRepository } from '../../../navigation/FacilityRepository';
+import { ICAO } from '../../../navigation/IcaoUtils';
+import { FlightPathWaypoint, Waypoint } from '../../../navigation/Waypoint';
 import { FSComponent, VNode } from '../../FSComponent';
 import { GeoProjectionPathStreamStack } from '../../map/GeoProjectionPathStreamStack';
 import { MapCachedCanvasLayer } from '../../map/layers/MapCachedCanvasLayer';
@@ -60,6 +65,13 @@ export interface MapSystemFlightPlanLayerProps extends MapLayerProps<MapSystemFl
    * degrees.
    */
   geoClipLatitude?: number;
+
+  /**
+   * Bitflags describing the requested data to be loaded in airport facilities retrieved by the layer. This controls
+   * what data are available from the airport waypoints that the layer registers with the waypoint renderer. Defaults
+   * to {@link AirportFacilityDataFlags.All}.
+   */
+  airportFacilityDataFlags?: number;
 }
 
 /**
@@ -93,6 +105,8 @@ export class MapSystemFlightPlanLayer extends MapLayer<MapSystemFlightPlanLayerP
 
   protected readonly facLoader = this.props.facilityLoader ?? new FacilityLoader(FacilityRepository.getRepository(this.props.bus));
   protected readonly facWaypointCache = DefaultFacilityWaypointCache.getCache(this.props.bus);
+
+  protected readonly airportFacilityDataFlags = this.props.airportFacilityDataFlags ?? AirportFacilityDataFlags.All;
 
   protected readonly geoClipAntiMeridianBuffer = Math.max(this.props.geoClipAntiMeridianGap ?? MapSystemFlightPlanLayer.DEFAULT_GEO_CLIP_ANTI_MERIDIAN_GAP, 1e-6);
   protected readonly geoClipLatitude = Math.max(this.props.geoClipLatitude ?? MapSystemFlightPlanLayer.DEFAULT_GEO_CLIP_LATITUDE, 0);
@@ -363,15 +377,15 @@ export class MapSystemFlightPlanLayer extends MapLayer<MapSystemFlightPlanLayerP
   protected async buildFixWaypoint(leg: LegDefinition, roleId: number): Promise<void> {
     const legWaypoint = this.legWaypoints.get(leg);
     if (legWaypoint === undefined) {
-      const facIcao = leg.leg.fixIcao;
-      let facility: Facility | undefined;
+      const facIcao = leg.leg.fixIcaoStruct;
+      let facility: Facility | null = null;
       try {
-        facility = await this.facLoader.getFacility(ICAO.getFacilityType(facIcao), facIcao);
+        facility = await this.facLoader.tryGetFacility(ICAO.getFacilityTypeFromValue(facIcao), facIcao, this.airportFacilityDataFlags);
       } catch (err) {
         /* continue */
       }
 
-      if (facility !== undefined) {
+      if (facility) {
         const waypoint = this.facWaypointCache.get(facility);
         const ident = leg.name ?? '';
         const newWaypoint = new FlightPathWaypoint(waypoint.location, leg, `${this.waypointPrefix}_${this.waypointId++}_${ident}`, ident);

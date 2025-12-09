@@ -451,11 +451,12 @@ export class GtcApproachPage extends GtcProcedureSelectionPage<GtcApproachPagePr
     this.skipCourseReversal.set(false);
 
     if (FmsUtils.checkForCourseReversal(this.legs, this.fms.ppos)) {
-      const icao = this.legs[1]?.leg.fixIcao;
+      // NOTE: this.legs[1] must exist if FmsUtils.checkForCourseReversal() returned true.
+      const icao = this.legs[1].leg.fixIcaoStruct;
       const result = await this.gtcService
         .openPopup<GtcMessageDialog>(GtcViewKeys.MessageDialog1)
         .ref.request({
-          message: `Fly Course Reversal at ${ICAO.getIdent(icao ?? '')}?`,
+          message: `Fly Course Reversal at ${icao.ident}?`,
           showRejectButton: true,
           acceptButtonLabel: 'Yes',
           rejectButtonLabel: 'No',
@@ -585,14 +586,12 @@ export class GtcApproachPage extends GtcProcedureSelectionPage<GtcApproachPagePr
       return;
     }
 
-    const arrivalFacilityIcao = this.store.arrivalFacilityIcao.get();
+    const arrivalFacility = this.store.arrivalFacility.get();
 
-    if (arrivalFacilityIcao && facility.icao !== arrivalFacilityIcao) {
-      const approachFacIdent = ICAO.getIdent(facility.icao);
-      const arrivalFacIdent = ICAO.getIdent(arrivalFacilityIcao);
+    if (arrivalFacility && !ICAO.valueEquals(facility.icaoStruct, arrivalFacility.icaoStruct)) {
       const accepted = await GtcDialogs.openMessageDialog(
         this.gtcService,
-        `The selected approach airport\n(${approachFacIdent}) is different from the\narrival airport (${arrivalFacIdent}).\nLoad Approach?`
+        `The selected approach airport\n(${facility.icaoStruct.ident}) is different from the\narrival airport (${arrivalFacility.icaoStruct.ident}).\nLoad Approach?`
       );
       if (!accepted) {
         return;

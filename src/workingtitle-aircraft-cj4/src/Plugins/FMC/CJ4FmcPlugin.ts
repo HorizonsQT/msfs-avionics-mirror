@@ -1,10 +1,10 @@
 import {
   ConsumerSubject, FacilityType, FlightPlanCopiedEvent, FlightPlanIndicationEvent, FlightPlanOriginDestEvent, FlightPlanPredictor,
-  FlightPlanProcedureDetailsEvent, FmcScreenPluginContext, OriginDestChangeType, PerformancePlanRepository, registerPlugin, Subject
+  FlightPlanProcedureDetailsEvent, FmcScreenPluginContext, OriginDestChangeType, PerformancePlanRepository, registerPlugin, SimVarValueType, Subject
 } from '@microsoft/msfs-sdk';
 
 import { FmcMiscEvents, PerfInitPage, PerfMenuPage, UserSettingsPage, WT21FmcAvionicsPlugin, WT21FmcEvents, WT21FmcPage } from '@microsoft/msfs-wt21-fmc';
-import { WT21FlightPlanPredictorConfiguration, WT21FmsUtils, WT21LNavDataEvents } from '@microsoft/msfs-wt21-shared';
+import { DefaultsUserSettings, WT21FlightPlanPredictorConfiguration, WT21FmsUtils, WT21LNavDataEvents } from '@microsoft/msfs-wt21-shared';
 
 import { CJ4UserSettings } from '../Shared/CJ4UserSettings';
 import { CJ4CabinLightsSystem } from '../Shared/Misc/CJ4CabinLightsSystem';
@@ -136,9 +136,9 @@ export class CJ4FmcPlugin extends WT21FmcAvionicsPlugin {
   }
 
   /**
-   * Applies flight plan copy events to the performance plan repository
+   * Applies flight plan creation events to the performance plan repository
    *
-   * @param ev plan copied event
+   * @param ev plan creation event
    */
   private applyCreationToPerformancePlans = (ev: FlightPlanIndicationEvent): void => {
     if (!this.cj4PerformancePlanRepository.hasAnyPlan()) {
@@ -162,6 +162,9 @@ export class CJ4FmcPlugin extends WT21FmcAvionicsPlugin {
   private applyOriginDestOrProcedureDetailChangedToPerformancePlans = async (ev: FlightPlanOriginDestEvent | FlightPlanProcedureDetailsEvent): Promise<void> => {
     if ('type' in ev && (ev.type === OriginDestChangeType.OriginAdded || ev.type === OriginDestChangeType.OriginRemoved)) {
       this.cj4PerformancePlanRepository.copy(PerformancePlanRepository.DEFAULT_VALUES_PLAN_INDEX, ev.planIndex);
+        // set auto qnh and defaults
+        this.cj4PerformancePlanRepository.forFlightPlanIndex(ev.planIndex).takeoffAutoQnh.set(SimVar.GetSimVarValue('KOHLSMAN SETTING MB:1', SimVarValueType.InHG));
+        this.cj4PerformancePlanRepository.forFlightPlanIndex(ev.planIndex).takeoffFlaps.set(DefaultsUserSettings.getManager(this.binder.bus).getSetting('takeoffFlaps').get());
     }
 
     const plan = this.binder.flightPlanner.getFlightPlan(ev.planIndex);

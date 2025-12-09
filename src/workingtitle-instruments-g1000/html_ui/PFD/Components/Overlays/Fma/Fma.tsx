@@ -146,31 +146,7 @@ export class Fma extends DisplayComponent<FmaProps> {
       this.bearingSubject.set(v);
     });
 
-    g1000Events.on('fma_modes').handle((v) => {
-      this.autopilotModes = v;
-      let verticalModeFailed = false;
-      if (v.lateralModeFailed) {
-        this.lateralModeFailed.set(true);
-        const verticalMode = this.verticalActiveSubject.getRaw();
-        if (verticalMode === APVerticalModes.GP || verticalMode === APVerticalModes.GS) {
-          verticalModeFailed = true;
-          this.verticalModeFailed.set(true);
-        }
-      } else {
-        this.lateralModeFailed.set(false);
-        this.verticalModeFailed.set(false);
-      }
-      if (!v.lateralModeFailed) {
-        this.lateralActiveModeSubject.set(this.autopilotModes.lateralActive);
-      }
-      if (!verticalModeFailed) {
-        this.verticalActiveSubject.set(this.autopilotModes.verticalActive);
-      }
-      this.lateralArmedModeSubject.set(this.autopilotModes.lateralArmed);
-      this.verticalArmedSubject.set(this.getVerticalArmedString(this.autopilotModes.verticalArmed));
-      this.verticalApproachArmedSubject.set(this.getVerticalApproachArmedString(this.autopilotModes.verticalApproachArmed));
-      this.handleVerticalValueChanged();
-    });
+    g1000Events.on('fma_modes').handle(this.handleFmaModesChanged.bind(this));
 
     g1000Events.on('fd_not_installed').handle(v => {
       this.fdNotInstalled = v;
@@ -192,6 +168,36 @@ export class Fma extends DisplayComponent<FmaProps> {
 
     this.apVsArrowDirectionIsUp.sub(this.apVsArrowDirectionIsUpChangedHandler.bind(this), true);
     this.apVsArrowIsVisible.sub(this.apVsArrowIsVisibleChangedHandler.bind(this), true);
+  }
+
+  /**
+   * Handles when the FMA modes are changed.
+   * @param modes The FMA modes.
+   */
+  private handleFmaModesChanged(modes: FmaData): void {
+    this.autopilotModes = modes;
+    let verticalModeFailed = false;
+    if (modes.lateralModeFailed) {
+      this.lateralModeFailed.set(true);
+      const verticalMode = this.verticalActiveSubject.getRaw();
+      if (verticalMode === APVerticalModes.GP || verticalMode === APVerticalModes.GS) {
+        verticalModeFailed = true;
+        this.verticalModeFailed.set(true);
+      }
+    } else {
+      this.lateralModeFailed.set(false);
+      this.verticalModeFailed.set(false);
+    }
+    if (!modes.lateralModeFailed) {
+      this.lateralActiveModeSubject.set(this.autopilotModes.lateralActive);
+    }
+    if (!verticalModeFailed) {
+      this.verticalActiveSubject.set(this.autopilotModes.verticalActive);
+    }
+    this.lateralArmedModeSubject.set(this.autopilotModes.lateralArmed);
+    this.verticalArmedSubject.set(this.getVerticalArmedString(this.autopilotModes.verticalArmed));
+    this.verticalApproachArmedSubject.set(this.getVerticalApproachArmedString(this.autopilotModes.verticalApproachArmed));
+    this.handleVerticalValueChanged();
   }
 
   /**
@@ -348,6 +354,8 @@ export class Fma extends DisplayComponent<FmaProps> {
     this.vnavPathMode = mode;
     this.vnavAltCapType = type;
     this.approachMode = approachMode;
+
+    this.handleFmaModesChanged(this.autopilotModes);
   }
 
   /**

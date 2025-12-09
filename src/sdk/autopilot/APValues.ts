@@ -2,11 +2,15 @@ import { NavSourceId } from '../instruments/NavProcessor';
 import { NavRadioIndex } from '../instruments/RadioCommon';
 import { Subject } from '../sub/Subject';
 import { Subscribable } from '../sub/Subscribable';
+import { APDataProvider } from './APDataProvider';
 
 /**
  * An object containing values pertinent to autopilot operation.
  */
 export interface APValues {
+  /** A provider of data for the autopilot. */
+  readonly dataProvider: APDataProvider;
+
   /** The ID of the CDI associated with the autopilot. */
   readonly cdiId: string;
 
@@ -15,6 +19,15 @@ export interface APValues {
 
   /** The current simulation rate. */
   readonly simRate: Subject<number>;
+
+  /**
+   * The total amount of simulated time, in milliseconds, that has elapsed since the beginning of the current
+   * simulation session.
+   */
+  readonly activeSimDuration: Subject<number>;
+
+  /** Whether the autopilot master ON/OFF state is in the ON state. */
+  readonly apMasterOn: Subject<boolean>;
 
   /** The selected altitude, in feet. */
   readonly selectedAltitude: Subject<number>;

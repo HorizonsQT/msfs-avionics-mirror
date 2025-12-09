@@ -4,9 +4,9 @@ import {
   FixTypeFlags, FlightPathUtils, FlightPlan, FlightPlanCalculatedEvent, FlightPlanIndicationEvent, FlightPlanLeg, FlightPlanLegIndexes, FlightPlanModBatchEvent,
   FlightPlanner, FlightPlannerEvents, FlightPlanOriginDestEvent, FlightPlanSegment, FlightPlanSegmentType, FlightPlanUtils, GeoPoint, GeoPointInterface,
   GeoPointSubject, GNSSEvents, ICAO, IcaoType, IcaoValue, IntersectionFacility, LegDefinition, LegDefinitionFlags, LegTurnDirection, LegType, LNavControlEvents,
-  LNavEvents, LNavUtils, MagVar, NavEvents, NavMath, NavSourceId, NavSourceType, NearestContext, OneWayRunway, PerformancePlanRepository, RnavTypeFlags,
+  LNavEvents, LNavUtils, MagVar, NavEvents, NavMath, NavSourceId, NavSourceType, OneWayRunway, PerformancePlanRepository, RnavTypeFlags,
   RunwayUtils, SmoothingPathCalculator, SpeedRestrictionType, SpeedUnit, SubEvent, Subject, UnitType, UserFacility, VerticalData, VerticalFlightPhase,
-  VerticalFlightPlan, VisualFacility, VNavUtils, VorFacility, VorType, Wait
+  VerticalFlightPlan, VisualFacility, VNavUtils, VorFacility, VorType,
 } from '@microsoft/msfs-sdk';
 
 import { UnsFmsConfigInterface } from '../Config/FmsConfigBuilder';
@@ -25,7 +25,7 @@ import { UnsFmsUtils } from './UnsFmsUtils';
 
 /** A UNS-1 FMS. */
 export class UnsFms {
-  public static version = 'WT2.1.3';
+  public static version = 'WT2.1.7';
 
   /** Set to true by FMC pages when the plan on this FMS instance is in modification and awaiting a cancel or exec. */
   public readonly planInMod = Subject.create<boolean>(false);
@@ -228,31 +228,6 @@ export class UnsFms {
 
     this.flightPlanner.createFlightPlan(UnsFlightPlans.Active);
     this.emptyFlightPlan(UnsFlightPlans.Active);
-
-    // When the nearest context is initialized, wait for nearest airport to be available and then insert it into the plan
-    // if it's less than 3NM away
-    NearestContext.onInitialized(async (instance) => {
-      await Wait.awaitCondition(() => instance.airports.length !== 0, 500, 15_000).catch(() => {
-        console.error('[UnsFms](initFlightPlans) Wait for nearest airports took longer than 15s and timed out');
-      });
-
-      // ...but if by that time an airport was manually selected, don't bother
-      if (this.getPrimaryFlightPlan().destinationAirport !== undefined) {
-        return;
-      }
-
-      const nearestAirport = instance.getNearest(FacilityType.Airport);
-
-      if (!nearestAirport) {
-        return;
-      }
-
-      const distanceToArp = this.pposSub.get().distance(nearestAirport);
-
-      if (distanceToArp < UnitType.NMILE.convertFrom(distanceToArp, UnitType.GA_RADIAN)) {
-        this.setOrigin(nearestAirport);
-      }
-    });
   }
 
   /**

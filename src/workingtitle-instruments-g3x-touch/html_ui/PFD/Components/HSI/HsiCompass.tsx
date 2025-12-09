@@ -45,7 +45,7 @@ export class HsiCompass extends DisplayComponent<HsiCompassProps> {
   public onAfterRender(): void {
     this.labelTransform.transform.getChild(0).set(-50, -50);
     this.props.rotation.sub((rotation) => {
-      this.labelTransform.transform.getChild(1).set(0, 0, 1, rotation * -1);
+      this.labelTransform.transform.getChild(1).set(0, 0, 1, rotation * -1, 0.1);
       this.labelTransform.resolve();
     }, true);
 

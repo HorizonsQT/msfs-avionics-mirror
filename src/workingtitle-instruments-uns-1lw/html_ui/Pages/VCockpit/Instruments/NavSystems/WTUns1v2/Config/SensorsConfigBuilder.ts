@@ -171,11 +171,11 @@ export class SensorsConfigBuilder extends ConfigBuilder<UnsSensorsConfig> {
 
     navSensors.waasSensorCount = this.getNavSensorCount('waasSensorCount', waasSensorElement);
     navSensors.irsSensorCount = this.getNavSensorCount('irsSensorCount', irsSensorElement);
-    navSensors.irsSensorCircuit = this.getElectricityConfig(irsSensorElement);
-    navSensors.waasSensorCircuit = this.getElectricityConfig(waasSensorElement);
-    navSensors.adcSensorCircuit = this.getElectricityConfig(adcSensorElement);
-    navSensors.dmeSensorCircuit = this.getElectricityConfig(dmeSensorElement);
-    navSensors.vorSensorCircuit = this.getElectricityConfig(vorSensorElement);
+    navSensors.irsSensorCircuit = ConfigParser.getChildElectricityConfig(irsSensorElement, this.baseInstrument);
+    navSensors.waasSensorCircuit = ConfigParser.getChildElectricityConfig(waasSensorElement, this.baseInstrument);
+    navSensors.adcSensorCircuit = ConfigParser.getChildElectricityConfig(adcSensorElement, this.baseInstrument);
+    navSensors.dmeSensorCircuit = ConfigParser.getChildElectricityConfig(dmeSensorElement, this.baseInstrument);
+    navSensors.vorSensorCircuit = ConfigParser.getChildElectricityConfig(vorSensorElement, this.baseInstrument);
 
     const totalSensors = navSensors.waasSensorCount + navSensors.irsSensorCount;
     if (totalSensors > SensorsConfigBuilder.MAX_TOTAL_NAV_SENSORS) {
@@ -203,25 +203,6 @@ export class SensorsConfigBuilder extends ConfigBuilder<UnsSensorsConfig> {
       return element;
     } catch {
       return defaultValue;
-    }
-  }
-
-  /**
-   * Gets the electricity logic from a given element
-   * @param element Element to get the electric circuit from
-   * @returns The electricity logic element, or undefined if none is present
-   */
-  private getElectricityConfig(element: Element | undefined): CompositeLogicXMLElement | undefined {
-    if (element) {
-      const electricLogicElement = element.querySelector(':scope>Electric');
-
-      if (electricLogicElement === null) {
-        return undefined;
-      } else {
-        return new CompositeLogicXMLElement(this.baseInstrument, electricLogicElement);
-      }
-    } else {
-      return undefined;
     }
   }
 

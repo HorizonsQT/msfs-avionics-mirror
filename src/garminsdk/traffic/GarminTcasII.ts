@@ -1,6 +1,7 @@
 import {
-  AdsbOperatingMode, EventBus, MappedSubject, NumberUnitInterface, Subject, Tcas, TcasAlertLevel, TcasIISensitivityParameters, TcasOperatingMode, TcasSensitivity,
-  TcasSensitivityParameters, TrafficContact, TrafficInstrument, UnitFamily, UnitType
+  AdsbOperatingMode, EventBus, MappedSubject, NumberUnitInterface, Subject, SubscribableUtils, Tcas, TcasAlertLevel,
+  TcasIISensitivityParameters, TcasOperatingMode, TcasSensitivity, TcasSensitivityParameters, TrafficContact,
+  TrafficInstrument, UnitFamily, UnitType
 } from '@microsoft/msfs-sdk';
 
 import { CDIScaleLabel, LNavDataEvents } from '../navigation/LNavDataEvents';
@@ -32,10 +33,10 @@ export class GarminTcasII extends Tcas<GarminTcasIntruder, GarminTcasIISensitivi
 
   private readonly raAltitudeInhibitFlag = MappedSubject.create(
     ([radarAlt, isClimbing]): boolean => {
-      return radarAlt < (isClimbing ? 900 : 1100);
+      return isFinite(radarAlt) && radarAlt < (isClimbing ? 900 : 1100);
     },
-    this.ownAirplaneSubs.radarAltitude.map(radarAlt => Math.round(radarAlt.asUnit(UnitType.FOOT))),
-    this.ownAirplaneSubs.verticalSpeed.map(verticalSpeed => verticalSpeed.number >= 0)
+    this.ownAirplaneDataProvider.radarAltitude.map(radarAlt => Math.round(radarAlt.asUnit(UnitType.FOOT)), SubscribableUtils.NUMERIC_NAN_EQUALITY),
+    this.ownAirplaneDataProvider.verticalSpeed.map(verticalSpeed => verticalSpeed.number >= 0)
   );
 
   /**
@@ -58,7 +59,12 @@ export class GarminTcasII extends Tcas<GarminTcasIntruder, GarminTcasIISensitivi
     realTimeUpdateFreq = GarminTcasII.DEFAULT_REAL_TIME_UPDATE_FREQ,
     simTimeUpdateFreq = GarminTcasII.DEFAULT_SIM_TIME_UPDATE_FREQ
   ) {
-    super(bus, tfcInstrument, maxIntruderCount, realTimeUpdateFreq, simTimeUpdateFreq);
+    super(bus, tfcInstrument, {
+      maxIntruderCount,
+      realTimeUpdateFreq,
+      simTimeUpdateFreq,
+      hasActiveSurveillance: true,
+    });
   }
 
   /** @inheritdoc */
@@ -123,21 +129,21 @@ export class GarminTcasII extends Tcas<GarminTcasIntruder, GarminTcasIISensitivi
     if (this.adsb) {
       this.sensitivity.update(
         this.adsb.getOperatingMode(),
-        this.ownAirplaneSubs.altitude.get(),
+        this.ownAirplaneDataProvider.pressureAltitude.get(),
         this.cdiScalingLabel,
-        this.ownAirplaneSubs.radarAltitude.get()
+        this.ownAirplaneDataProvider.radarAltitude.get()
       );
     } else {
       this.sensitivity.update(
-        this.ownAirplaneSubs.altitude.get(),
-        this.ownAirplaneSubs.radarAltitude.get()
+        this.ownAirplaneDataProvider.pressureAltitude.get(),
+        this.ownAirplaneDataProvider.radarAltitude.get()
       );
     }
   }
 
   /** @inheritdoc */
   protected canIssueTrafficAdvisory(simTime: number, intruder: GarminTcasIntruder): boolean {
-    if (this.ownAirplaneSubs.isOnGround.get()) {
+    if (this.ownAirplaneDataProvider.isOnGround.get()) {
       return false;
     }
 
@@ -151,7 +157,7 @@ export class GarminTcasII extends Tcas<GarminTcasIntruder, GarminTcasIISensitivi
 
   /** @inheritdoc */
   protected canCancelTrafficAdvisory(simTime: number, intruder: GarminTcasIntruder): boolean {
-    if (this.ownAirplaneSubs.isOnGround.get()) {
+    if (this.ownAirplaneDataProvider.isOnGround.get()) {
       return true;
     }
 

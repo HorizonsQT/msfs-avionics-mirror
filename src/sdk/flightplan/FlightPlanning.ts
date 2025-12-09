@@ -307,6 +307,15 @@ export interface VerticalData {
   /** The speed unit. */
   speedUnit: SpeedUnit;
 
+  // TODO: Make alongTrackOffset a required property when it's acceptable to break backward compatibility.
+
+  /**
+   * The along-track offset of the altitude and speed restrictions for the leg, in meters. Positive offsets move the
+   * restrictions forward, and negative offsets move the restrictions backward. If not defined, then the offset is
+   * assumed to be zero.
+   */
+  alongTrackOffset?: number;
+
   /** The FPA for this constraint, in degrees, optional. */
   fpa?: number;
 }

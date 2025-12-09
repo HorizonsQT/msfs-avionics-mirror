@@ -181,6 +181,7 @@ export class MapSharedCachedCanvasLayer extends MapLayer<MapSharedCachedCanvasLa
           mapProjection={this.props.mapProjection}
           useBuffer={this.props.useBuffer}
           overdrawFactor={this.props.overdrawFactor}
+          class={this.props.class}
         />
         {this.props.children}
       </>

@@ -6,7 +6,7 @@ import { MapSystemWaypointRoles } from './MapSystemWaypointRoles';
 import { MapSystemIconFactory, MapSystemLabelFactory, MapSystemWaypointsRenderer } from './MapSystemWaypointsRenderer';
 
 /**
- * A class that builds a configuration for the waypoint display.
+ * A class that builds a configuration for the display of waypoints on the map.
  */
 export class WaypointDisplayBuilder {
 
@@ -22,6 +22,14 @@ export class WaypointDisplayBuilder {
    */
   constructor(protected readonly iconFactory: MapSystemIconFactory, protected readonly labelFactory: MapSystemLabelFactory,
     protected readonly waypointRenderer: MapSystemWaypointsRenderer) { }
+
+  /**
+   * Gets the render role group used by this builder when registering a render role with the waypoint renderer.
+   * @returns The render role group used by this builder when registering a render role with the waypoint renderer.
+   */
+  public getRoleGroup(): string {
+    return this.roleGroup;
+  }
 
   /**
    * Adds a icon configuration to the waypoint display system.
@@ -89,8 +97,8 @@ export class WaypointDisplayBuilder {
   }
 
   /**
-   * Registers a waypoint display role for use with the flight plan rendering
-   * system.
+   * Registers a render role for use with the waypoint renderer. When the render role is registered, it will also be
+   * added to this builder's render role group (accessible via `getRoleGroup()`).
    * @param name The name of the role to register.
    * @returns The modified builder.
    */

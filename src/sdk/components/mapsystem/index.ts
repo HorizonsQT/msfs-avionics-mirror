@@ -10,6 +10,7 @@ export * from './controllers/MapOwnAirplanePropsController';
 export * from './controllers/MapRotationController';
 
 export * from './layers/MapSystemFlightPlanLayer';
+export * from './layers/MapSystemSharedFlightPlanLayer';
 export * from './layers/MapSystemTrafficLayer';
 export * from './layers/MapSystemWaypointsLayer';
 

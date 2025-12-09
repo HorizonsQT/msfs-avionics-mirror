@@ -1,5 +1,7 @@
 .bearing-information-display-container {
   position: relative;
+  /* NOTE: force overflow clipping to allow this element to be a layout boundary. */
+  overflow: hidden;
 }
 
 .gdu-460-display .bearing-information-display-container {

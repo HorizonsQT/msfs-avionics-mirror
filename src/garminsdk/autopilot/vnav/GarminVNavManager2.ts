@@ -56,6 +56,9 @@ export class GarminVNavManager2 implements VNavManager {
   /** @inheritDoc */
   public activateMode?: (mode: number) => void;
 
+  /** @inheritDoc */
+  public deactivateMode?: (mode: number) => void;
+
   // eslint-disable-next-line jsdoc/require-returns
   /** Whether VNAV is active. */
   public get isActive(): boolean {
@@ -217,7 +220,7 @@ export class GarminVNavManager2 implements VNavManager {
     }
 
     if (this.apValues.verticalActive.get() === APVerticalModes.PATH) {
-      this.activateMode && this.activateMode(APVerticalModes.PITCH);
+      this.deactivateMode && this.deactivateMode(APVerticalModes.PATH);
     }
   }
 

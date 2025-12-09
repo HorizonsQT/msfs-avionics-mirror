@@ -42,7 +42,7 @@ export class BottomSectionVer1 extends DisplayComponent<BottomSectionVer1Props> 
     this.props.bus.getSubscriber<NavComSimVars>().on('com_active_frequency_1').whenChangedBy(0.01).handle((v) => this.com1.set(v));
     this.props.bus.getSubscriber<NavComSimVars>().on('com_active_frequency_2').whenChangedBy(0.01).handle((v) => this.com2.set(v));
     this.props.bus.getSubscriber<AdcEvents>().on('ram_air_temp_c').withPrecision(0).handle((v) => this.rat.set(v));
-    this.props.bus.getSubscriber<GNSSEvents>().on('zulu_time').atFrequency(10).handle((v) => this.time.set(v));
+    this.props.bus.getSubscriber<GNSSEvents>().on('zulu_time').atFrequency(1).handle((v) => this.time.set(v));
 
     const xpdr = this.props.bus.getSubscriber<XPDRSimVarEvents>();
     xpdr.on('xpdr_code_1').whenChanged().handle((v) => this.ident.set(v.toString().padStart(4, '0')));
@@ -104,7 +104,7 @@ export class BottomSectionVer1 extends DisplayComponent<BottomSectionVer1Props> 
         </div>
         <div class="bottom-section-data-container">
           <div class="bottom-section-data-title">UTC</div>
-          <div class="bottom-section-data-value">{this.time}</div>
+          <div class="bottom-section-data-value utc-value">{this.time}</div>
         </div>
       </div>
     );

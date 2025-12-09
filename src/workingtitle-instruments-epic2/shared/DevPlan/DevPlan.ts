@@ -10,6 +10,7 @@ export class DevPlan {
   /**
    * Temp code to setup a dev flight plan for testing.
    * @param fms The fms instance to use.
+   * @returns A Promise that resolves when the dev plan setup is complete.
    */
   public static async setupDevPlan(fms: Epic2Fms): Promise<void> {
     const latitude = SimVar.GetSimVarValue('PLANE LATITUDE', SimVarValueType.Degree);

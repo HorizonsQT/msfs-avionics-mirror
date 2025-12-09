@@ -17,6 +17,7 @@ import { MapDeadReckoningLayer, MapPointerInfoLayerSize } from '../layers';
 import { MapUtils } from '../MapUtils';
 import { NextGenMapWaypointStyles } from '../MapWaypointStyles';
 import { MapFlightPlanFocusModule, MapOrientation, MapOrientationModule, MapPointerModule, MapTerrainMode, MapTerrainModule, MapUnitsModule } from '../modules';
+import { NextGenGarminMapUtils } from '../NextGenGarminMapUtils';
 
 /**
  * Options for creating a next-generation (NXi, G3000, etc) Garmin procedure map.
@@ -47,6 +48,13 @@ export type NextGenProcMapOptions = {
 
   /** The scaling factor of waypoint icons and labels. Defaults to `1`. */
   waypointStyleScale?: number;
+
+  /**
+   * Bitflags describing the requested data to be loaded in airport facilities retrieved by the map for rendering
+   * purposes. This controls what data are available from airport waypoints registered with the map's waypoint
+   * renderer. Defaults to {@link NextGenGarminMapUtils.AIRPORT_DATA_FLAGS}.
+   */
+  waypointRendererAirportDataFlags?: number;
 
   /**
    * The nominal projected target offset of the map, as `[x, y]`, where each component is expressed relative to the
@@ -194,6 +202,8 @@ export class NextGenProcMapBuilder {
   ): MapBuilder {
     options = Object.assign({}, options); // so we don't mutate the object that was passed in.
 
+    options.waypointRendererAirportDataFlags ??= NextGenGarminMapUtils.AIRPORT_DATA_FLAGS;
+
     options.rangeEndpoints ??= VecNMath.create(4, 0.5, 0.5, 0.5, 0.25);
     options.defaultFocusRangeIndex ??= 17;
 
@@ -214,6 +224,7 @@ export class NextGenProcMapBuilder {
       .withContext(MapSystemKeys.FacilityLoader, context => {
         return options.facilityLoader ?? new FacilityLoader(FacilityRepository.getRepository(context.bus));
       })
+      .withContext(MapSystemKeys.WaypointRendererAirportDataFlags, () => options.waypointRendererAirportDataFlags)
       .withModule(GarminMapKeys.Units, () => new MapUnitsModule(options.unitsSettingManager))
       .with(GarminMapBuilder.range,
         options.nauticalRangeArray ?? MapUtils.nextGenMapRanges(UnitsDistanceSettingMode.Nautical),

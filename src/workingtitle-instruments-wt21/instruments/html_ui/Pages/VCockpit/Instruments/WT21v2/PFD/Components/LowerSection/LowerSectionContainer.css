@@ -13,6 +13,7 @@
 /* The widths are weird numbers in order to get the hsi center to be square */
 .left-panel {
   width: 13.472%;
+  height: 537px;
   padding-left: 1%;
   z-index: 50;
 }

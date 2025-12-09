@@ -38,11 +38,15 @@ export class MapSystemKeys {
 
   public static readonly WaypointRenderer = 'waypointRenderer' as const;
 
+  public static readonly WaypointRendererAirportDataFlags = 'waypointRendererAirportDataFlags' as const;
+
   public static readonly IconFactory = 'iconFactory' as const;
 
   public static readonly LabelFactory = 'labelFactory' as const;
 
   public static readonly NearestWaypoints = 'nearestWaypoints' as const;
+
+  public static readonly FlightPlanWaypoints = 'flightPlanWaypoints' as const;
 
   public static readonly FlightPlan = 'flightPlan' as const;
 

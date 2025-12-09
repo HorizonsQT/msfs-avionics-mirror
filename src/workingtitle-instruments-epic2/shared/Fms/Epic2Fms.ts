@@ -2319,6 +2319,12 @@ export class Epic2Fms {
 
           const runwayLeg = Epic2FmsUtils.buildRunwayLeg(description.facility, approachRunway, false);
           runwayLeg.verticalAngle = leg.verticalAngle;
+          runwayLeg.rnp = leg.rnp;
+          runwayLeg.originIcaoStruct = leg.originIcaoStruct;
+          runwayLeg.originIcao = leg.originIcao;
+          runwayLeg.fixTypeFlags = leg.fixTypeFlags;
+          runwayLeg.rho = leg.rho;
+          runwayLeg.theta = leg.theta;
 
           insertProcedureObject.procedureLegs.push(runwayLeg);
         }
@@ -3543,23 +3549,25 @@ export class Epic2Fms {
    * Intercepts the chosen leg with that course
    * @param segmentIndex The index of the segment which contains the leg being intercepted
    * @param legIndex The index of the leg within the segment that is being intercepted
-   * @param course The course with which to intercept the leg
+   * @param course The magnetic course with which to intercept the leg
    */
   public interceptLeg(segmentIndex: number, legIndex: number, course: number): void {
     const plan = this.getModFlightPlan();
     const leg = plan.tryGetLeg(segmentIndex, legIndex);
 
-    if (leg) {
+    if (leg && Epic2Fms.isXFLeg(leg.leg)) {
       const { endLat, endLon } = leg.calculated ?? {};
 
       plan.removeLeg(segmentIndex, legIndex);
       plan.addLeg(segmentIndex, FlightPlan.createLeg({ type: LegType.Discontinuity }), legIndex, Epic2ExtraLegDefinitionFlags.HeadingInterceptLeg);
 
+      let distanceGa = 0;
       let newLegIndex = legIndex + 1;
       if (endLat && endLon) {
         const endGeo = new GeoPoint(endLat, endLon);
         const bearing = MagVar.magneticToTrue(NavMath.reciprocateHeading(course), endLat, endLon);
-        const { lat, lon } = endGeo.offset(bearing, this.ppos.distance(endLat, endLon));
+        distanceGa = this.ppos.distance(endLat, endLon);
+        const { lat, lon } = endGeo.offset(bearing, distanceGa);
 
         const initialLeg = FlightPlan.createLeg({
           type: LegType.IF,
@@ -3572,9 +3580,15 @@ export class Epic2Fms {
       }
 
       const interceptLeg = FlightPlan.createLeg({
+        ...leg.leg, // keep fixTypeFlags, rnp, navaids, etc.
         fixIcaoStruct: leg.leg.fixIcaoStruct,
         course,
-        type: LegType.CF
+        trueDegrees: false,
+        type: LegType.CF,
+        flyOver: false,
+        distance: UnitType.NMILE.convertFrom(distanceGa, UnitType.GA_RADIAN),
+        distanceMinutes: false,
+        turnDirection: LegTurnDirection.None,
       });
       const newLeg = plan.addLeg(segmentIndex, interceptLeg, newLegIndex, leg.flags);
       const interceptLegIndex = plan.getLegIndexFromLeg(newLeg);

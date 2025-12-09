@@ -1,9 +1,5 @@
-/// <reference types="@microsoft/msfs-types/js/simvar" preserve="true" />
-
 import { DirectorState, PlaneDirector } from './PlaneDirector';
-import { SimVarValueType } from '../../data/SimVars';
 import { MathUtils } from '../../math/MathUtils';
-import { MappedSubscribable } from '../../sub';
 import { APValues } from '../APValues';
 
 /**
@@ -11,112 +7,121 @@ import { APValues } from '../APValues';
  */
 export type APFPADirectorOptions = {
   /**
-   * The maximum flight path angle, in degrees, supported by the director, or a function which returns it. If not defined,
-   * the director will not limit the FPA.
+   * The maximum flight path angle, in degrees, supported by the director, or a function which returns it. If not
+   * defined, then the director will not limit the FPA.
    */
-  maxFpa: number | (() => number) | undefined;
+  maxFpa?: number | (() => number);
 };
 
 /**
- * A flight path angle autopilot director.
+ * An autopilot director that generates flight director pitch commands to hold a flight path angle.
+ * 
+ * The director requires valid pitch, ground speed, and positional vertical speed data to arm or activate.
  */
 export class APFPADirector implements PlaneDirector {
-
+  /** @inheritDoc */
   public state: DirectorState;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
   public onActivate?: () => void;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
   public onArm?: () => void;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
+  public onDeactivate?: () => void;
+
+  /** @inheritDoc */
   public drivePitch?: (pitch: number, adjustForAoa?: boolean, adjustForVerticalWind?: boolean) => void;
 
   private readonly maxFpaFunc: () => number;
 
-  private readonly selectedFpa: MappedSubscribable<number>;
+  private readonly pitch = this.apValues.dataProvider.getItem('pitch');
+  private readonly aoa = this.apValues.dataProvider.getItem('aoa');
+  private readonly groundSpeed = this.apValues.dataProvider.getItem('ground_speed');
+  private readonly positionVerticalSpeed = this.apValues.dataProvider.getItem('position_vertical_speed');
 
   /**
-   * Creates an instance of the FPA Director.
-   * @param apValues are the ap selected values for the autopilot.
-   * @param options Options to configure the new director. Option values default to the following if not defined:
-   * * `maxFpa`: `undefined`
+   * Creates a new instance of APFPADirector.
+   * @param apValues Autopilot values from this director's parent autopilot.
+   * @param options Options to configure the new director.
    */
-  constructor(private readonly apValues: APValues, options?: Partial<Readonly<APFPADirectorOptions>>) {
-    const maxBankAngleOpt = options?.maxFpa ?? undefined;
-    switch (typeof maxBankAngleOpt) {
+  public constructor(private readonly apValues: APValues, options?: Readonly<APFPADirectorOptions>) {
+    const maxFpaOpt = options?.maxFpa ?? undefined;
+    switch (typeof maxFpaOpt) {
       case 'number':
-        this.maxFpaFunc = () => maxBankAngleOpt;
+        this.maxFpaFunc = () => maxFpaOpt;
         break;
       case 'function':
-        this.maxFpaFunc = maxBankAngleOpt;
+        this.maxFpaFunc = maxFpaOpt;
         break;
       default:
         this.maxFpaFunc = () => Infinity;
     }
 
-    this.selectedFpa = this.apValues.selectedFlightPathAngle.map(fpa => {
-      const maxFpa = this.maxFpaFunc();
-      return -MathUtils.clamp(fpa, -maxFpa, maxFpa);
-    });
-
     this.state = DirectorState.Inactive;
-
-    this.pauseSubs();
-  }
-
-  /** Resumes Subscriptions. */
-  private resumeSubs(): void {
-    this.selectedFpa.resume();
-  }
-
-  /** Pauses Subscriptions. */
-  private pauseSubs(): void {
-    this.selectedFpa.pause();
   }
 
   /**
-   * Activates this director.
+   * Checks whether the data required for this director to function are valid.
+   * @returns Whether the data required for this director to function are valid.
    */
+  private isDataValid(): boolean {
+    return this.pitch.isValueValid() && this.groundSpeed.isValueValid() && this.positionVerticalSpeed.isValueValid();
+  }
+
+  /** @inheritDoc */
   public activate(): void {
-    this.resumeSubs();
+    if (this.state === DirectorState.Active || !this.isDataValid()) {
+      return;
+    }
+
     this.state = DirectorState.Active;
+
     if (this.onActivate !== undefined) {
       this.onActivate();
     }
+
     const fpa = this.getCurrentFpa();
     SimVar.SetSimVarValue('L:WT_AP_FPA_Target:1', 'degree', fpa);
     SimVar.SetSimVarValue('AUTOPILOT VERTICAL HOLD', 'Bool', true);
   }
 
-  /**
-   * Arms this director.
-   * This director has no armed mode, so it activates immediately.
-   */
+  /** @inheritDoc */
   public arm(): void {
-    this.resumeSubs();
     if (this.state == DirectorState.Inactive) {
       this.activate();
     }
   }
 
-  /**
-   * Deactivates this director.
-   */
+  /** @inheritDoc */
   public deactivate(): void {
+    if (this.state === DirectorState.Inactive) {
+      return;
+    }
+
     this.state = DirectorState.Inactive;
+
+    if (this.onDeactivate !== undefined) {
+      this.onDeactivate();
+    }
+
     SimVar.SetSimVarValue('AUTOPILOT VERTICAL HOLD', 'Bool', false);
-    this.pauseSubs();
   }
 
-  /**
-   * Updates this director.
-   */
+  /** @inheritDoc */
   public update(): void {
-    if (this.state === DirectorState.Active) {
-      this.drivePitch && this.drivePitch(this.selectedFpa.get(), true, true);
+    if (this.state !== DirectorState.Active) {
+      return;
     }
+
+    if (!this.isDataValid()) {
+      this.deactivate();
+      return;
+    }
+
+    const maxFpa = this.maxFpaFunc();
+    this.drivePitch && this.drivePitch(-MathUtils.clamp(this.apValues.selectedFlightPathAngle.get(), -maxFpa, maxFpa), true, true);
   }
 
   /**
@@ -124,8 +129,6 @@ export class APFPADirector implements PlaneDirector {
    * @returns The current aircraft FPA, in degrees.
    */
   private getCurrentFpa(): number {
-    const aoa = SimVar.GetSimVarValue('INCIDENCE ALPHA', SimVarValueType.Degree);
-    const pitch = -SimVar.GetSimVarValue('PLANE PITCH DEGREES', SimVarValueType.Degree);
-    return pitch - aoa;
+    return -this.pitch.getActualValue() - this.aoa.getActualValue();
   }
 }

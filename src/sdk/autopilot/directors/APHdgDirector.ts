@@ -1,7 +1,5 @@
-import { ConsumerValue } from '../../data/ConsumerValue';
 import { EventBus } from '../../data/EventBus';
 import { NavMath } from '../../geo/NavMath';
-import { AhrsEvents } from '../../instruments/Ahrs';
 import { MathUtils } from '../../math/MathUtils';
 import { APValues } from '../APValues';
 import { DirectorState, PlaneDirector } from './PlaneDirector';
@@ -34,28 +32,38 @@ export type APHdgDirectorOptions = {
   turnReversalThreshold?: number;
 
   /**
-   * Whether the director is to be used as a TO/GA lateral mode. If `true`, the director will not control the
-   * `AUTOPILOT HEADING LOCK` simvar. Defaults to `false`.
+   * Whether the director is to be used as a TO/GA lateral mode. If false, then the director will hold the autopilot's
+   * selected heading and will control the state of the `AUTOPILOT HEADING LOCK` SimVar. If true, then the director
+   * will hold the airplane's current heading at the time of director activation or the transition from on-ground to
+   * in-air, whichever comes later, and will not control the state of the `AUTOPILOT HEADING LOCK` SimVar. Defaults to
+   * `false`.
    */
   isToGaMode?: boolean;
 };
 
 /**
- * A heading autopilot director.
+ * An autopilot director that generates flight director bank commands to hold a magnetic heading. Optionally sets
+ * the `AUTOPILOT HEADING LOCK` SimVar state to true (1) when it is armed or activated, and to false (0) when it is
+ * deactivated.
+ * 
+ * The director requires valid bank and magnetic heading data to arm or activate.
  */
 export class APHdgDirector implements PlaneDirector {
+  /** @inheritDoc */
   public state: DirectorState;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
   public onActivate?: () => void;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
   public onArm?: () => void;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
+  public onDeactivate?: () => void;
+
+  /** @inheritDoc */
   public driveBank?: (bank: number, rate?: number) => void;
 
-  private readonly currentHeading = ConsumerValue.create(null, 0);
   private toGaHeading = 0;
 
   private lastHeadingDiff: number | undefined = undefined;
@@ -66,6 +74,10 @@ export class APHdgDirector implements PlaneDirector {
   private readonly driveBankFunc: (bank: number) => void;
 
   private readonly isToGaMode: boolean;
+
+  private readonly bank = this.apValues.dataProvider.getItem('bank');
+  private readonly headingMagnetic = this.apValues.dataProvider.getItem('heading_magnetic');
+  private readonly isOnGround = this.apValues.dataProvider.getItem('is_on_ground');
 
   /**
    * Creates a new instance of APHdgDirector.
@@ -118,81 +130,87 @@ export class APHdgDirector implements PlaneDirector {
 
     this.isToGaMode = options?.isToGaMode ?? false;
 
-    this.currentHeading.setConsumer(bus.getSubscriber<AhrsEvents>().on('hdg_deg').withPrecision(1));
-
-    this.pauseSubs();
-
     this.state = DirectorState.Inactive;
-
-  }
-
-  /** Resumes Subscriptions. */
-  private resumeSubs(): void {
-    this.currentHeading.resume();
-  }
-
-  /** Pauses Subscriptions. */
-  private pauseSubs(): void {
-    this.currentHeading.pause();
   }
 
   /**
-   * Activates this director.
+   * Checks whether the data required for this director to function are valid.
+   * @returns Whether the data required for this director to function are valid.
    */
+  private isDataValid(): boolean {
+    return this.bank.isValueValid() && this.headingMagnetic.isValueValid();
+  }
+
+  /** @inheritDoc */
   public activate(): void {
-    this.resumeSubs();
-    if (this.onActivate !== undefined) {
-      this.onActivate();
-    }
-    if (!this.isToGaMode) {
-      SimVar.SetSimVarValue('AUTOPILOT HEADING LOCK', 'Bool', true);
-    } else {
-      this.toGaHeading = this.currentHeading.get();
+    if (this.state === DirectorState.Active || !this.isDataValid()) {
+      return;
     }
 
     this.state = DirectorState.Active;
+
+    if (this.onActivate !== undefined) {
+      this.onActivate();
+    }
+
+    if (!this.isToGaMode) {
+      SimVar.SetSimVarValue('AUTOPILOT HEADING LOCK', 'Bool', true);
+    } else {
+      this.toGaHeading = this.headingMagnetic.getValue();
+    }
   }
 
-  /**
-   * Arms this director.
-   * This director has no armed mode, so it activates immediately.
-   */
+  /** @inheritDoc */
   public arm(): void {
     if (this.state == DirectorState.Inactive) {
       this.activate();
     }
   }
 
-  /**
-   * Deactivates this director.
-   */
-  public async deactivate(): Promise<void> {
-    this.pauseSubs();
-    if (!this.isToGaMode) { await SimVar.SetSimVarValue('AUTOPILOT HEADING LOCK', 'Bool', false); }
+  /** @inheritDoc */
+  public deactivate(): void {
+    if (this.state === DirectorState.Inactive) {
+      return;
+    }
+
     this.state = DirectorState.Inactive;
+
+    if (this.onDeactivate !== undefined) {
+      this.onDeactivate();
+    }
+
+    if (!this.isToGaMode) {
+      SimVar.SetSimVarValue('AUTOPILOT HEADING LOCK', 'Bool', false);
+    }
+
     this.lastHeadingDiff = undefined;
     this.lockedTurnDirection = undefined;
   }
 
-  /**
-   * Updates this director.
-   */
+  /** @inheritDoc */
   public update(): void {
-    if (this.state === DirectorState.Active) {
-      let bank: number;
+    if (this.state !== DirectorState.Active) {
+      return;
+    }
 
-      if (this.isToGaMode) {
-        if (Simplane.getIsGrounded()) {
-          this.toGaHeading = this.currentHeading.get();
-        }
+    if (!this.isDataValid()) {
+      this.deactivate();
+      return;
+    }
 
-        bank = this.desiredBank(this.toGaHeading);
-      } else {
-        bank = this.desiredBank(this.apValues.selectedHeading.get());
+    let bank: number;
+
+    if (this.isToGaMode) {
+      if (this.isOnGround.getValue()) {
+        this.toGaHeading = this.headingMagnetic.getValue();
       }
 
-      this.driveBankFunc(bank);
+      bank = this.desiredBank(this.toGaHeading);
+    } else {
+      bank = this.desiredBank(this.apValues.selectedHeading.get());
     }
+
+    this.driveBankFunc(bank);
   }
 
   /**
@@ -201,7 +219,7 @@ export class APHdgDirector implements PlaneDirector {
    * @returns The desired bank angle.
    */
   private desiredBank(targetHeading: number): number {
-    const currentHeading = this.currentHeading.get();
+    const currentHeading = this.headingMagnetic.getValue();
     const headingDiff = MathUtils.diffAngleDeg(currentHeading, targetHeading);
 
     let turnDirection: 'left' | 'right' | undefined = undefined;

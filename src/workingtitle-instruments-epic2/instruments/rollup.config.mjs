@@ -14,11 +14,11 @@ export default [
         name: 'wt_epic2_pfd',
         globals: {
           '@microsoft/msfs-sdk': 'msfssdk',
-          '@microsoft/msfs-epic2-shared': 'wt_epic2_shared'
-        }
+          '@microsoft/msfs-epic2-shared': 'wt_epic2_shared',
+        },
       },
       external: ['@microsoft/msfs-sdk', '@microsoft/msfs-epic2-shared'],
-      plugins: [css({ output: 'Epic2Pfd.css' }), resolve()]
+      plugins: [css({ output: 'Epic2Pfd.css' }), resolve()],
     },
     {
       input: `${build_path}/MFD/UpperMFD/index.js`,
@@ -28,11 +28,11 @@ export default [
         name: 'wt_epic2_upper_mfd',
         globals: {
           '@microsoft/msfs-sdk': 'msfssdk',
-          '@microsoft/msfs-epic2-shared': 'wt_epic2_shared'
-        }
+          '@microsoft/msfs-epic2-shared': 'wt_epic2_shared',
+        },
       },
       external: ['@microsoft/msfs-sdk', '@microsoft/msfs-epic2-shared'],
-      plugins: [css({ output: 'Epic2UpperMfd.css' }), resolve()]
+      plugins: [css({ output: 'Epic2UpperMfd.css' }), resolve()],
     },
     {
       input: `${build_path}/MFD/LowerMFD/index.js`,
@@ -42,11 +42,11 @@ export default [
         name: 'wt_epic2_lower_mfd',
         globals: {
           '@microsoft/msfs-sdk': 'msfssdk',
-          '@microsoft/msfs-epic2-shared': 'wt_epic2_shared'
-        }
+          '@microsoft/msfs-epic2-shared': 'wt_epic2_shared',
+        },
       },
       external: ['@microsoft/msfs-sdk', '@microsoft/msfs-epic2-shared'],
-      plugins: [css({ output: 'Epic2LowerMfd.css' }), resolve()]
+      plugins: [css({ output: 'Epic2LowerMfd.css' }), resolve()],
     },
     {
       input: `${build_path}/TSC/index.js`,
@@ -56,10 +56,10 @@ export default [
         name: 'wt_epic2_tsc',
         globals: {
           '@microsoft/msfs-sdk': 'msfssdk',
-          '@microsoft/msfs-epic2-shared': 'wt_epic2_shared'
-        }
+          '@microsoft/msfs-epic2-shared': 'wt_epic2_shared',
+        },
       },
       external: ['@microsoft/msfs-sdk', '@microsoft/msfs-epic2-shared'],
       plugins: [css({ output: 'Epic2Tsc.css' }), resolve()]
-    }
+    },
 ];

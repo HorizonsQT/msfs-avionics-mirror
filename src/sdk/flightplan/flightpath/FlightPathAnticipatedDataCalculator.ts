@@ -1,9 +1,17 @@
 import { LegDefinition } from '../FlightPlanning';
+import { FlightPathCalculatorFacilityCache } from './FlightPathCalculatorFacilityCache';
 
 /**
  * A context which provides information for a {@link FlightPathAnticipatedDataCalculator}.
  */
 export interface FlightPathAnticipatedDataContext {
+  /**
+   * A cache of facilities. When accessed in
+   * {@link FlightPathAnticipatedDataCalculator.getAnticipatedData | FlightPathAnticipatedDataCalculator.getAnticipatedData()},
+   * the cache contains facilities referenced by the flight plan legs for which anticipated data are requested.
+   */
+  readonly facilityCache: FlightPathCalculatorFacilityCache;
+
   /** The index of the active flight plan leg. */
   readonly activeLegIndex: number;
 

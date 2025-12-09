@@ -8,7 +8,7 @@ export default [
     output: {
       file: 'dist/wt21shared.js',
       format: 'iife',
-      name: 'msfswt21shared',
+      name: 'wt21_shared',
       globals: {
         '@microsoft/msfs-sdk': 'msfssdk',
         '@microsoft/msfs-wtlinesdk': 'wtlinesdk',

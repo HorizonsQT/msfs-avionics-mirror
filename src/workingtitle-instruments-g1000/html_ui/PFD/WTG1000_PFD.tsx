@@ -11,7 +11,10 @@ import {
   SoundServer, Subject, TrafficInstrument, UnitType, UserSettingSaveManager, VNavSimVarPublisher, Wait, XMLGaugeConfigFactory, XMLWarningFactory, XPDRInstrument
 } from '@microsoft/msfs-sdk';
 
-import { AdcSystem, Fms, GarminAdsb, NavIndicatorController, TrafficAdvisorySystem } from '@microsoft/msfs-garminsdk';
+import {
+  AdcSystem, Fms, GarminAdsb, GpsNavSource, NavIndicatorController, NavRadioNavSource,
+  NavReferenceIndicatorsCollection, NavReferenceSourceCollection, TrafficAdvisorySystem
+} from '@microsoft/msfs-garminsdk';
 
 import { EIS } from '../MFD/Components/EIS';
 import { MapInset } from '../PFD/Components/Overlays/MapInset';
@@ -19,10 +22,15 @@ import { BacklightManager } from '../Shared/Backlight/BacklightManager';
 import { G1000ControlPublisher } from '../Shared/G1000Events';
 import { G1000PfdAvionicsPlugin } from '../Shared/G1000PfdPlugin';
 import { G1000PfdPluginBinder } from '../Shared/G1000Plugin';
+import { CourseKnobInputHandler } from '../Shared/Input/CourseKnobInputHandler';
 import { AhrsPublisher } from '../Shared/Instruments/AhrsPublisher';
 import { NavComRadio } from '../Shared/NavCom/NavComRadio';
 import { G1000Config } from '../Shared/NavComConfig';
 import { NPConfig } from '../Shared/NavProcessorConfig';
+import {
+  G1000ActiveSourceNavIndicator, G1000NavIndicator, G1000NavIndicatorName, G1000NavIndicators, G1000NavSourceName,
+  G1000NavSources
+} from '../Shared/NavReference/G1000NavReference';
 import { G1000AirframeOptionsManager } from '../Shared/Profiles/G1000AirframeOptionsManager';
 import { G1000SettingSaveManager } from '../Shared/Profiles/G1000SettingSaveManager';
 import { StartupLogo } from '../Shared/StartupLogo';
@@ -142,6 +150,10 @@ class WTG1000_PFD extends BaseInstrument {
 
   private readonly airframeOptions: G1000AirframeOptionsManager;
 
+  private readonly navSources: G1000NavSources;
+  private readonly navIndicators: G1000NavIndicators;
+  private readonly courseKnobInputHandler: CourseKnobInputHandler;
+
   private readonly g1000Systems: G1000AvionicsSystem[] = [];
   private readonly systems: AvionicsSystem[] = [];
 
@@ -248,6 +260,12 @@ class WTG1000_PFD extends BaseInstrument {
 
     this.navIndicatorController = new NavIndicatorController(this.bus, this.fms);
 
+    this.navSources = this.createNavReferenceSourceCollection();
+    this.navIndicators = this.createNavReferenceIndicatorCollection();
+
+    this.courseKnobInputHandler = new CourseKnobInputHandler('PFD', this.bus, this.navIndicators.get('activeSource'));
+    this.courseKnobInputHandler.init();
+
     this.casXmlLogicHost = new CompositeLogicXMLHost();
     this.eisXmlLogicHost = new CompositeLogicXMLHost();
     this.warningFactory = new XMLWarningFactory(this);
@@ -280,6 +298,29 @@ class WTG1000_PFD extends BaseInstrument {
    */
   get isInteractive(): boolean {
     return true;
+  }
+
+  /**
+   * Creates a navigation reference source collection for this instrument to use.
+   * @returns A navigation reference source collection for this instrument to use.
+   */
+  private createNavReferenceSourceCollection(): G1000NavSources {
+    return new NavReferenceSourceCollection<G1000NavSourceName>(
+      new NavRadioNavSource<G1000NavSourceName>(this.bus, 'NAV1', 1),
+      new NavRadioNavSource<G1000NavSourceName>(this.bus, 'NAV2', 2),
+      new GpsNavSource<G1000NavSourceName>(this.bus, 'GPS1', 1),
+      new GpsNavSource<G1000NavSourceName>(this.bus, 'GPS2', 2)
+    );
+  }
+
+  /**
+   * Creates a navigation reference indicator collection for this instrument to use.
+   * @returns A navigation reference indicator collection for this instrument to use.
+   */
+  private createNavReferenceIndicatorCollection(): G1000NavIndicators {
+    return new NavReferenceIndicatorsCollection(new Map<G1000NavIndicatorName, G1000NavIndicator>([
+      ['activeSource', new G1000ActiveSourceNavIndicator(this.navSources, this.bus)]
+    ]));
   }
 
   /**

@@ -9,10 +9,20 @@ import { MathUtils } from '../../math/MathUtils';
 import { UnitType } from '../../math/NumberUnit';
 import { AltitudeRestrictionType, LegType } from '../../navigation';
 import { ReadonlySubEvent, SubEvent } from '../../sub';
-import { AltitudeConstraintDetails, VerticalFlightPlan, VNavConstraint } from '../VerticalNavigation';
+import { AltitudeConstraintDetails, VerticalFlightPlan, VNavConstraint, VNavLeg } from '../VerticalNavigation';
 import { VNavControlEvents } from '../vnav/VNavControlEvents';
 import { VNavUtils } from '../vnav/VNavUtils';
 import { VNavPathCalculator } from './VNavPathCalculator';
+
+/**
+ * A leg in a {@link VerticalFlightPlan} that does not contain computed vertical path information.
+ */
+export type UncomputedVNavLeg = Pick<VNavLeg, 'segmentIndex' | 'legIndex' | 'name' | 'distance' | 'isEligible' | 'isUserDefined' | 'isDirectToTarget'>;
+
+/**
+ * An altitude constraint in a {@link VerticalFlightPlan} that does not contain computed vertical path information.
+ */
+export type UncomputedVNavConstraint = Pick<VNavConstraint, 'type' | 'index' | 'minAltitude' | 'maxAltitude' | 'name' | 'isBeyondFaf'>;
 
 /**
  * Options for a SmoothingPathCalculator.
@@ -45,22 +55,62 @@ export type SmoothingPathCalculatorOptions = {
    */
   maxFpa?: number;
 
-  /** Whether to force the first constraint in the approach to an AT constraint. Defaults to `false`. */
+  /**
+   * Whether to force the first constraint in the approach to an AT constraint. Defaults to `false`.
+   * @deprecated Please use the `getLegConstraintAltitudes` option to customize minimum and maximum altitudes for VNAV
+   * constraints.
+   */
   forceFirstApproachAtConstraint?: boolean;
 
   /** The index offset of a lateral direct-to leg from its direct-to target leg. Defaults to `3`. */
   directToLegOffset?: number;
 
   /**
+   * A function which gets the minimum and maximum altitudes to enforce for a VNAV constraint assigned to a lateral
+   * flight plan leg.
+   * 
+   * If not defined, then the minimum and maximum altitudes will be taken from the leg's vertical data based on the
+   * value of the altitude restriction type field as follows:
+   * * {@link AltitudeRestrictionType.At}: minimum and maximum altitude equal to the first altitude restriction field.
+   * * {@link AltitudeRestrictionType.AtOrAbove}: minimum altitude equal to the first altitude restriction field,
+   * maximum altitude equal to infinity.
+   * * {@link AltitudeRestrictionType.AtOrBelow}: minimum altitude equal to negative infinity, maximum altitude equal
+   * to the second altitude restriction field.
+   * * {@link AltitudeRestrictionType.Between}: minimum altitude equal to the second altitude restriction field,
+   * maximum altitude equal to the first altitude restriction field.
+   * * {@link AltitudeRestrictionType.Unused} (or any other value): no altitudes.
+   * @param out The tuple to which to write the minimum and maximum altitudes, as
+   * `[minimum_altitude, maximum_altitude]` in meters.
+   * @param lateralPlan The lateral flight plan that hosts the leg for which to get the constraint altitudes.
+   * @param lateralLeg The lateral flight plan leg for which to get the constraint altitudes.
+   * @param globalLegIndex The global index of the lateral flight plan leg for which to get the constraint altitudes.
+   * @param segment The latearl flight plan segment containing the flight plan leg for which to get the constraint
+   * altitudes.
+   * @param segmentLegIndex The index of the lateral flight plan leg for which to get the constraint altitudes in its
+   * containing segment.
+   * @returns The minimum and maximum altitudes to enforce for a VNAV constraint assigned to the specified lateral
+   * flight plan leg, as the tuple passed to the `out` parameter, or `undefined` if there should be no constraint
+   * assigned to the leg.
+   */
+  getLegConstraintAltitudes?: (
+    out: [min: number, max: number],
+    lateralPlan: FlightPlan,
+    lateralLeg: LegDefinition,
+    globalLegIndex: number,
+    segment: FlightPlanSegment,
+    segmentLegIndex: number
+  ) => [min: number, max: number] | undefined;
+
+  /**
    * A function which checks whether a lateral flight plan leg is eligible for VNAV. VNAV descent paths will not be
-   * calculated through VNAV-ineligible legs. If not defined, a leg will be considered eligible if and only if it
+   * calculated through VNAV-ineligible legs. If not defined, then a leg will be considered eligible if and only if it
    * does not contain a discontinuity.
    */
   isLegEligible?: (lateralLeg: LegDefinition) => boolean;
 
   /**
    * A function which checks whether an altitude constraint defined for a lateral flight plan leg should be used for
-   * VNAV. If not defined, all constraints will be used.
+   * VNAV. If not defined, then all constraints will be used.
    * @param lateralPlan The lateral flight plan that hosts the altitude constraint.
    * @param lateralLeg The lateral flight plan leg that hosts the altitude constraint.
    * @param globalLegIndex The global index of the lateral flight plan leg that hosts the altitude constraint.
@@ -73,9 +123,35 @@ export type SmoothingPathCalculatorOptions = {
   shouldUseConstraint?: (lateralPlan: FlightPlan, lateralLeg: LegDefinition, globalLegIndex: number, segment: FlightPlanSegment, segmentLegIndex: number) => boolean;
 
   /**
+   * A function which gets the along-track offset to use for a VNAV constraint.
+   * @param constraint The constraint for which to get an along-track offset.
+   * @param constraintIndex The index of the constraint for which to get an along-track offset.
+   * @param verticalLeg The vertical flight plan leg that hosts the constraint for which to get an along-track offset.
+   * @param lateralLeg The lateral flight plan leg that hosts the constraint for which to get an along-track offset.
+   * @param verticalPlan The vertical flight plan containing the constraint for which to get an along-track offset.
+   * Use caution when accessing information from the vertical flight plan - computed vertical path information may be
+   * unavailable or out-of-date. Refer to the {@link UncomputedVNavLeg} and {@link UncomputedVNavConstraint} types for
+   * guidance on what information from legs and constraints is safe to access.
+   * @param lateralPlan The lateral flight plan associated with the constraint for which to get an along-track offset.
+   * @returns The along-track offset to use for the specified VNAV constraint, in meters. An offset of zero indicates
+   * the constraint is coincident with the end of its host leg, positive offsets move the constraint forward along the
+   * flight plan, and negative offsets move the constraint backward along the flight plan.
+   */
+  getConstraintAlongTrackOffset?: (
+    constraint: UncomputedVNavConstraint,
+    constraintIndex: number,
+    verticalLeg: UncomputedVNavLeg,
+    lateralLeg: LegDefinition,
+    verticalPlan: VerticalFlightPlan,
+    lateralPlan: FlightPlan
+  ) => number;
+
+  /**
    * A function which checks whether a climb constraint should be invalidated. Invalidated constraints will not appear
-   * in the vertical flight plan. If not defined, no climb constraints will be invalidated.
-   * @param constraint A descent constraint.
+   * in the vertical flight plan.
+   * 
+   * If not defined, then no climb constraints will be invalidated.
+   * @param constraint The climb constraint to check.
    * @param index The index of the constraint to check.
    * @param constraints The array of VNAV constraints currently in the vertical flight plan.
    * @param firstDescentConstraintIndex The index of the first descent constraint in the vertical flight plan, if one
@@ -89,9 +165,9 @@ export type SmoothingPathCalculatorOptions = {
    * @returns Whether the specified climb constraint should be invalidated.
    */
   invalidateClimbConstraint?: (
-    constraint: VNavConstraint,
+    constraint: UncomputedVNavConstraint,
     index: number,
-    constraints: readonly VNavConstraint[],
+    constraints: readonly UncomputedVNavConstraint[],
     firstDescentConstraintIndex: number,
     priorMinAltitude: number,
     priorMaxAltitude: number
@@ -99,8 +175,14 @@ export type SmoothingPathCalculatorOptions = {
 
   /**
    * A function which checks whether a descent constraint should be invalidated. Invalidated constraints will not
-   * appear in the vertical flight plan. If not defined, no descent constraints will be invalidated.
-   * @param constraint A descent constraint.
+   * appear in the vertical flight plan.
+   * 
+   * If not defined, then a constraint is invalidated if any of the following conditions is met:
+   * * The constraint defines a minimum altitude and the minimum altitude is greater than the most recent maximum
+   * altitude defined by a prior constraint that is connected to the constraint to check by a contiguous sequence of
+   * descent constraints.
+   * * The required flight path angle to meet the constraint is greater than the maximum allowed flight path angle.
+   * @param constraint The descent constraint to check.
    * @param index The index of the constraint to check.
    * @param constraints The array of VNAV constraints currently in the vertical flight plan.
    * @param priorMinAltitude The most recent minimum altitude, in meters, defined by a VNAV constraint prior to the
@@ -118,14 +200,41 @@ export type SmoothingPathCalculatorOptions = {
    * @returns Whether the specified descent constraint should be invalidated.
    */
   invalidateDescentConstraint?: (
-    constraint: VNavConstraint,
+    constraint: UncomputedVNavConstraint,
     index: number,
-    constraints: readonly VNavConstraint[],
+    constraints: readonly UncomputedVNavConstraint[],
     priorMinAltitude: number,
     priorMaxAltitude: number,
     requiredFpa: number,
     maxFpa: number
   ) => boolean;
+
+  /**
+   * Gets the target altitude to use for a target descent constraint, in meters. A target descent constraint is a
+   * constraint at which a section of the vertical path with a constant flight path angle terminates. The target
+   * altitude of the constraint is the altitude at which the vertical path crosses the constraint.
+   * 
+   * Note: this function is only called to get target altitudes for constraints for which the target altitude is not
+   * otherwise constrained by the vertical path to one possible value.
+   * @param constraint The constraint for which to get a target altitude.
+   * @param constraintIndex The index of the constraint for which to get a target altitude.
+   * @param verticalLeg The vertical flight plan leg that hosts the constraint for which to get a target altitude.
+   * @param lateralLeg The lateral flight plan leg that hosts the constraint for which to get a target altitude.
+   * @param verticalPlan The vertical flight plan containing the constraint for which to get a target altitude. Use
+   * caution when accessing information from the vertical flight plan - computed vertical path information may be
+   * unavailable or out-of-date. Refer to the {@link UncomputedVNavLeg} and {@link UncomputedVNavConstraint} types for
+   * guidance on what information from legs and constraints is safe to access.
+   * @param lateralPlan The lateral flight plan associated with the constraint for which to get a target altitude. 
+   * @returns The target altitude to use for the specified target descent constraint, in meters.
+   */
+  getDescentTargetConstraintAltitude?: (
+    constraint: UncomputedVNavConstraint,
+    constraintIndex: number,
+    verticalLeg: UncomputedVNavLeg,
+    lateralLeg: LegDefinition,
+    verticalPlan: VerticalFlightPlan,
+    lateralPlan: FlightPlan
+  ) => number;
 };
 
 /**
@@ -171,28 +280,55 @@ export class SmoothingPathCalculator implements VNavPathCalculator {
 
   protected readonly directToLegOffset: number;
 
+  protected getLegConstraintAltitudesFunc: (
+    out: [min: number, max: number],
+    lateralPlan: FlightPlan,
+    lateralLeg: LegDefinition,
+    globalLegIndex: number,
+    segment: FlightPlanSegment,
+    segmentLegIndex: number
+  ) => [min: number, max: number] | undefined;
+
   protected isLegEligibleFunc: (lateralLeg: LegDefinition) => boolean;
 
   protected shouldUseConstraintFunc: (lateralPlan: FlightPlan, lateralLeg: LegDefinition, globalLegIndex: number, segment: FlightPlanSegment, segmentLegIndex: number) => boolean;
 
+  protected getConstraintAlongTrackOffsetFunc: (
+    constraint: UncomputedVNavConstraint,
+    constraintIndex: number,
+    verticalLeg: UncomputedVNavLeg,
+    lateralLeg: LegDefinition,
+    verticalPlan: VerticalFlightPlan,
+    lateralPlan: FlightPlan
+  ) => number;
+
   protected invalidateClimbConstraintFunc: (
-    constraint: VNavConstraint,
+    constraint: UncomputedVNavConstraint,
     index: number,
-    constraints: readonly VNavConstraint[],
+    constraints: readonly UncomputedVNavConstraint[],
     firstDescentConstraintIndex: number,
     priorMinAltitude: number,
     priorMaxAltitude: number,
   ) => boolean;
 
   protected invalidateDescentConstraintFunc: (
-    constraint: VNavConstraint,
+    constraint: UncomputedVNavConstraint,
     index: number,
-    constraints: readonly VNavConstraint[],
+    constraints: readonly UncomputedVNavConstraint[],
     priorMinAltitude: number,
     priorMaxAltitude: number,
     requiredFpa: number,
     maxFpa: number
   ) => boolean;
+
+  protected getDescentTargetConstraintAltitudeFunc: (
+    constraint: UncomputedVNavConstraint,
+    constraintIndex: number,
+    verticalLeg: UncomputedVNavLeg,
+    lateralLeg: LegDefinition,
+    verticalPlan: VerticalFlightPlan,
+    lateralPlan: FlightPlan
+  ) => number;
 
   protected readonly legAltitudes: [number, number] = [0, 0];
   protected readonly applyPathValuesResult: [number | undefined, number] = [undefined, 0];
@@ -217,10 +353,13 @@ export class SmoothingPathCalculator implements VNavPathCalculator {
     this.maxFlightPathAngle = options?.maxFpa ?? SmoothingPathCalculator.DEFAULT_MAX_FPA;
     this.forceFirstApproachAtConstraint = options?.forceFirstApproachAtConstraint ?? false;
     this.directToLegOffset = options?.directToLegOffset ?? SmoothingPathCalculator.DEFAULT_DIRECT_TO_LEG_OFFSET;
+    this.getLegConstraintAltitudesFunc = options?.getLegConstraintAltitudes ?? SmoothingPathCalculator.getLegConstraintAltitudes;
     this.isLegEligibleFunc = options?.isLegEligible ?? SmoothingPathCalculator.isLegVnavEligible;
     this.shouldUseConstraintFunc = options?.shouldUseConstraint ?? (() => true);
+    this.getConstraintAlongTrackOffsetFunc = options?.getConstraintAlongTrackOffset ?? SmoothingPathCalculator.getConstraintAlongTrackOffset;
     this.invalidateClimbConstraintFunc = options?.invalidateClimbConstraint ?? SmoothingPathCalculator.invalidateClimbConstraint;
     this.invalidateDescentConstraintFunc = options?.invalidateDescentConstraint ?? SmoothingPathCalculator.invalidateDescentConstraint;
+    this.getDescentTargetConstraintAltitudeFunc = options?.getDescentTargetConstraintAltitude ?? SmoothingPathCalculator.getDescentTargetConstraintAltitude;
 
     this.flightPlanner.onEvent('fplCreated').handle(e => this.createVerticalPlan(e.planIndex));
 
@@ -691,8 +830,7 @@ export class SmoothingPathCalculator implements VNavPathCalculator {
           verticalPlan.missedApproachStartIndex = globalLegIndex;
         }
 
-        // Check if the leg contains a constraint
-        const constraintAltitudes = SmoothingPathCalculator.getConstraintAltitudes(lateralLeg, this.legAltitudes);
+        const constraintAltitudes = this.getLegConstraintAltitudesFunc(this.legAltitudes, lateralPlan, lateralLeg, globalLegIndex, segment, segmentLegIndex);
 
         verticalLeg.isEligible = this.isLegEligibleFunc(lateralLeg);
 
@@ -813,6 +951,9 @@ export class SmoothingPathCalculator implements VNavPathCalculator {
     // Updated leg distances could cause some invalidated constraints to become valid, so we will re-insert all
     // invalidated constraints and filter them again.
     this.reinsertInvalidConstraints(verticalPlan, lateralPlan);
+
+    this.refreshConstraintAlongTrackOffsets(lateralPlan, verticalPlan);
+
     this.findAndRemoveInvalidConstraints(verticalPlan);
 
     if (verticalPlan.constraints.length < 1) {
@@ -822,13 +963,17 @@ export class SmoothingPathCalculator implements VNavPathCalculator {
     this.populateConstraints(verticalPlan);
 
     if (this.computeFlightPathAngles(verticalPlan)) {
+      this.computeLegAltitudes(lateralPlan, verticalPlan);
+
       for (let constraintIndex = 0; constraintIndex < verticalPlan.constraints.length; constraintIndex++) {
         const constraint = verticalPlan.constraints[constraintIndex];
 
-        if (constraint.type === 'descent' || constraint.type === 'direct' || constraint.type === 'manual') {
-          let altitude = constraint.targetAltitude;
+        let isDescent = false;
+        let constraintIsBod = false;
 
-          let constraintIsBod = true;
+        if (constraint.type === 'descent' || constraint.type === 'direct' || constraint.type === 'manual') {
+          isDescent = true;
+          constraintIsBod = true;
 
           // Check to see if the current constraint is not considered a BOD constraint. A constraint is not BOD if and
           // only if there is a following constraint (in flight plan order) that is not a climb constraint and is
@@ -854,25 +999,45 @@ export class SmoothingPathCalculator implements VNavPathCalculator {
           if (constraint.isPathEnd) {
             constraintIsBod = true;
           }
+        }
 
-          for (let legIndex = 0; legIndex < constraint.legs.length; legIndex++) {
-            const leg = constraint.legs[legIndex];
-            leg.fpa = constraint.fpa;
-            leg.altitude = altitude;
+        for (let legIndex = 0; legIndex < constraint.legs.length; legIndex++) {
+          const leg = constraint.legs[legIndex];
 
-            altitude += VNavUtils.altitudeForDistance(leg.fpa, leg.distance);
+          leg.fpa = constraint.fpa;
 
-            if (legIndex === 0) {
-              leg.isAdvisory = false;
-            } else {
-              leg.isAdvisory = true;
+          if (isDescent && legIndex === 0) {
+            leg.isAdvisory = false;
+          } else {
+            leg.isAdvisory = true;
+          }
+
+          if (legIndex === 0 && constraint.isTarget && constraintIsBod) {
+            leg.isBod = true;
+          } else {
+            leg.isBod = false;
+          }
+        }
+      }
+
+      // Iterate through all legs that are not part of a constraint (i.e. all legs that are past the leg hosting the
+      // last constraint in the flight plan) and reset the fpa, isAdvisory, and isBod flags.
+
+      const lastConstraintLegIndex = verticalPlan.constraints[0]?.index ?? -1;
+      outer: for (let segmentIndex = verticalPlan.segments.length - 1; segmentIndex >= 0; segmentIndex--) {
+        const segment = verticalPlan.segments[segmentIndex];
+        if (segment) {
+          for (let segmentLegIndex = segment.legs.length - 1; segmentLegIndex >= 0; segmentLegIndex--) {
+            const globalLegIndex = segment.offset + segmentLegIndex;
+
+            if (globalLegIndex <= lastConstraintLegIndex) {
+              break outer;
             }
 
-            if (legIndex === 0 && constraint.isTarget && constraintIsBod) {
-              leg.isBod = true;
-            } else {
-              leg.isBod = false;
-            }
+            const leg = segment.legs[segmentLegIndex];
+            leg.fpa = 0;
+            leg.isAdvisory = true;
+            leg.isBod = false;
           }
         }
       }
@@ -880,12 +1045,12 @@ export class SmoothingPathCalculator implements VNavPathCalculator {
   }
 
   /**
-   * Fills the VNAV plan leg and constraint segment distances.
-   * @param lateralPlan The Lateral Flight Plan.
-   * @param verticalPlan The Vertical Flight Plan.
+   * Fills the distance properties of all legs in a vertical flight plan.
+   * @param lateralPlan The lateral flight plan associated with the vertical flight plan for which to fill leg
+   * distances.
+   * @param verticalPlan The vertical flight plan for which to fill leg distances.
    */
   protected fillLegDistances(lateralPlan: FlightPlan, verticalPlan: VerticalFlightPlan): void {
-
     if (lateralPlan.length > 0) {
       for (const segment of lateralPlan.segments()) {
         if (segment) {
@@ -937,9 +1102,9 @@ export class SmoothingPathCalculator implements VNavPathCalculator {
     let distanceFromPriorMinAltitude = 0;
     let requiredFpa = 0;
 
-    for (let i = startIndex; i >= 0; i--) {
-      const currentConstraint = verticalPlan.constraints[i];
-      const currentConstraintDistance = VNavUtils.getConstraintDistanceFromLegs(currentConstraint, verticalPlan.constraints[i + 1], verticalPlan);
+    for (let constraintIndex = startIndex; constraintIndex >= 0; constraintIndex--) {
+      const currentConstraint = verticalPlan.constraints[constraintIndex];
+      const currentConstraintDistance = VNavUtils.getConstraintDistanceWithOffsetsFromLegs(verticalPlan, constraintIndex, constraintIndex + 1);
 
       let currentPhase: 'climb' | 'descent' | 'missed';
       switch (currentConstraint.type) {
@@ -967,14 +1132,18 @@ export class SmoothingPathCalculator implements VNavPathCalculator {
         case 'climb':
         case 'missed':
           isDescentConstraint = false;
-          shouldInvalidate = this.invalidateClimbConstraintFunc(
-            currentConstraint,
-            i,
-            verticalPlan.constraints,
-            firstDescentConstraintIndex,
-            priorMinAltitude,
-            priorMaxAltitude
-          );
+
+          // Invalidate the constraint if the constraint is located before the prior constraint or if the configuration
+          // tells us to invalidate it.
+          shouldInvalidate = currentConstraintDistance < 0
+            || this.invalidateClimbConstraintFunc(
+              currentConstraint,
+              constraintIndex,
+              verticalPlan.constraints,
+              firstDescentConstraintIndex,
+              priorMinAltitude,
+              priorMaxAltitude
+            );
           break;
         default:
           isDescentConstraint = true;
@@ -985,28 +1154,31 @@ export class SmoothingPathCalculator implements VNavPathCalculator {
             requiredFpa = 0;
           }
 
-          shouldInvalidate = this.invalidateDescentConstraintFunc(
-            currentConstraint,
-            i,
-            verticalPlan.constraints,
-            priorMinAltitude,
-            priorMaxAltitude,
-            requiredFpa,
-            this.maxFlightPathAngle
-          );
+          // Invalidate the constraint if the constraint is located before the prior constraint or if the configuration
+          // tells us to invalidate it.
+          shouldInvalidate = currentConstraintDistance < 0
+            || this.invalidateDescentConstraintFunc(
+              currentConstraint,
+              constraintIndex,
+              verticalPlan.constraints,
+              priorMinAltitude,
+              priorMaxAltitude,
+              requiredFpa,
+              this.maxFlightPathAngle
+            );
       }
 
       const constraintLeg = VNavUtils.getVerticalLegFromPlan(verticalPlan, currentConstraint.index);
 
       if (shouldInvalidate) {
         constraintLeg.invalidConstraintAltitude = currentConstraint.minAltitude !== Number.NEGATIVE_INFINITY ? currentConstraint.minAltitude : currentConstraint.maxAltitude;
-        verticalPlan.constraints.splice(i, 1);
+        verticalPlan.constraints.splice(constraintIndex, 1);
         // Need to subtract current constraint distance because it will get added again at the beginning of the next iteration.
         // (The next constraint inherits the legs that belonged to the current constraint after it is removed.)
         distanceFromPriorMinAltitude -= currentConstraintDistance;
 
         // If we invalidated the first descent constraint, we need to find the new one.
-        if (isDescentConstraint && i === firstDescentConstraintIndex) {
+        if (isDescentConstraint && constraintIndex === firstDescentConstraintIndex) {
           firstDescentConstraintIndex = VNavUtils.getFirstDescentConstraintIndex(verticalPlan);
           verticalPlan.firstDescentConstraintLegIndex = verticalPlan.constraints[firstDescentConstraintIndex]?.index;
         }
@@ -1034,7 +1206,6 @@ export class SmoothingPathCalculator implements VNavPathCalculator {
    * @param lateralPlan The Lateral Flight Plan.
    */
   protected reinsertInvalidConstraints(verticalPlan: VerticalFlightPlan, lateralPlan: FlightPlan): void {
-
     const firstDescentConstraintIndex = verticalPlan.firstDescentConstraintLegIndex === undefined
       ? -1
       : VNavUtils.getConstraintIndexFromLegIndex(verticalPlan, verticalPlan.firstDescentConstraintLegIndex);
@@ -1045,35 +1216,58 @@ export class SmoothingPathCalculator implements VNavPathCalculator {
       ? (verticalPlan.firstDescentConstraintLegIndex as number + 1)
       : 0;
 
-    let globalLegIndex = startIndex;
-    for (const lateralLeg of lateralPlan.legs(false, startIndex)) {
-      const verticalLeg = VNavUtils.getVerticalLegFromPlan(verticalPlan, globalLegIndex);
+    lateralPlan.forEachLeg(
+      (lateralLeg, lateralSegment, segmentIndex, segmentLegIndex) => {
+        const verticalLeg = verticalPlan.segments[segmentIndex].legs[segmentLegIndex];
+        if (verticalLeg.invalidConstraintAltitude !== undefined) {
+          const globalLegIndex = lateralSegment.offset + segmentLegIndex;
 
-      if (verticalLeg.invalidConstraintAltitude !== undefined) {
-        const constraintIndex = VNavUtils.getConstraintIndexFromLegIndex(verticalPlan, globalLegIndex);
-        const constraintAltitudes = SmoothingPathCalculator.getConstraintAltitudes(lateralLeg, this.legAltitudes);
-        if (constraintAltitudes !== undefined) {
-          const proposedConstraint = this.buildConstraint(verticalPlan, globalLegIndex, lateralLeg, constraintAltitudes, verticalLeg.name);
-          verticalPlan.constraints.splice(constraintIndex + 1, 0, proposedConstraint);
+          const constraintIndex = VNavUtils.getConstraintIndexFromLegIndex(verticalPlan, globalLegIndex);
+          const constraintAltitudes = this.getLegConstraintAltitudesFunc(this.legAltitudes, lateralPlan, lateralLeg, globalLegIndex, lateralSegment, segmentLegIndex);
+          if (constraintAltitudes !== undefined) {
+            const proposedConstraint = this.buildConstraint(verticalPlan, globalLegIndex, lateralLeg, constraintAltitudes, verticalLeg.name);
+            verticalPlan.constraints.splice(constraintIndex + 1, 0, proposedConstraint);
 
-          // If we re-validated a descent constraint, we need to update the first/last descent constraint when appropriate.
-          if (
-            proposedConstraint.type === 'descent'
-            || proposedConstraint.type === 'manual'
-            || proposedConstraint.type === 'direct'
-            || proposedConstraint.type === 'dest'
-          ) {
-            if (verticalPlan.firstDescentConstraintLegIndex === undefined || globalLegIndex < verticalPlan.firstDescentConstraintLegIndex) {
-              verticalPlan.firstDescentConstraintLegIndex = globalLegIndex;
-            }
-            if (verticalPlan.lastDescentConstraintLegIndex === undefined || globalLegIndex > verticalPlan.lastDescentConstraintLegIndex) {
-              verticalPlan.lastDescentConstraintLegIndex = globalLegIndex;
+            // If we re-validated a descent constraint, we need to update the first/last descent constraint when appropriate.
+            if (
+              proposedConstraint.type === 'descent'
+              || proposedConstraint.type === 'manual'
+              || proposedConstraint.type === 'direct'
+              || proposedConstraint.type === 'dest'
+            ) {
+              if (verticalPlan.firstDescentConstraintLegIndex === undefined || globalLegIndex < verticalPlan.firstDescentConstraintLegIndex) {
+                verticalPlan.firstDescentConstraintLegIndex = globalLegIndex;
+              }
+              if (verticalPlan.lastDescentConstraintLegIndex === undefined || globalLegIndex > verticalPlan.lastDescentConstraintLegIndex) {
+                verticalPlan.lastDescentConstraintLegIndex = globalLegIndex;
+              }
             }
           }
         }
-      }
+      },
+      false,
+      startIndex
+    );
+  }
 
-      globalLegIndex++;
+  /**
+   * Refreshes the along-track offsets to use for all constraints in a vertical flight plan.
+   * @param lateralPlan The lateral flight plan associated with the vertical flight plan containing the constraints to
+   * refresh.
+   * @param verticalPlan The vertical flight plan containing the constraints to refresh.
+   */
+  protected refreshConstraintAlongTrackOffsets(lateralPlan: FlightPlan, verticalPlan: VerticalFlightPlan): void {
+    for (let constraintIndex = verticalPlan.constraints.length - 1; constraintIndex >= 0; constraintIndex--) {
+      const constraint = verticalPlan.constraints[constraintIndex];
+      const verticalLeg = VNavUtils.getVerticalLegFromPlan(verticalPlan, constraint.index);
+      constraint.alongTrackOffset = this.getConstraintAlongTrackOffsetFunc(
+        constraint,
+        constraintIndex,
+        verticalLeg,
+        lateralPlan.getLeg(verticalLeg.segmentIndex, verticalLeg.legIndex),
+        verticalPlan,
+        lateralPlan
+      );
     }
   }
 
@@ -1100,12 +1294,11 @@ export class SmoothingPathCalculator implements VNavPathCalculator {
 
       constraint.legs.length = 0;
 
-      constraint.distance = VNavUtils.getConstraintDistanceFromLegs(constraint, previousConstraint, verticalPlan);
-
       let eligibleLegIndex = constraint.index + 1;
       let ineligibleLegIndex: number | undefined;
 
-      for (let globalLegIndex = constraint.index; globalLegIndex > (previousConstraint !== undefined ? previousConstraint.index : -1); globalLegIndex--) {
+      const endLegIndex = previousConstraint !== undefined ? previousConstraint.index : -1;
+      for (let globalLegIndex = constraint.index; globalLegIndex > endLegIndex; globalLegIndex--) {
         const verticalLeg = VNavUtils.getVerticalLegFromPlan(verticalPlan, globalLegIndex);
         constraint.legs.push(verticalLeg);
 
@@ -1121,7 +1314,92 @@ export class SmoothingPathCalculator implements VNavPathCalculator {
       if (ineligibleLegIndex !== undefined) {
         constraint.nextVnavEligibleLegIndex = eligibleLegIndex;
       }
+
+      this.refreshConstraintLocation(verticalPlan, constraintIndex);
+      this.refreshConstraintDistance(verticalPlan, constraintIndex);
     }
+  }
+
+  /**
+   * Refreshes the location of a VNAV constraint based on its along-track offset.
+   * @param verticalPlan The vertical flight plan containing the constraint to refresh.
+   * @param constraintIndex The index of the constraint to refresh.
+   */
+  protected refreshConstraintLocation(verticalPlan: VerticalFlightPlan, constraintIndex: number): void {
+    const constraint = verticalPlan.constraints[constraintIndex];
+
+    let constraintLegIndex = constraint.index;
+    let constraintDistanceToLegEnd = -(constraint.alongTrackOffset ?? 0);
+
+    if (constraintDistanceToLegEnd === 0) {
+      constraint.containingLegIndex = undefined;
+      constraint.containingLegDistanceToEnd = undefined;
+      return;
+    }
+
+    if (constraintDistanceToLegEnd < 0) {
+      // The constraint is past the end of the constraint leg. We need to iterate forward through the flight plan to
+      // find the leg that contains the constraint.
+
+      let legIndex = constraintLegIndex + 1;
+      for (const leg of VNavUtils.planLegs(verticalPlan, false, legIndex)) {
+        constraintLegIndex = legIndex;
+
+        constraintDistanceToLegEnd += leg.distance;
+        if (constraintDistanceToLegEnd >= 0) {
+          // The constraint is located within the current leg. We are done with the iteration.
+          break;
+        }
+
+        ++legIndex;
+      }
+    } else {
+      // The constraint is prior to the end of the constraint leg. We need to iterate backward through the flight plan
+      // to find the leg that contains the constraint.
+
+      let legIndex = constraintLegIndex;
+      for (const leg of VNavUtils.planLegs(verticalPlan, true, legIndex)) {
+        constraintLegIndex = legIndex;
+
+        if (constraintDistanceToLegEnd <= leg.distance) {
+          // The constraint is located within the current leg. We are done with the iteration.
+          break;
+        } else {
+          constraintDistanceToLegEnd -= leg.distance;
+        }
+
+        --legIndex;
+      }
+    }
+
+    constraint.containingLegIndex = constraintLegIndex;
+    constraint.containingLegDistanceToEnd = constraintDistanceToLegEnd;
+  }
+
+  /**
+   * Refreshes the distance property of a VNAV constraint based on the distances of the legs contained in the
+   * constraint's leg array, the constraint's along-track offset, and the along-track offset of the prior constraint
+   * (if one exists).
+   * @param verticalPlan The vertical flight plan containing the constraint to refresh.
+   * @param constraintIndex The index of the constraint to refresh.
+   */
+  protected refreshConstraintDistance(verticalPlan: VerticalFlightPlan, constraintIndex: number): void {
+    const constraint = verticalPlan.constraints[constraintIndex];
+    const priorConstraint = verticalPlan.constraints[constraintIndex + 1] as VNavConstraint | undefined;
+
+    let distance = 0;
+
+    if (priorConstraint) {
+      distance -= priorConstraint.alongTrackOffset ?? 0;
+    }
+
+    for (let i = constraint.legs.length - 1; i >= 0; i--) {
+      distance += constraint.legs[i].distance;
+    }
+
+    distance += constraint.alongTrackOffset ?? 0;
+
+    constraint.distance = distance;
   }
 
   /**
@@ -1130,6 +1408,9 @@ export class SmoothingPathCalculator implements VNavPathCalculator {
    * @returns Whether the flight path angles were computed.
    */
   protected computeFlightPathAngles(verticalPlan: VerticalFlightPlan): boolean {
+    // TODO: pass in the lateral plan as an argument instead of getting it from the planner when it's acceptable to
+    // break backward compatibility.
+    const lateralPlan = this.flightPlanner.getFlightPlan(verticalPlan.planIndex);
 
     // Iterate through all descent constraints in reverse flight plan order and attempt to assign one as a "target"
     // constraint, which is a constraint that anchors a constant FPA path connecting it to one or more prior
@@ -1171,21 +1452,28 @@ export class SmoothingPathCalculator implements VNavPathCalculator {
       }
 
       // If we haven't found a target constraint yet, attempt to make the current constraint the target constraint,
-      // if it defines either a minimum or maximum altitude. The target altitude is preferentially set to the minimum
-      // altitude, if it exists. If the current constraint has neither a minimum nor maximum altitude (which should
-      // technically never happen), skip it.
+      // if it defines either a minimum or maximum altitude. If the current constraint has neither a minimum nor
+      // maximum altitude (which should technically never happen), skip it.
       if (!currentTargetConstraint) {
-
         if (constraint.minAltitude > Number.NEGATIVE_INFINITY || constraint.maxAltitude < Number.POSITIVE_INFINITY) {
           currentTargetConstraint = constraint;
-          currentTargetConstraint.targetAltitude = constraint.minAltitude > Number.NEGATIVE_INFINITY ? constraint.minAltitude : constraint.maxAltitude;
+          currentTargetConstraint.targetAltitude = this.getDescentTargetConstraintAltitude(
+            constraint,
+            targetConstraintIndex,
+            constraint.legs[0],
+            lateralPlan.getLeg(constraint.legs[0].segmentIndex, constraint.legs[0].legIndex),
+            verticalPlan,
+            lateralPlan
+          );
           currentTargetConstraint.isTarget = true;
 
           if (!hasFoundPathEndConstraint) {
             currentTargetConstraint.isPathEnd = true;
             hasFoundPathEndConstraint = true;
           }
-        } else { continue; }
+        } else {
+          continue;
+        }
       }
 
       // Reset the method variables
@@ -1286,16 +1574,21 @@ export class SmoothingPathCalculator implements VNavPathCalculator {
           // restricted by the current constraint, since the path between the two is undefined.
           currentTargetConstraint.fpa = MathUtils.clamp(this.flightPathAngle, currentPathSegmentMinFpa, currentPathSegmentMaxFpa);
 
-          // Attempt to set the maximum altitude of the path from the current constraint to the current target
-          // constraint to the minimum altitude of the current constraint, if it exists, or to the maximum altitude
-          // otherwise. We will then clamp this from below using the current target constraint's target altitude. Since
-          // we didn't restrict the current target constraint's FPA based on the current constraint, this ensures we
-          // don't have to climb when traveling from the current constraint to the current target constraint. We will
-          // also clamp from above using the prior (in flight plan order) maximum altitude constraint. This ensures we
-          // don't have to descend when traveling to the current constraint.
-          const currentConstraintTargetAltitude = currentConstraint.minAltitude > Number.NEGATIVE_INFINITY
-            ? currentConstraint.minAltitude
-            : currentConstraint.maxAltitude;
+          // Attempt to set the maximum altitude of the path from the current constraint to the target altitude of the
+          // current constraint if it were a target constraint. We will then clamp this from below using the current
+          // target constraint's target altitude. Since we didn't restrict the current target constraint's FPA based on
+          // the current constraint, this ensures we don't have to climb when traveling from the current constraint to
+          // the current target constraint. We will also clamp from above using the prior (in flight plan order)
+          // maximum altitude constraint. This ensures we don't have to descend when traveling to the current
+          // constraint.
+          const currentConstraintTargetAltitude = this.getDescentTargetConstraintAltitude(
+            currentConstraint,
+            currentConstraintIndex,
+            currentConstraint.legs[0],
+            lateralPlan.getLeg(currentConstraint.legs[0].segmentIndex, currentConstraint.legs[0].legIndex),
+            verticalPlan,
+            lateralPlan
+          );
           const priorMaxAltitude = SmoothingPathCalculator.findPriorMaxAltitude(verticalPlan, currentConstraintIndex, firstDescentConstraintIndex);
           const maxAltitude = Math.min(Math.max(currentConstraintTargetAltitude, currentTargetConstraint.targetAltitude), priorMaxAltitude);
 
@@ -1498,6 +1791,31 @@ export class SmoothingPathCalculator implements VNavPathCalculator {
   }
 
   /**
+   * Gets the target altitude to use for a target descent constraint, in meters.
+   * @param constraint The constraint for which to get a target altitude.
+   * @param constraintIndex The index of the constraint for which to get a target altitude.
+   * @param verticalLeg The vertical flight plan leg that hosts the constraint for which to get a target altitude.
+   * @param lateralLeg The lateral flight plan leg that hosts the constraint for which to get a target altitude.
+   * @param verticalPlan The vertical flight plan containing the constraint for which to get a target altitude.
+   * @param lateralPlan The lateral flight plan associated with the constraint for which to get a target altitude. 
+   * @returns The target altitude to use for the specified target descent constraint, in meters.
+   */
+  protected getDescentTargetConstraintAltitude(
+    constraint: VNavConstraint,
+    constraintIndex: number,
+    verticalLeg: VNavLeg,
+    lateralLeg: LegDefinition,
+    verticalPlan: VerticalFlightPlan,
+    lateralPlan: FlightPlan
+  ): number {
+    return MathUtils.clamp(
+      this.getDescentTargetConstraintAltitudeFunc(constraint, constraintIndex, verticalLeg, lateralLeg, verticalPlan, lateralPlan),
+      constraint.minAltitude,
+      constraint.maxAltitude
+    );
+  }
+
+  /**
    * Attempts to extend and terminate a constant-FPA path from an existing target constraint at another constraint,
    * applying flight path angles and target altitudes to each constraint along the path. The target constraint defines
    * the FPA of the path.
@@ -1556,6 +1874,85 @@ export class SmoothingPathCalculator implements VNavPathCalculator {
     return maxAltitudeViolatedIndex ?? terminatingConstraintIndex;
   }
 
+  /**
+   * Computes flight path altitudes for each leg in a vertical flight plan.
+   * @param lateralPlan The lateral flight plan associated with the vertical flight plan for which to calculate leg altitudes.
+   * @param verticalPlan The vertical flight plan for which to calculate leg altitudes.
+   */
+  protected computeLegAltitudes(lateralPlan: FlightPlan, verticalPlan: VerticalFlightPlan): void {
+    let currentConstraint = undefined as VNavConstraint | undefined;
+    let currentConstraintLegIndex = -1;
+    let currentConstraintDistanceToLegEnd = 0;
+    let currentConstraintGradient = 0;
+
+    let priorConstraintIndex = 0;
+    let priorConstraint = verticalPlan.constraints[priorConstraintIndex] as VNavConstraint | undefined;
+    let priorConstraintLegIndex = priorConstraint ? (priorConstraint.containingLegIndex ?? priorConstraint.index) : -1;
+    let priorConstraintDistanceToLegEnd = priorConstraint?.containingLegDistanceToEnd ?? 0;
+
+    let distanceToCurrentConstraint = 0;
+
+    let followingLeg: VNavLeg | undefined;
+    for (let segmentIndex = verticalPlan.segments.length - 1; segmentIndex >= 0; segmentIndex--) {
+      const segment = verticalPlan.segments[segmentIndex];
+      if (segment) {
+        for (let segmentLegIndex = segment.legs.length - 1; segmentLegIndex >= 0; segmentLegIndex--) {
+          const globalLegIndex = segment.offset + segmentLegIndex;
+          const leg = segment.legs[segmentLegIndex];
+
+          if (priorConstraint) {
+            while (
+              priorConstraint
+              && (
+                priorConstraintLegIndex > globalLegIndex
+                || (priorConstraintLegIndex === globalLegIndex && priorConstraintDistanceToLegEnd <= 0)
+              )
+            ) {
+              currentConstraint = priorConstraint;
+              currentConstraintLegIndex = priorConstraintLegIndex;
+              currentConstraintDistanceToLegEnd = priorConstraintDistanceToLegEnd;
+              currentConstraintGradient = currentConstraint.fpa <= 0 ? 0 : Math.tan(currentConstraint.fpa * Avionics.Utils.DEG2RAD);
+
+              priorConstraint = verticalPlan.constraints[++priorConstraintIndex];
+              priorConstraintLegIndex = priorConstraint ? (priorConstraint.containingLegIndex ?? priorConstraint.index) : -1;
+              priorConstraintDistanceToLegEnd = priorConstraint?.containingLegDistanceToEnd ?? 0;
+
+              // Because the current constraint has changed, we need to re-initialize the distance from the end of the
+              // current leg to the current constraint.
+              if (globalLegIndex === currentConstraintLegIndex) {
+                // If the current leg contains the current constraint, then the constraint is guaranteed to be located
+                // at or past the end of the leg. Therefore, the distance to the current constraint is the negation of
+                // the distance from the constraint to the end of its containing leg (which is equal to the current
+                // leg).
+                distanceToCurrentConstraint = -currentConstraintDistanceToLegEnd;
+              } else {
+                // If the current leg does not contain the current constraint, then the leg immediately following the
+                // current leg (in flight plan order) is guaranteed to contain the current constraint. This is because
+                // we iterate backward through the legs one at a time and the current constraint is guaranteed to be
+                // the earliest constraint (in flight plan order) located at or after the end of the current leg. In
+                // this case, the distance to the current constraint is the distance of the following leg minus the
+                // distance from the constraint to the end of its containing leg (which is equal to the following leg).
+                if (followingLeg) {
+                  distanceToCurrentConstraint = followingLeg.distance - currentConstraintDistanceToLegEnd;
+                } else {
+                  distanceToCurrentConstraint = 0;
+                }
+              }
+            }
+          }
+
+          if (currentConstraint && (currentConstraint.type === 'descent' || currentConstraint.type === 'direct' || currentConstraint.type === 'manual')) {
+            leg.altitude = currentConstraint.targetAltitude + currentConstraintGradient * distanceToCurrentConstraint;
+            distanceToCurrentConstraint += leg.distance;
+          } else {
+            leg.altitude = 0;
+          }
+
+          followingLeg = leg;
+        }
+      }
+    }
+  }
 
   /** @inheritdoc */
   public getFirstDescentConstraintAltitude(planIndex: number): number | undefined {
@@ -1736,7 +2133,31 @@ export class SmoothingPathCalculator implements VNavPathCalculator {
   }
 
   /**
-   * The default function which checks whether a lateral flight plan leg is eligible for VNAV.
+   * The default function that gets the minimum and maximum altitudes to enforce for a VNAV constraint assigned to a
+   * lateral flight plan leg. The minimum and maximum altitudes will be taken from the leg's vertical data based on the
+   * value of the altitude restriction type field as follows:
+   * * {@link AltitudeRestrictionType.At}: minimum and maximum altitude equal to the first altitude restriction field.
+   * * {@link AltitudeRestrictionType.AtOrAbove}: minimum altitude equal to the first altitude restriction field,
+   * maximum altitude equal to infinity.
+   * * {@link AltitudeRestrictionType.AtOrBelow}: minimum altitude equal to negative infinity, maximum altitude equal
+   * to the second altitude restriction field.
+   * * {@link AltitudeRestrictionType.Between}: minimum altitude equal to the second altitude restriction field,
+   * maximum altitude equal to the first altitude restriction field.
+   * * {@link AltitudeRestrictionType.Unused} (or any other value): no altitudes.
+   * @param out The tuple to which to write the minimum and maximum altitudes, as
+   * `[minimum_altitude, maximum_altitude]` in meters.
+   * @param lateralPlan The lateral flight plan that hosts the leg for which to get the constraint altitudes.
+   * @param lateralLeg The lateral flight plan leg for which to get the constraint altitudes.
+   * @returns The minimum and maximum altitudes to enforce for a VNAV constraint assigned to the specified lateral
+   * flight plan leg, as the tuple passed to the `out` parameter, or `undefined` if there should be no constraint
+   * assigned to the leg.
+   */
+  public static getLegConstraintAltitudes(out: [min: number, max: number], lateralPlan: FlightPlan, lateralLeg: LegDefinition): [min: number, max: number] | undefined {
+    return SmoothingPathCalculator.getConstraintAltitudes(lateralLeg, out);
+  }
+
+  /**
+   * The default function that checks whether a lateral flight plan leg is eligible for VNAV.
    * @param lateralLeg A lateral flight plan leg.
    * @returns Whether the specified leg is eligible for VNAV.
    */
@@ -1753,7 +2174,27 @@ export class SmoothingPathCalculator implements VNavPathCalculator {
   }
 
   /**
-   * The default function which checks whether a climb constraint should be invalidated. This function always returns
+   * The default function that gets the along-track offset to use for a VNAV constraint. The offset is taken from the
+   * along-track offset defined by the vertical data of the constraint's host lateral leg.
+   * @param constraint The constraint for which to get an along-track offset.
+   * @param constraintIndex The index of the constraint for which to get an along-track offset.
+   * @param verticalLeg The vertical flight plan leg that hosts the constraint for which to get an along-track offset.
+   * @param lateralLeg The lateral flight plan leg that hosts the constraint for which to get an along-track offset.
+   * @returns The along-track offset to use for the specified VNAV constraint, in meters. An offset of zero indicates
+   * the constraint is coincident with the end of its host leg, positive offsets move the constraint forward along the
+   * flight plan, and negative offsets move the constraint backward along the flight plan.
+   */
+  public static getConstraintAlongTrackOffset(
+    constraint: UncomputedVNavConstraint,
+    constraintIndex: number,
+    verticalLeg: UncomputedVNavLeg,
+    lateralLeg: LegDefinition
+  ): number {
+    return lateralLeg.verticalData.alongTrackOffset ?? 0;
+  }
+
+  /**
+   * The default function that checks whether a climb constraint should be invalidated. This function always returns
    * `false`.
    * @returns Whether the specified climb constraint should be invalidated (always `false`).
    */
@@ -1762,8 +2203,13 @@ export class SmoothingPathCalculator implements VNavPathCalculator {
   }
 
   /**
-   * The default function which checks whether a descent constraint should be invalidated.
-   * @param constraint A descent constraint.
+   * The default function that checks whether a descent constraint should be invalidated. A constraint is invalidated
+   * if any of the following conditions is met:
+   * * The constraint defines a minimum altitude and the minimum altitude is greater than the most recent maximum
+   * altitude defined by a prior constraint that is connected to the constraint to check by a contiguous sequence of
+   * descent constraints.
+   * * The required flight path angle to meet the constraint is greater than the maximum allowed flight path angle.
+   * @param constraint The descent constraint to check.
    * @param index The index of the constraint to check.
    * @param constraints The array of VNAV constraints currently in the vertical flight plan.
    * @param priorMinAltitude The most recent minimum altitude, in meters, defined by a VNAV constraint prior to the
@@ -1781,15 +2227,26 @@ export class SmoothingPathCalculator implements VNavPathCalculator {
    * @returns Whether the specified descent constraint should be invalidated.
    */
   public static invalidateDescentConstraint(
-    constraint: VNavConstraint,
+    constraint: UncomputedVNavConstraint,
     index: number,
-    constraints: readonly VNavConstraint[],
+    constraints: readonly UncomputedVNavConstraint[],
     priorMinAltitude: number,
     priorMaxAltitude: number,
     requiredFpa: number,
     maxFpa: number
   ): boolean {
     return (isFinite(constraint.minAltitude) && MathUtils.round(constraint.minAltitude, 10) > MathUtils.round(priorMaxAltitude, 10)) || requiredFpa > maxFpa;
+  }
+
+  /**
+   * The default function that gets the target altitude to use for a target descent constraint, in meters. The selected
+   * target altitude is equal to the constraint's minimum altitude if it is defined, or the constraint's maximum
+   * altitude otherwise.
+   * @param constraint The constraint for which to get a target altitude.
+   * @returns The target altitude to use for the specified target descent constraint, in meters.
+   */
+  public static getDescentTargetConstraintAltitude(constraint: UncomputedVNavConstraint): number {
+    return constraint.minAltitude > Number.NEGATIVE_INFINITY ? constraint.minAltitude : constraint.maxAltitude;
   }
 
   // Start of computeFlightPathAngles helper methods

@@ -16,6 +16,9 @@ import { CDIScaleLabel, LNavDataEvents } from '../navigation/LNavDataEvents';
  * Configuration options for {@link TrafficInfoService}.
  */
 export type TrafficInfoServiceOptions = {
+  /** Whether the TIS supports TIS-A. */
+  supportTisA?: boolean;
+
   /** Whether the TIS supports radar altitude. Defaults to `false`. */
   supportRadarAltitude?: boolean;
 
@@ -92,6 +95,8 @@ export class TrafficInfoService extends Tcas<GarminTcasIntruder, TisSensitivity>
   /** @inheritdoc */
   public readonly adsb: GarminAdsb | null;
 
+  private readonly supportsTisA: boolean;
+
   private readonly supportsRadarAltitude: boolean;
 
   private readonly _isPowered: Subject<boolean>;
@@ -142,12 +147,15 @@ export class TrafficInfoService extends Tcas<GarminTcasIntruder, TisSensitivity>
     arg6?: number
   ) {
     let opts: Readonly<TrafficInfoServiceOptions> | undefined;
+    let supportsTisA: boolean;
     let maxIntruderCount: number | Subscribable<number>;
     let realTimeUpdateFreq: number | Subscribable<number>;
     let simTimeUpdateFreq: number | Subscribable<number>;
 
     if (arg3 === undefined || typeof arg3 === 'object') {
       opts = arg3;
+
+      supportsTisA = opts?.supportTisA ?? true;
 
       const noAdsbMaxIntruderCount = opts?.maxIntruderCount ?? TrafficInfoService.DEFAULT_MAX_INTRUDER_COUNT;
       const noAdsbRealTimeUpdateFreq = opts?.realTimeUpdateFreq ?? TrafficInfoService.DEFAULT_REAL_TIME_UPDATE_FREQ;
@@ -179,14 +187,22 @@ export class TrafficInfoService extends Tcas<GarminTcasIntruder, TisSensitivity>
         simTimeUpdateFreq = noAdsbSimTimeUpdateFreq;
       }
     } else {
+      supportsTisA = true;
       maxIntruderCount = arg4 ?? TrafficInfoService.DEFAULT_MAX_INTRUDER_COUNT;
       realTimeUpdateFreq = arg5 ?? TrafficInfoService.DEFAULT_REAL_TIME_UPDATE_FREQ;
       simTimeUpdateFreq = arg6 ?? TrafficInfoService.DEFAULT_SIM_TIME_UPDATE_FREQ;
     }
 
-    super(bus, tfcInstrument, maxIntruderCount, realTimeUpdateFreq, simTimeUpdateFreq);
+    super(bus, tfcInstrument, {
+      maxIntruderCount,
+      realTimeUpdateFreq,
+      simTimeUpdateFreq,
+      hasActiveSurveillance: supportsTisA,
+    });
 
     this.type = TrafficSystemType.Tis;
+
+    this.supportsTisA = supportsTisA;
 
     if (opts) {
       this.adsb = opts.adsb ?? null;
@@ -257,6 +273,14 @@ export class TrafficInfoService extends Tcas<GarminTcasIntruder, TisSensitivity>
       return true;
     }
 
+    // If ADS-B is not available, then TIS-A is the only source from which we can track intruders. Therefore, if we
+    // don't support TIS-A, then no intruders can be tracked.
+    if (!this.supportsTisA) {
+      return false;
+    }
+
+    // TIS-A only tracks intruders within a certain volume of the own airplane.
+
     const relativePosVec = intruder.relativePositionVec;
 
     return TrafficInfoService.MAX_INTRUDER_ALTITUDE_BELOW.compare(-relativePosVec[2], UnitType.METER) >= 0
@@ -269,22 +293,22 @@ export class TrafficInfoService extends Tcas<GarminTcasIntruder, TisSensitivity>
     if (this.adsb) {
       this.sensitivity.update(
         this.adsb.getOperatingMode(),
-        this.ownAirplaneSubs.altitude.get(),
-        this.ownAirplaneSubs.groundSpeed.get(),
+        this.ownAirplaneDataProvider.pressureAltitude.get(),
+        this.ownAirplaneDataProvider.groundSpeed.get(),
         this.cdiScalingLabel,
-        this.supportsRadarAltitude ? this.ownAirplaneSubs.radarAltitude.get() : undefined
+        this.supportsRadarAltitude ? this.ownAirplaneDataProvider.radarAltitude.get() : undefined
       );
     } else {
       this.sensitivity.update(
-        this.ownAirplaneSubs.groundSpeed.get(),
-        this.supportsRadarAltitude ? this.ownAirplaneSubs.radarAltitude.get() : undefined
+        this.ownAirplaneDataProvider.groundSpeed.get(),
+        this.supportsRadarAltitude ? this.ownAirplaneDataProvider.radarAltitude.get() : undefined
       );
     }
   }
 
   /** @inheritdoc */
   protected canIssueTrafficAdvisory(simTime: number, intruder: GarminTcasIntruder): boolean {
-    if (this.ownAirplaneSubs.isOnGround.get()) {
+    if (this.ownAirplaneDataProvider.isOnGround.get()) {
       return false;
     }
 
@@ -298,7 +322,7 @@ export class TrafficInfoService extends Tcas<GarminTcasIntruder, TisSensitivity>
 
   /** @inheritdoc */
   protected canCancelTrafficAdvisory(simTime: number, intruder: GarminTcasIntruder): boolean {
-    if (this.ownAirplaneSubs.isOnGround.get()) {
+    if (this.ownAirplaneDataProvider.isOnGround.get()) {
       return true;
     }
 
@@ -331,8 +355,9 @@ export class TisSensitivityParameters {
 
   /**
    * Selects a sensitivity level for a specified environment.
-   * @param groundSpeed The ground speed of the own airplane.
-   * @param radarAltitude The radar altitude of the own airplane.
+   * @param groundSpeed The ground speed of the own airplane, or `NaN` if the ground speed is not known.
+   * @param radarAltitude The radar altitude of the own airplane, or `NaN` if the radar altitude is not known. Defaults
+   * to `NaN`.
    * @returns The sensitivity level for the specified environment.
    */
   public selectLevel(
@@ -342,7 +367,13 @@ export class TisSensitivityParameters {
     // TODO: I couldn't find any specific details on how TIS determines sensitivity levels, so for now this is
     // identical to the TAS algorithm.
 
-    if ((radarAltitude?.compare(2000, UnitType.FOOT) ?? 1) < 0 || groundSpeed.compare(120, UnitType.KNOT) < 0) {
+    const radarAltFeet = !radarAltitude || radarAltitude.isNaN() ? undefined : radarAltitude.asUnit(UnitType.FOOT);
+    const groundSpeedKnots = groundSpeed.isNaN() ? undefined : groundSpeed.asUnit(UnitType.KNOT);
+
+    if (
+      (radarAltFeet !== undefined && radarAltFeet < 2000)
+      || (groundSpeedKnots !== undefined && groundSpeedKnots < 120)
+    ) {
       return 0;
     } else {
       return 1;
@@ -351,8 +382,9 @@ export class TisSensitivityParameters {
 
   /**
    * Selects Proximity Advisory sensitivity settings for a specified environment.
-   * @param groundSpeed The ground speed of the own airplane.
-   * @param radarAltitude The radar altitude of the own airplane.
+   * @param groundSpeed The ground speed of the own airplane, or `NaN` if the ground speed is not known.
+   * @param radarAltitude The radar altitude of the own airplane, or `NaN` if the radar altitude is not known. Defaults
+   * to `NaN`.
    * @returns Proximity Advisory sensitivity settings for the specified environment.
    */
   public selectPA(
@@ -366,8 +398,9 @@ export class TisSensitivityParameters {
 
   /**
    * Selects Traffic Advisory sensitivity settings for a specified environment.
-   * @param groundSpeed The ground speed of the own airplane.
-   * @param radarAltitude The radar altitude of the own airplane.
+   * @param groundSpeed The ground speed of the own airplane, or `NaN` if the ground speed is not known.
+   * @param radarAltitude The radar altitude of the own airplane, or `NaN` if the radar altitude is not known. Defaults
+   * to `NaN`.
    * @returns Traffic Advisory sensitivity settings for the specified environment.
    */
   public selectTA(
@@ -445,8 +478,9 @@ export class TisSensitivity implements TcasSensitivity {
 
   /**
    * Updates the sensitivity without ADS-B support.
-   * @param groundSpeed The ground speed of the own airplane.
-   * @param radarAltitude The radar altitude of the own airplane.
+   * @param groundSpeed The ground speed of the own airplane, or `NaN` if the ground speed is not known.
+   * @param radarAltitude The radar altitude of the own airplane, or `NaN` if the radar altitude is not known. Defaults
+   * to `NaN`.
    */
   public update(
     groundSpeed: NumberUnitInterface<UnitFamily.Speed>,
@@ -456,9 +490,10 @@ export class TisSensitivity implements TcasSensitivity {
    * Updates the sensitivity with ADS-B support.
    * @param adsbMode The ADS-B operating mode.
    * @param altitude The indicated altitude of the own airplane.
-   * @param groundSpeed The ground speed of the own airplane.
+   * @param groundSpeed The ground speed of the own airplane, or `NaN` if the ground speed is not known.
    * @param cdiScalingLabel The CDI scaling sensitivity of the own airplane.
-   * @param radarAltitude The radar altitude of the own airplane.
+   * @param radarAltitude The radar altitude of the own airplane, or `NaN` if the radar altitude is not known. Defaults
+   * to `NaN`.
    */
   public update(
     adsbMode: AdsbOperatingMode,

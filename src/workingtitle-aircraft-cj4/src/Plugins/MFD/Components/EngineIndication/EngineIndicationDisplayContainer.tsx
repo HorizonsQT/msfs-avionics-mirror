@@ -153,8 +153,7 @@ export class EngineIndicationDisplayContainer extends DisplayComponent<EngineInd
    * @param newValue The new value of the property.
    */
   private onEngineDataUpdate(data: EisEngineData, prop: keyof EisEngineData, newValue: any): void {
-    this.compressedEisRef.instance.updateEngineData(prop, newValue);
-    this.expandedEisRef.instance.updateEngineData(prop, newValue);
+    this.getCurrentEisRef()?.updateEngineData(prop, newValue);
   }
 
   /**
@@ -164,8 +163,7 @@ export class EngineIndicationDisplayContainer extends DisplayComponent<EngineInd
    * @param newValue The new value of the property.
    */
   private onSurfacesDataUpdate(data: EisSurfacesData, prop: keyof EisSurfacesData, newValue: number): void {
-    this.compressedEisRef.instance.updateSurfacesData(prop, newValue);
-    this.expandedEisRef.instance.updateSurfacesData(prop, newValue);
+    this.getCurrentEisRef()?.updateSurfacesData(prop, newValue);
   }
 
   /**
@@ -175,8 +173,15 @@ export class EngineIndicationDisplayContainer extends DisplayComponent<EngineInd
    * @param newValue The new value of the property.
    */
   private onFadecDataUpdate(data: EisFadecData, prop: keyof EisFadecData, newValue: EisFadecData[keyof EisFadecData]): void {
-    this.compressedEisRef.instance.updateFadecData(prop, newValue);
-    this.expandedEisRef.instance.updateFadecData(prop, newValue);
+    this.getCurrentEisRef()?.updateFadecData(prop, newValue);
+  }
+
+  /**
+   * Gets a reference to the currently displayed EIS component.
+   * @returns The currently displayed EIS component.
+   */
+  private getCurrentEisRef(): CompressedEngineIndicationDisplay | ExpandedEngineIndicationDisplay | null {
+    return this.mode === EngineIndicationDisplayMode.Compressed ? this.compressedEisRef.getOrDefault() : this.expandedEisRef.getOrDefault();
   }
 
   /** @inheritdoc */

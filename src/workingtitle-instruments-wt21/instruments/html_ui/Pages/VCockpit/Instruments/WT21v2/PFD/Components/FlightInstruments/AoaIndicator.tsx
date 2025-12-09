@@ -135,7 +135,7 @@ export class AoaIndicator extends DisplayComponent<AoaIndicatorProps> {
       this.showLowRhombus.set(false);
     }
     this.arrowBugRef.instance.style.transform = `translate3d(0,${this.pixelPerTick * (1 - MathUtils.clamp(rv, 0.18, 1))}px,0)`;
-    this.relativeAoaStr.set(rv);
+    this.relativeAoaStr.set(MathUtils.clamp(rv, 0, 0.99));
   }
 
   /**

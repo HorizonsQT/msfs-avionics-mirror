@@ -69,13 +69,15 @@ export class NumberUnitSubject<F extends string, U extends Unit<F> = Unit<F>>
   }
 
   /**
-   * Returns a number {@link Subscribable} of this `NumberUnit` converted according to a unit or unit `Subscribable`
-   *
-   * @param unit the unit to subscribe to
-   *
-   * @returns a `MappedSubscribable<number>`
+   * Maps this subject to a new subscribable whose value is this subject's value converted to a given unit type.
+   * @param unit The unit type in which the mapped subscribable's value is to be expressed.
+   * @returns A new mapped subscribable whose value is this subject's value converted to the specified unit type.
    */
   public asUnit(unit: Unit<F> | Subscribable<Unit<F>>): MappedSubscribable<number> {
-    return MappedSubject.create(([numberUnit, toUnit]) => numberUnit.asUnit(toUnit), this, SubscribableUtils.toSubscribable(unit, true));
+    return MappedSubject.create(
+      inputs => inputs[0].asUnit(inputs[1]),
+      this,
+      SubscribableUtils.toSubscribable(unit, true)
+    );
   }
 }

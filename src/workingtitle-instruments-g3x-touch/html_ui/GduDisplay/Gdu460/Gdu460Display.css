@@ -9,19 +9,23 @@
 }
 
 .gdu-460-display .cns-data-bar {
+  /* NOTE: we want this element to be a layout boundary. */
   position: absolute;
   left: 0;
   top: 0;
   width: 1280px;
   height: 62px;
+  overflow: hidden;
 }
 
 .gdu-460-display .status-bar-bottom {
+  /* NOTE: we want this element to be a layout boundary. */
   position: absolute;
   left: 0;
   bottom: 0;
   width: 1280px;
   height: 24px;
+  overflow: hidden;
 }
 
 .gdu-display-main-container {
@@ -36,10 +40,19 @@
   display: flex;
   flex-flow: row nowrap;
   align-items: stretch;
+
+  /*
+   * 100% of height minus borders (682px - 2 * 1px).
+   * NOTE: we avoid using relative (e.g. x%) values here so that elements using this var for height are still eligible
+   * to be layout boundaries.
+   */
+  --gdu-display-main-container-content-height: 680px;
 }
 
 .gdu-460-display .eis {
-  height: 100%;
+  /* NOTE: Avoid using relative (e.g. x%) heights and force overflow clipping to allow this element to be a layout boundary. */
+  height: var(--gdu-display-main-container-content-height);
+  overflow: hidden;
 }
 
 .gdu-460-display.gdu-display-eis-narrow .eis {
@@ -90,7 +103,7 @@
 .gdu-460-display .ui-pane-container {
   flex-grow: 1;
   position: relative;
-  height: 100%;
+  height: var(--gdu-display-main-container-content-height);
   display: flex;
   align-items: stretch;
 }
@@ -122,7 +135,9 @@
 }
 
 .gdu-460-display .ui-pane {
+  /* NOTE: Avoid using relative (e.g. x%) heights and force overflow clipping to allow this element to be a layout boundary. */
   position: relative;
+  height: var(--gdu-display-main-container-content-height);
   overflow: hidden;
 }
 

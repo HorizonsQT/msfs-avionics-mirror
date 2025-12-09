@@ -1,5 +1,5 @@
 import {
-  APValues, APVerticalModes, ConsumerValue, DirectorState, EventBus, KeyEventData, KeyEventManager, KeyEvents, MathUtils, PlaneDirector, SimVarValueType,
+  APValues, APVerticalModes, ConsumerValue, DirectorState, EventBus, KeyEventData, KeyEventManager, KeyEvents, MathUtils, PlaneDirector,
   VNavEvents, VNavState
 } from '@microsoft/msfs-sdk';
 
@@ -7,7 +7,7 @@ import {
  * An autopilot pitch director.
  */
 export class Epic2ApPitchDirector implements PlaneDirector {
-  public state =  DirectorState.Inactive;
+  public state = DirectorState.Inactive;
   private keyEventManager?: KeyEventManager;
 
   /** @inheritdoc */
@@ -29,8 +29,10 @@ export class Epic2ApPitchDirector implements PlaneDirector {
 
   private readonly vnavState = ConsumerValue.create(this.bus.getSubscriber<VNavEvents>().on('vnav_state'), VNavState.Disabled);
 
+  private readonly pitch = this.apValues.dataProvider.getItem('pitch');
+
   /**
-   * Creates an instance of the LateralDirector.
+   * Creates an instance of the Epic2ApPitchDirector.
    * @param bus The event bus to use with this instance.
    * @param apValues are the AP Values subjects.
    */
@@ -69,7 +71,7 @@ export class Epic2ApPitchDirector implements PlaneDirector {
     if (this.onActivate !== undefined) {
       this.onActivate();
     }
-    this.selectedPitch = this.getTargetPitch(SimVar.GetSimVarValue('PLANE PITCH DEGREES', SimVarValueType.Degree));
+    this.selectedPitch = this.getTargetPitch(this.pitch.getValue());
     SimVar.SetSimVarValue('AUTOPILOT PITCH HOLD', 'Bool', true);
   }
 

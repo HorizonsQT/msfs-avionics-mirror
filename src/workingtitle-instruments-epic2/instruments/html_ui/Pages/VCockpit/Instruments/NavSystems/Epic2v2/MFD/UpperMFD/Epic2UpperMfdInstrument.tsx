@@ -8,8 +8,8 @@
 
 import {
   APRadioNavInstrument, ArrayUtils, AutothrottleOptions, AutothrottleThrottleIndex, AvionicsSystemState, ClockEvents, ConsumerSubject, EngineType,
-  FlightPlanRouteManager, FSComponent, GameStateProvider, GpsSynchronizer, LNavComputer, MappedSubject, PluginSystem, SimVarValueType, Subject, Wait,
-  WeightBalanceSimvarPublisher
+  FlightPlanRouteManager, FlightPlanRouteUtils, FSComponent, GameStateProvider, GpsSynchronizer, LNavComputer, MappedSubject, PluginSystem, SimVarValueType,
+  Subject, TrafficInstrument, Wait, WeightBalanceSimvarPublisher
 } from '@microsoft/msfs-sdk';
 
 import {
@@ -225,6 +225,17 @@ export class Epic2UpperMfdInstrument extends Epic2FsInstrument {
     this.agmSubject.pipe(this.isAgmOn);
 
     this.doInit();
+  }
+
+  /** @inheritDoc */
+  protected override createTrafficInstrument(): TrafficInstrument {
+    return new TrafficInstrument(this.bus, {
+      syncRole: 'primary',
+      syncId: 'epic2',
+      realTimeUpdateFreq: 2,
+      simTimeUpdateFreq: 1,
+      contactDeprecateTime: 10,
+    });
   }
 
   /** Init instrument. */
@@ -448,6 +459,13 @@ export class Epic2UpperMfdInstrument extends Epic2FsInstrument {
 
     if (this.fplSyncManager) {
       this.fplSyncManager.init(routeManager, new Epic2FlightPlanRouteLoader(this.fms));
+
+      // Always load the synced avionics route, or the EFB route if a synced route does not exist, on flight start.
+      const routeToLoad = routeManager.syncedAvionicsRoute.get() ?? routeManager.efbRoute.get();
+
+      if (!FlightPlanRouteUtils.isRouteEmpty(routeToLoad, false)) {
+        await this.fplSyncManager!.loadRoute(routeToLoad, true);
+      }
     }
   }
 

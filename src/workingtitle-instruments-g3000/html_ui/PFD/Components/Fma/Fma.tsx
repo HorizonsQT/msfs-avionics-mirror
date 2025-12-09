@@ -4,7 +4,8 @@ import {
 } from '@microsoft/msfs-sdk';
 
 import {
-  FmaData, FmaDataEvents, FmaMasterSlot, FmaMasterSlotState, FmaModeSlot, FmaModeSlotActiveData, FmaVNavState
+  FmaData, FmaDataEvents, FmaMasterSlot, FmaMasterSlotState, FmaModeSlot, FmaModeSlotActiveData, FmaVNavState,
+  GarminAPUtils
 } from '@microsoft/msfs-garminsdk';
 
 import {
@@ -66,18 +67,7 @@ export class Fma extends DisplayComponent<FmaProps> {
   private readonly autothrottleIasCssClass = SetSubject.create(['fma-autothrottle-ias']);
   private readonly autothrottleMachCssClass = SetSubject.create(['fma-autothrottle-mach']);
 
-  private readonly lastData: FmaData = {
-    verticalActive: APVerticalModes.NONE,
-    verticalArmed: APVerticalModes.NONE,
-    verticalApproachArmed: APVerticalModes.NONE,
-    verticalAltitudeArmed: APAltitudeModes.NONE,
-    altitudeCaptureArmed: false,
-    altitudeCaptureValue: -1,
-    lateralActive: APLateralModes.NONE,
-    lateralArmed: APLateralModes.NONE,
-    lateralModeFailed: false,
-    vnavState: FmaVNavState.OFF
-  };
+  private readonly lastData = GarminAPUtils.createEmptyFmaData();
   private lastVNavPathMode = VNavPathMode.None;
 
   private readonly fmaData = ConsumerSubject.create(null, this.lastData).pause();
@@ -302,14 +292,6 @@ export class Fma extends DisplayComponent<FmaProps> {
    * @param lastVNavPathMode The previous VNAV path mode.
    */
   private updateFromFmaData(data: FmaData, vnavPathMode: VNavPathMode, lastData?: FmaData, lastVNavPathMode?: VNavPathMode): void {
-    let isLateralModeFailed = false;
-    let isVerticalModeFailed = false;
-
-    if (data.lateralModeFailed) {
-      isLateralModeFailed = true;
-      isVerticalModeFailed = lastData !== undefined && (lastData.verticalActive === APVerticalModes.GP || lastData.verticalActive === APVerticalModes.GS);
-    }
-
     if (data.lateralActive !== lastData?.lateralActive) {
       this.tempSlotActiveData.active = this.getLateralActiveString(data.lateralActive);
       if (lastData === undefined) {
@@ -318,8 +300,8 @@ export class Fma extends DisplayComponent<FmaProps> {
         this.tempSlotActiveData.armedTransition = this.getLateralArmedString(lastData.lateralArmed);
       }
       this.tempSlotActiveData.secondaryArmedTransition = undefined;
-      this.tempSlotActiveData.failed = isLateralModeFailed && lastData !== undefined
-        ? this.getLateralActiveString(lastData.lateralActive)
+      this.tempSlotActiveData.failed = data.lateralReversionFromMode !== null
+        ? this.getLateralActiveString(data.lateralReversionFromMode)
         : undefined;
 
       this.lateralSlotActiveData.set(this.tempSlotActiveData);
@@ -346,8 +328,8 @@ export class Fma extends DisplayComponent<FmaProps> {
         );
       }
 
-      this.tempSlotActiveData.failed = isVerticalModeFailed && lastData !== undefined
-        ? this.getVerticalActiveString(lastData.verticalActive, lastData.verticalAltitudeArmed)
+      this.tempSlotActiveData.failed = data.verticalReversionFromMode !== null
+        ? this.getVerticalActiveString(data.verticalReversionFromMode, data.verticalAltitudeReversionFromMode ?? APAltitudeModes.NONE)
         : undefined;
 
       this.altitudeCaptureValue.set(data.altitudeCaptureValue);

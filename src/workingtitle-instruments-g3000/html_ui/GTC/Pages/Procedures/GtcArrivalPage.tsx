@@ -580,7 +580,7 @@ export class GtcArrivalPage extends GtcProcedureSelectionPage {
 
     const destinationFacility = this.store.destinationFacility.get();
 
-    if (destinationFacility && ICAO.valueEquals(selectedFacility.icaoStruct, destinationFacility.icaoStruct)) {
+    if (destinationFacility && !ICAO.valueEquals(selectedFacility.icaoStruct, destinationFacility.icaoStruct)) {
       const message = `The selected arrival airport\n(${selectedFacility.icaoStruct.ident}) is different from the\napproach airport (${destinationFacility.icaoStruct.ident}).\nLoad Arrival?`;
       const accepted = await GtcDialogs.openMessageDialog(this.gtcService, message);
       if (!accepted) {

@@ -1,5 +1,6 @@
 import {
-  DefaultTcasIntruder, EventBus, MappedSubject, Tcas, TcasIISensitivity, TcasOperatingMode, TrafficContact, TrafficInstrument, UnitType
+  DefaultTcasIntruder, EventBus, MappedSubject, SubscribableUtils, Tcas, TcasIISensitivity, TcasOperatingMode,
+  TrafficContact, TrafficInstrument, UnitType
 } from '@microsoft/msfs-sdk';
 
 import { TcasOperatingModeSetting, TrafficUserSettings } from './TrafficUserSettings';
@@ -16,10 +17,10 @@ export class WT21TCAS extends Tcas<DefaultTcasIntruder, TcasIISensitivity> {
 
   private readonly raAltitudeInhibitFlag = MappedSubject.create(
     ([radarAlt, isClimbing]): boolean => {
-      return radarAlt < (isClimbing ? 900 : 1100);
+      return isFinite(radarAlt) && radarAlt < (isClimbing ? 900 : 1100);
     },
-    this.ownAirplaneSubs.radarAltitude.map(radarAlt => Math.round(radarAlt.asUnit(UnitType.FOOT))),
-    this.ownAirplaneSubs.verticalSpeed.map(verticalSpeed => verticalSpeed.number >= 0)
+    this.ownAirplaneDataProvider.radarAltitude.map(radarAlt => Math.round(radarAlt.asUnit(UnitType.FOOT)), SubscribableUtils.NUMERIC_NAN_EQUALITY),
+    this.ownAirplaneDataProvider.verticalSpeed.map(verticalSpeed => verticalSpeed.number >= 0)
   );
 
   /**
@@ -28,14 +29,19 @@ export class WT21TCAS extends Tcas<DefaultTcasIntruder, TcasIISensitivity> {
    * @param tfcInstrument The traffic instrument which provides traffic contacts for this TCAS.
    */
   constructor(bus: EventBus, tfcInstrument: TrafficInstrument) {
-    super(bus, tfcInstrument, WT21TCAS.MAX_INTRUDER_COUNT, WT21TCAS.REAL_TIME_UPDATE_FREQ, WT21TCAS.SIM_TIME_UPDATE_FREQ);
+    super(bus, tfcInstrument, {
+      maxIntruderCount: WT21TCAS.MAX_INTRUDER_COUNT,
+      realTimeUpdateFreq: WT21TCAS.REAL_TIME_UPDATE_FREQ,
+      simTimeUpdateFreq: WT21TCAS.SIM_TIME_UPDATE_FREQ,
+      hasActiveSurveillance: true,
+    });
   }
 
   /** @inheritdoc */
   public init(): void {
     super.init();
 
-    this.settings.whenSettingChanged('trafficOperatingMode').handle(mode => {
+    this.settings.getSetting('trafficOperatingMode').sub(mode => {
       switch (mode) {
         case TcasOperatingModeSetting.Standby:
           this.setOperatingMode(TcasOperatingMode.Standby);
@@ -51,7 +57,7 @@ export class WT21TCAS extends Tcas<DefaultTcasIntruder, TcasIISensitivity> {
           }
           break;
       }
-    });
+    }, true);
 
     this.raAltitudeInhibitFlag.sub(inhibit => {
       if (this.settings.getSetting('trafficOperatingMode').value === TcasOperatingModeSetting.TA_RA) {
@@ -72,6 +78,6 @@ export class WT21TCAS extends Tcas<DefaultTcasIntruder, TcasIISensitivity> {
 
   /** @inheritdoc */
   protected updateSensitivity(): void {
-    this.sensitivity.updateLevel(this.ownAirplaneSubs.altitude.get(), this.ownAirplaneSubs.radarAltitude.get());
+    this.sensitivity.updateLevel(this.ownAirplaneDataProvider.pressureAltitude.get(), this.ownAirplaneDataProvider.radarAltitude.get());
   }
 }

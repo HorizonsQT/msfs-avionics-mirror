@@ -32,5 +32,5 @@ export default [
     },
     external: ['@microsoft/msfs-sdk', '@microsoft/msfs-garminsdk'],
     plugins: [css({ output: 'PFD.css' }), resolve()]
-  }
-]
+  },
+];

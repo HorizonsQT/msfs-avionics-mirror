@@ -21,10 +21,10 @@ export type HorizonProjectionParameters = {
   /** The true heading of the airplane, in degrees. */
   readonly heading?: number;
 
-  /** The pitch of the airplane, in degrees. */
+  /** The pitch of the airplane, in degrees. Positive values indicate upward pitch. */
   readonly pitch?: number;
 
-  /** The roll of the airplane, in degrees. */
+  /** The roll of the airplane, in degrees. Positive values indicate rightward roll. */
   readonly roll?: number;
 
   /**
@@ -107,10 +107,10 @@ type HorizonProjectionParametersRecord = {
   /** The true heading of the airplane, in degrees. */
   heading: number;
 
-  /** The pitch of the airplane, in degrees. */
+  /** The pitch of the airplane, in degrees. Positive values indicate upward pitch. */
   pitch: number;
 
-  /** The roll of the airplane, in degrees. */
+  /** The roll of the airplane, in degrees. Positive values indicate rightward roll. */
   roll: number;
 
   /**
@@ -263,7 +263,7 @@ export class HorizonProjection {
   }
 
   /**
-   * Gets the pitch of this projection, in degrees.
+   * Gets the pitch of this projection, in degrees. Positive values indicate upward pitch.
    * @returns The pitch of this projection, in degrees.
    */
   public getPitch(): number {
@@ -271,11 +271,22 @@ export class HorizonProjection {
   }
 
   /**
-   * Gets the roll of this projection, in degrees.
+   * Gets the roll of this projection, in degrees. Positive values indicate rightward roll.
    * @returns The roll of this projection, in degrees.
    */
   public getRoll(): number {
     return this.roll;
+  }
+
+  /**
+   * Gets the offset of this projection's camera relative to the airplane, as `[x, y, z]` in meters using the
+   * airplane's coordinate system. The positive z axis points in the forward direction of the airplane, the positive x
+   * axis points in the upward direction, and the positive y axis points to the right.
+   * @returns The offset of this projection's camera relative to the airplane, as `[x, y, z]` in meters using the
+   * airplane's coordinate system.
+   */
+  public getOffset(): ReadonlyFloat64Array {
+    return this.offset;
   }
 
   /**

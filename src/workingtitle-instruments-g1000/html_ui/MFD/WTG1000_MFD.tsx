@@ -18,7 +18,8 @@ import {
   ActiveNavSource, AdcSystem, DateTimeUserSettings, Fms, GarminAdsb, GarminAPConfig, GarminAPStateManager,
   GarminAPUtils, GarminFlightPlanRouteSyncManager, GarminGlidepathComputer, GarminGoAroundManager, GarminNavEvents,
   GarminNavToNavComputer, GarminObsLNavModule, GarminPrimaryFlightPlanRouteLoader,
-  GarminPrimaryFlightPlanRouteProvider, GarminVNavComputer, GarminVNavUtils, NavdataComputer, TrafficAdvisorySystem,
+  GarminPrimaryFlightPlanRouteProvider, GarminVNavComputer, GarminVNavUtils, GpsNavSource, NavdataComputer,
+  NavRadioNavSource, NavReferenceIndicatorsCollection, NavReferenceSourceCollection, TrafficAdvisorySystem,
   TrafficOperatingModeManager, UnitsUserSettings
 } from '@microsoft/msfs-garminsdk';
 
@@ -29,10 +30,16 @@ import { FuelComputer } from '../Shared/FuelComputer';
 import { G1000ControlPublisher } from '../Shared/G1000Events';
 import { G1000AvionicsPlugin, G1000PluginBinder } from '../Shared/G1000Plugin';
 import { AltimeterBaroKeyEventHandler } from '../Shared/Input/AltimeterBaroKeyEventHandler';
+import { CourseKnobInputHandler } from '../Shared/Input/CourseKnobInputHandler';
 import { AhrsPublisher } from '../Shared/Instruments/AhrsPublisher';
 import { G1000APPublisher } from '../Shared/Instruments/G1000APPublisher';
 import { NavComRadio } from '../Shared/NavCom/NavComRadio';
 import { ActiveNavSourceManager } from '../Shared/Navigation/ActiveNavSourceManager';
+import { G1000FacilityUtils } from '../Shared/Navigation/G1000FacilityUtils';
+import {
+  G1000ActiveSourceNavIndicator, G1000NavIndicator, G1000NavIndicatorName, G1000NavIndicators, G1000NavSourceName,
+  G1000NavSources
+} from '../Shared/NavReference/G1000NavReference';
 import { G1000AirframeOptionsManager } from '../Shared/Profiles/G1000AirframeOptionsManager';
 import { G1000SettingSaveManager } from '../Shared/Profiles/G1000SettingSaveManager';
 import { StartupLogo } from '../Shared/StartupLogo';
@@ -95,9 +102,8 @@ import { MFDWptInfo } from './Components/UI/WptInfo/MFDWptInfo';
 
 // import { TurbulenceGraph } from './Components/UI/TurbulenceGraph';
 import '../Shared/UI/Common/g1k_common.css';
-import './WTG1000_MFD.css';
 import '../Shared/UI/Common/LatLonDisplay.css';
-import { G1000FacilityUtils } from '../Shared';
+import './WTG1000_MFD.css';
 
 /**
  * The base G1000 MFD instrument class.
@@ -139,6 +145,11 @@ class WTG1000_MFD extends BaseInstrument {
   private readonly airframeOptions: G1000AirframeOptionsManager;
 
   private readonly activeNavSourceManager: ActiveNavSourceManager;
+
+  private readonly navSources: G1000NavSources;
+  private readonly navIndicators: G1000NavIndicators;
+
+  private readonly courseKnobInputHandler: CourseKnobInputHandler;
 
   private readonly altimeterBaroKeyEventHandler: AltimeterBaroKeyEventHandler;
 
@@ -276,6 +287,12 @@ class WTG1000_MFD extends BaseInstrument {
 
     this.navdataComputer = new NavdataComputer(this.bus, this.planner, this.loader);
 
+    this.navSources = this.createNavReferenceSourceCollection();
+    this.navIndicators = this.createNavReferenceIndicatorCollection();
+
+    this.courseKnobInputHandler = new CourseKnobInputHandler('MFD', this.bus, this.navIndicators.get('activeSource'));
+    this.courseKnobInputHandler.init();
+
     this.tas = new TrafficAdvisorySystem(this.bus, this.trafficInstrument, new GarminAdsb(this.bus), false);
     this.trafficOperatingModeManager = new TrafficOperatingModeManager(this.bus);
 
@@ -307,6 +324,29 @@ class WTG1000_MFD extends BaseInstrument {
    */
   get isInteractive(): boolean {
     return true;
+  }
+
+  /**
+   * Creates a navigation reference source collection for this instrument to use.
+   * @returns A navigation reference source collection for this instrument to use.
+   */
+  private createNavReferenceSourceCollection(): G1000NavSources {
+    return new NavReferenceSourceCollection<G1000NavSourceName>(
+      new NavRadioNavSource<G1000NavSourceName>(this.bus, 'NAV1', 1),
+      new NavRadioNavSource<G1000NavSourceName>(this.bus, 'NAV2', 2),
+      new GpsNavSource<G1000NavSourceName>(this.bus, 'GPS1', 1),
+      new GpsNavSource<G1000NavSourceName>(this.bus, 'GPS2', 2)
+    );
+  }
+
+  /**
+   * Creates a navigation reference indicator collection for this instrument to use.
+   * @returns A navigation reference indicator collection for this instrument to use.
+   */
+  private createNavReferenceIndicatorCollection(): G1000NavIndicators {
+    return new NavReferenceIndicatorsCollection(new Map<G1000NavIndicatorName, G1000NavIndicator>([
+      ['activeSource', new G1000ActiveSourceNavIndicator(this.navSources, this.bus)]
+    ]));
   }
 
   /**

@@ -200,9 +200,9 @@ export class PitchLadder extends HorizonLayer<PitchLadderProps> {
 
     const pitchOffset = this.props.projection.getPitch() * this.pitchResolution;
 
-    this.transform.transform.getChild(0).set(-bounds[0], -bounds[1], 0, 0.1, 0.1);
-    this.transform.transform.getChild(1).set(-this.props.projection.getRoll());
-    this.transform.transform.getChild(2).set(pitchOffset, 0.1);
+    this.transform.transform.getChild(0).set(-bounds[0], -bounds[1], 0, 0.25);
+    this.transform.transform.getChild(1).set(-this.props.projection.getRoll(), 0.1);
+    this.transform.transform.getChild(2).set(pitchOffset, 0.25);
     this.transform.resolve();
   }
 

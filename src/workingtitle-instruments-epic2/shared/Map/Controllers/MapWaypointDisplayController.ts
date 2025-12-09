@@ -16,9 +16,9 @@ import { AirportWaypoint } from '../AirportWaypoint';
 export interface WaypointDisplayControllerModules {
   /** Waypoints display module. */
   [MapSystemKeys.NearestWaypoints]: MapWaypointDisplayModule;
-  /** Waypoints display module. */
+  /** Facility select module. */
   [EpicMapKeys.CtrWpt]: MapFacilitySelectModule;
-  /** Waypoints display module. */
+  /** Flight Plan Module. */
   [MapSystemKeys.FlightPlan]: MapFlightPlanModule;
 }
 
@@ -117,7 +117,6 @@ export class MapWaypointDisplayController extends MapSystemController<
       classMask: BitFlags.union(
         BitFlags.createFlag(AirportClass.HardSurface),
         BitFlags.createFlag(AirportClass.SoftSurface),
-        BitFlags.createFlag(AirportClass.AllWater),
         BitFlags.createFlag(AirportClass.Private),
       ),
       showClosed: NearestAirportSearchSession.Defaults.ShowClosed,

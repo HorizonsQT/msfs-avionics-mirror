@@ -1,25 +1,26 @@
 import {
   AdcEvents, AirportFacility, AirportUtils, APEvents, APLateralModes, APValues, APVerticalModes, BitFlags, ClockEvents, ConsumerSubject, EventBus,
-  FacilityLoader, FlightPlan, FlightPlanner, FlightPlannerEvents, GeoPoint, GlidePathCalculator, GNSSEvents, ICAO, LegDefinition, LegDefinitionFlags, LegType,
-  LNavEvents, MappedSubject, MappedValue, MathUtils, NavMath, ObjectSubject, OriginDestChangeType, RnavTypeFlags, SimVarValueType, SmoothingPathCalculator,
-  Subject, TocBocDetails, TodBodDetails, UnitType, VerticalFlightPhase, VerticalFlightPlan, VNavAltCaptureType, VNavAvailability, VNavConstraint,
-  VNavControlEvents, VNavDataEvents, VNavEvents, VNavManager, VNavPathCalculator, VNavPathMode, VNavState, VNavUtils, VNavVars, Wait, WeightBalanceEvents
+  FacilityLoader, FlightPlan, FlightPlanner, FlightPlannerEvents, FlightPlanSegment, FlightPlanSegmentType, GeoPoint, GlidePathCalculator2, GNSSEvents, ICAO,
+  LegDefinition, LegDefinitionFlags, LegType, LNavEvents, MappedSubject, MappedValue, MathUtils, NavMath, ObjectSubject, OriginDestChangeType, RnavTypeFlags,
+  SimVarValueType, SmoothingPathCalculator, Subject, TocBocDetails, TodBodDetails, UnitType, VerticalFlightPhase, VerticalFlightPlan, VNavAltCaptureType,
+  VNavAvailability, VNavConstraint, VNavControlEvents, VNavDataEvents, VNavEvents, VNavManager, VNavPathCalculator, VNavPathMode, VNavState, VNavUtils,
+  VNavVars, Wait, WeightBalanceEvents
 } from '@microsoft/msfs-sdk';
 
 import { ApproachDetails, Epic2FlightPlans, Epic2FmsEvents, Epic2VerticalFlightPhase, RnavMinima } from '../Fms';
 import { FmsMessageKey, FmsMessageTransmitter } from '../FmsMessageSystem';
 import { Epic2LNavDataEvents } from '../Navigation';
 import { Epic2PerformancePlan } from '../Performance';
-import { Epic2VerticalPredictionFunctions, Epic2VnavUtils } from './Epic2VnavUtils';
 import { Epic2FlightArea } from './Epic2FlightAreaComputer';
-
-// import { PerformancePlan } from '../Performance';
-
+import { Epic2VerticalPredictionFunctions, Epic2VnavUtils } from './Epic2VnavUtils';
 
 /**
  * An Epic2 VNav Manager.
  */
 export class Epic2VNavManager implements VNavManager {
+  private static readonly CRUISE_CLIMB_ALT_DEADBAND_FT = 200;
+  private static readonly CRUISE_CLIMB_VS_DEADBAND_FPM = 150;
+
   private _realTime = 0;
 
   public state = VNavState.Disabled;
@@ -31,10 +32,13 @@ export class Epic2VNavManager implements VNavManager {
   private originFacility?: AirportFacility;
   private destFacility?: AirportFacility;
 
+  /** Current barometric altitude in feet. */
   private currentAltitude = 0;
   private currentGpsAltitude = 0;
+  /** AP target altitude in feet. */
   private preselectedAltitude = 0;
   private currentGroundSpeed = 0;
+  /** Current vertical speed in feet per minute. */
   private currentVS = 0;
   private trueTrack = 0;
 
@@ -109,7 +113,10 @@ export class Epic2VNavManager implements VNavManager {
   private todCalculatedTimer = 0;
   private tocCalculatedTimer = 0;
 
-  public readonly glidepathCalculator = new GlidePathCalculator(this.bus, this.flightPlanner, this.primaryPlanIndex);
+  public readonly glidepathCalculator = new GlidePathCalculator2(
+    this.flightPlanner,
+    { planIndex: this.primaryPlanIndex, isEligibleReferenceLeg: Epic2VNavManager.isEligibleGlidePathReferenceLeg },
+  );
 
   private readonly todBodDetails: TodBodDetails = {
     todLegIndex: -1,
@@ -572,6 +579,7 @@ export class Epic2VNavManager implements VNavManager {
     const lateralLegIndex = this.lnavLegIndex.get();
 
     if (lateralPlan.length > 0 && lateralLegIndex < lateralPlan.length && VNavUtils.verticalPlanHasLeg(verticalPlan, lateralLegIndex)) {
+      this.glidepathCalculator.update();
 
       if (this.needCalculateTodDisplayDistance) {
         this.calculateTodDisplayDistance(lateralPlan, verticalPlan);
@@ -648,7 +656,7 @@ export class Epic2VNavManager implements VNavManager {
 
       requiredVs = this.getVerticalSpeedAdvisoryPointerValue(lateralPlan, alongLegDistance, lateralLegIndex, flightPhase);
 
-      this.apValues.approachHasGP.set(this.manageGP(lateralPlan, alongLegDistance));
+      this.apValues.approachHasGP.set(this.manageGP(lateralPlan, UnitType.METER.convertFrom(this.lnavLegDistanceRemaining.get(), UnitType.NMILE)));
       const gpDistance = this.gpDistance.get();
 
       if (
@@ -663,9 +671,10 @@ export class Epic2VNavManager implements VNavManager {
           )
         )
       ) {
+
         requiredVs = this.getRequiredVs(
           UnitType.METER.convertTo(gpDistance, UnitType.NMILE),
-          UnitType.METER.convertTo(this.glidepathCalculator.getRunwayAltitude(), UnitType.FOOT),
+          UnitType.METER.convertTo(this.glidepathCalculator.getDesiredAltitude(0) ?? 0, UnitType.FOOT),
           this.currentGpsAltitude
         );
       }
@@ -1484,10 +1493,10 @@ export class Epic2VNavManager implements VNavManager {
   /**
    * Manages the GP State and sets required data for GP guidance, returns whether there is a GP.
    * @param lateralPlan The FlightPlan.
-   * @param alongLegDistance The Along Leg Distance
+   * @param legDistanceRemaining The distance remaining on the active leg in metres.
    * @returns Whether there is a GP.
    */
-  private manageGP(lateralPlan: FlightPlan | undefined, alongLegDistance: number): boolean {
+  private manageGP(lateralPlan: FlightPlan | undefined, legDistanceRemaining: number): boolean {
     const approachDetails = this.approachDetails.get();
     const approachIsActive = approachDetails.approachIsActive;
     const approachSupportsVnav = approachDetails.selectedRnavMinima === RnavMinima.LPV ||
@@ -1497,15 +1506,32 @@ export class Epic2VNavManager implements VNavManager {
     const activeLeg = lateralPlan?.tryGetLeg(this.lnavLegIndex.get());
     const activeLegIsNotMissed = activeLeg && !BitFlags.isAll(LegDefinitionFlags.MissedApproach, activeLeg.flags);
     if (lateralPlan && approachSupportsVnav && approachIsActive && activeLegIsNotMissed) {
-      const gpDistance = this.glidepathCalculator.getGlidepathDistance(this.lnavLegIndex.get(), alongLegDistance);
-      this.gpDistance.set(gpDistance);
-      const desiredGPAltitudeFeet = UnitType.METER.convertTo(this.glidepathCalculator.getDesiredGlidepathAltitude(gpDistance), UnitType.FOOT);
-      this.gpVerticalDeviation.set(MathUtils.clamp(desiredGPAltitudeFeet - this.currentGpsAltitude, -1000, 1000));
-      this.gpFpa.set(this.glidepathCalculator.glidepathFpa);
-      return true;
+      const distance2Ref = this.glidepathCalculator.getDistanceToReference(this.lnavLegIndex.get(), legDistanceRemaining);
+      if (distance2Ref !== undefined) {
+        this.gpDistance.set(distance2Ref);
+        const desiredAlt = this.glidepathCalculator.getDesiredAltitude(distance2Ref);
+        if (desiredAlt !== undefined) {
+          // Only LPV uses GPS alt; see "FMS SBAS APPROACHES" section of pilot guide.
+          const currentAltitude = approachDetails.selectedRnavMinima === RnavMinima.LPV ? this.currentGpsAltitude : this.currentAltitude;
+          this.gpVerticalDeviation.set(MathUtils.clamp(UnitType.FOOT.convertFrom(desiredAlt, UnitType.METER) - currentAltitude, -1000, 1000));
+          this.gpFpa.set(this.glidepathCalculator.glidepath.get().angle);
+          return true;
+        }
+      }
     }
     this.resetGpVars();
     return false;
+  }
+
+  /**
+   * Checks whether a candidate flight plan leg is eligible to host a glidepath reference point.
+   * @param leg The flight plan leg to check.
+   * @param segment The flight plan segment containing the leg to check.
+   * @returns Whether the specified flight plan leg is eligible to host a glidepath reference point.
+   */
+  private static isEligibleGlidePathReferenceLeg(leg: LegDefinition, segment: FlightPlanSegment): boolean {
+    return segment.segmentType === FlightPlanSegmentType.Approach
+      && !BitFlags.isAny(leg.flags, LegDefinitionFlags.MissedApproach);
   }
 
   /**
@@ -1588,12 +1614,16 @@ export class Epic2VNavManager implements VNavManager {
     currentAltitudeMetric: number,
     cruiseAltitude: number,
   ): TocBocDetails {
-
-    const calculate = (this.tocBocDetails.tocLegIndex === -1 && this.tocBocDetails.tocLegIndex === -1) || this._realTime - this.tocCalculatedTimer > 1000;
+    const noToc = this.tocBocDetails.tocLegIndex === -1 && this.tocBocDetails.tocLegIndex === -1;
+    const calculate = noToc || this._realTime - this.tocCalculatedTimer > 1000;
 
     if (calculate) {
+      const currentAltWithDeadband = this.currentAltitude + (noToc ? Epic2VNavManager.CRUISE_CLIMB_ALT_DEADBAND_FT : 0);
       let tocBocDetails: TocBocDetails;
-      if (this.preselectedAltitude > this.currentAltitude || this.currentVS > 0) {
+      if (cruiseAltitude >= currentAltWithDeadband && (
+        this.preselectedAltitude >= currentAltWithDeadband ||
+        this.currentVS >= Epic2VNavManager.CRUISE_CLIMB_VS_DEADBAND_FPM
+      )) {
         tocBocDetails = Epic2VnavUtils.calculateCruiseToc(
           this.predictionFunctions,
           flightPlan,

@@ -1,22 +1,21 @@
 import { ReadonlyFloat64Array } from '../../math/VecMath';
-import { VecNSubject } from '../../math/VectorSubject';
 import { ObjectSubject } from '../../sub/ObjectSubject';
 import { Subscribable } from '../../sub/Subscribable';
 import { SubscribableSet } from '../../sub/SubscribableSet';
+import { SubscribableUtils } from '../../sub/SubscribableUtils';
 import { FSComponent, VNode } from '../FSComponent';
 import { MapComponent, MapComponentProps } from '../map/MapComponent';
 import { MapProjection } from '../map/MapProjection';
 
 /**
- * Component props for MapSystemComponent.
+ * Component props for {@link MapSystemComponent}.
  */
 export interface MapSystemComponentProps<Modules> extends MapComponentProps<Modules> {
   /**
-   * A subscribable which provides the size of the dead zone around each edge of the map projection window, which is
-   * displayed but excluded in map range calculations. Expressed as [left, top, right, bottom] in pixels. Defaults to 0
-   * on all sides.
+   * The size of the dead zone around each edge of the map projection window, as `[left, top, right, bottom]` in
+   * pixels. Defaults to 0 on all sides.
    */
-  deadZone?: Subscribable<Float64Array>;
+  deadZone?: ReadonlyFloat64Array | Subscribable<ReadonlyFloat64Array>;
 
   /** A function to be called after the map is rendered. */
   onAfterRender: () => void;
@@ -61,7 +60,7 @@ export class MapSystemComponent<P extends MapSystemComponentProps<any> = MapSyst
   constructor(props: P) {
     super(props);
 
-    this.deadZone = this.props.deadZone ?? VecNSubject.create(new Float64Array(4));
+    this.deadZone = SubscribableUtils.toSubscribable(this.props.deadZone ?? new Float64Array(4), true);
     this.deadZone.sub(this.onDeadZoneChanged.bind(this));
   }
 

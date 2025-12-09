@@ -1,5 +1,3 @@
-/// <reference types="@microsoft/msfs-types/js/simvar" preserve="true" />
-
 import { ConsumerValue } from '../../data/ConsumerValue';
 import { EventBus } from '../../data/EventBus';
 import { SimVarValueType } from '../../data/SimVars';
@@ -8,7 +6,7 @@ import { NavComEvents } from '../../instruments/NavCom';
 import { NavSourceId, NavSourceType } from '../../instruments/NavProcessor';
 import { NavRadioIndex } from '../../instruments/RadioCommon';
 import { MathUtils } from '../../math/MathUtils';
-import { UnitType } from '../../math/NumberUnit';
+import { Unit, UnitFamily, UnitType } from '../../math/NumberUnit';
 import { APLateralModes, APVerticalModes } from '../APTypes';
 import { APValues } from '../APValues';
 import { ApproachGuidanceMode } from '../VerticalNavigation';
@@ -162,22 +160,28 @@ export type APGSDirectorOptions = {
 };
 
 /**
- * An autopilot director that provides vertical guidance by tracking a glideslope signal from a radio navigation aid.
- *
+ * An autopilot director that generates flight director pitch commands to track a glideslope signal from a radio
+ * navigation aid.
+ * 
+ * The director requires valid pitch data to arm or activate.
+ * 
  * Requires that the navigation radio topics defined in {@link NavComEvents} be published to the event bus in order to
  * function properly.
  */
 export class APGSDirector implements PlaneDirector {
-
+  /** @inheritDoc */
   public state: DirectorState;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
   public onActivate?: () => void;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
   public onArm?: () => void;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
+  public onDeactivate?: () => void;
+
+  /** @inheritDoc */
   public drivePitch?: (pitch: number, adjustForAoa?: boolean, adjustForVerticalWind?: boolean) => void;
 
   private navSource: Readonly<NavSourceId> = {
@@ -217,6 +221,13 @@ export class APGSDirector implements PlaneDirector {
 
   private readonly minVs: number;
   private readonly maxVs: number;
+
+  private readonly pitch = this.apValues.dataProvider.getItem('pitch');
+  private readonly planeLat = this.apValues.dataProvider.getItem('lat');
+  private readonly planeLon = this.apValues.dataProvider.getItem('lon');
+  private readonly groundSpeed = this.apValues.dataProvider.getItem('ground_speed');
+  private readonly verticalSpeed = this.apValues.dataProvider.getItem('position_vertical_speed');
+  private readonly tas = this.apValues.dataProvider.getItem('tas');
 
   /**
    * Creates a new instance of APGSDirector.
@@ -287,6 +298,14 @@ export class APGSDirector implements PlaneDirector {
   }
 
   /**
+   * Checks whether the data required for this director to function are valid.
+   * @returns Whether the data required for this director to function are valid.
+   */
+  private isDataValid(): boolean {
+    return this.pitch.isValueValid();
+  }
+
+  /**
    * Updates this director's radio navigation data.
    */
   private updateNavData(): void {
@@ -298,15 +317,19 @@ export class APGSDirector implements PlaneDirector {
     this.navData.gsAngleError = this.navData.signal > 0 && this.navData.hasGs ? this.navGsError.get() : null;
   }
 
-  /**
-   * Activates this director.
-   */
+  /** @inheritDoc */
   public activate(): void {
+    if (this.state === DirectorState.Active || !this.isDataValid()) {
+      return;
+    }
+
     this.state = DirectorState.Active;
-    SimVar.SetSimVarValue(VNavVars.GPApproachMode, SimVarValueType.Number, ApproachGuidanceMode.GSActive);
+
     if (this.onActivate !== undefined) {
       this.onActivate();
     }
+
+    SimVar.SetSimVarValue(VNavVars.GPApproachMode, SimVarValueType.Number, ApproachGuidanceMode.GSActive);
     SimVar.SetSimVarValue('AUTOPILOT GLIDESLOPE ACTIVE', 'Bool', true);
     SimVar.SetSimVarValue('AUTOPILOT APPROACH ACTIVE', 'Bool', true);
     SimVar.SetSimVarValue('AUTOPILOT GLIDESLOPE ARM', 'Bool', false);
@@ -315,40 +338,56 @@ export class APGSDirector implements PlaneDirector {
     this.activateNavData.frequency = this.navFrequency.get();
   }
 
-  /**
-   * Arms this director.
-   */
+  /** @inheritDoc */
   public arm(): void {
-    if (this.state === DirectorState.Inactive) {
-      this.updateNavData();
-      if (this.canArm(this.apValues, this.navData)) {
-        this.state = DirectorState.Armed;
-        SimVar.SetSimVarValue(VNavVars.GPApproachMode, SimVarValueType.Number, ApproachGuidanceMode.GSArmed);
-        if (this.onArm !== undefined) {
-          this.onArm();
-        }
-        SimVar.SetSimVarValue('AUTOPILOT GLIDESLOPE ARM', 'Bool', true);
-        SimVar.SetSimVarValue('AUTOPILOT GLIDESLOPE ACTIVE', 'Bool', false);
-        SimVar.SetSimVarValue('AUTOPILOT APPROACH ACTIVE', 'Bool', true);
+    if (this.state !== DirectorState.Inactive || !this.isDataValid()) {
+      return;
+    }
+
+    this.updateNavData();
+    if (this.canArm(this.apValues, this.navData)) {
+      this.state = DirectorState.Armed;
+
+      if (this.onArm !== undefined) {
+        this.onArm();
       }
+
+      SimVar.SetSimVarValue(VNavVars.GPApproachMode, SimVarValueType.Number, ApproachGuidanceMode.GSArmed);
+      SimVar.SetSimVarValue('AUTOPILOT GLIDESLOPE ARM', 'Bool', true);
+      SimVar.SetSimVarValue('AUTOPILOT GLIDESLOPE ACTIVE', 'Bool', false);
+      SimVar.SetSimVarValue('AUTOPILOT APPROACH ACTIVE', 'Bool', true);
     }
   }
 
-  /**
-   * Deactivates this director.
-   */
+  /** @inheritDoc */
   public deactivate(): void {
+    if (this.state === DirectorState.Inactive) {
+      return;
+    }
+
     this.state = DirectorState.Inactive;
+
+    if (this.onDeactivate !== undefined) {
+      this.onDeactivate();
+    }
+
     SimVar.SetSimVarValue(VNavVars.GPApproachMode, SimVarValueType.Number, ApproachGuidanceMode.None);
     SimVar.SetSimVarValue('AUTOPILOT GLIDESLOPE ARM', 'Bool', false);
     SimVar.SetSimVarValue('AUTOPILOT GLIDESLOPE ACTIVE', 'Bool', false);
     SimVar.SetSimVarValue('AUTOPILOT APPROACH ACTIVE', 'Bool', false);
   }
 
-  /**
-   * Updates this director.
-   */
+  /** @inheritDoc */
   public update(): void {
+    if (this.state === DirectorState.Inactive) {
+      return;
+    }
+
+    if (!this.isDataValid()) {
+      this.deactivate();
+      return;
+    }
+
     if (this.state === DirectorState.Armed) {
       this.updateNavData();
       if (this.canActivate(this.apValues, this.navData)) {
@@ -379,8 +418,8 @@ export class APGSDirector implements PlaneDirector {
         GeoPoint.distance(
           navLla.lat,
           navLla.long,
-          SimVar.GetSimVarValue('PLANE LATITUDE', SimVarValueType.Degree),
-          SimVar.GetSimVarValue('PLANE LONGITUDE', SimVarValueType.Degree)
+          this.planeLat.getActualValue(),
+          this.planeLon.getActualValue()
         ),
         UnitType.METER
       );
@@ -388,8 +427,8 @@ export class APGSDirector implements PlaneDirector {
       // We want the height of the plane above the glideslope antenna, which we can calculate from distance,
       // glideslope angle, and glideslope error.
       const heightM = distanceM * Math.tan((gsAngle + gsError) * Avionics.Utils.DEG2RAD);
-      const groundSpeedMps = SimVar.GetSimVarValue('GROUND VELOCITY', SimVarValueType.MetersPerSecond);
-      const vsMps = SimVar.GetSimVarValue('VELOCITY WORLD Y', SimVarValueType.MetersPerSecond);
+      const groundSpeedMps = UnitType.KNOT.convertTo(this.groundSpeed.getActualValue(), UnitType.MPS);
+      const vsMps = UnitType.FPM.convertTo(this.verticalSpeed.getActualValue(), UnitType.MPS);
 
       const hypotSq = distanceM * distanceM + heightM * heightM;
       const heightTimesGs = heightM * groundSpeedMps;
@@ -397,22 +436,23 @@ export class APGSDirector implements PlaneDirector {
       const currentAngleRate = (vsMps * distanceM + heightTimesGs) / hypotSq;
 
       let targetVs: number;
-      let unit: string;
+      let unit: Unit<UnitFamily.Speed>;
 
       if (this.vsTargetFunc) {
         targetVs = this.vsTargetFunc(gsError, gsAngle, currentAngleRate, distanceM, heightM, groundSpeedMps, vsMps);
-        unit = SimVarValueType.FPM;
+        unit = UnitType.FPM;
       } else {
         const desiredClosureRate = this.angleClosureRateFunc(gsError, gsAngle, currentAngleRate, distanceM, heightM, groundSpeedMps, vsMps);
         const desiredAngleRate = Math.sign(gsError) * -1 * desiredClosureRate;
 
         targetVs = (Avionics.Utils.DEG2RAD * desiredAngleRate * hypotSq - heightTimesGs) / distanceM;
-        unit = SimVarValueType.MetersPerSecond;
+        unit = UnitType.MPS;
       }
 
       targetVs = MathUtils.clamp(targetVs, this.minVs, this.maxVs);
 
-      const pitchForVerticalSpeed = Math.asin(MathUtils.clamp(targetVs / SimVar.GetSimVarValue('AIRSPEED TRUE', unit), -1, 1)) * Avionics.Utils.RAD2DEG;
+      const tas = UnitType.KNOT.convertTo(this.tas.getActualValue(), unit);
+      const pitchForVerticalSpeed = Math.asin(MathUtils.clamp(targetVs / tas, -1, 1)) * Avionics.Utils.RAD2DEG;
       const targetPitch = MathUtils.clamp(pitchForVerticalSpeed, -8, 3);
 
       this.drivePitch && this.drivePitch(-targetPitch, true, true);

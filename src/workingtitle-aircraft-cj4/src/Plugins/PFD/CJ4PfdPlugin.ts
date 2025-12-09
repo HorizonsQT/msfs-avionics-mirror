@@ -14,7 +14,10 @@ export class CJ4PfdPlugin extends WT21AvionicsPlugin {
   /** @inheritDoc */
   public onInstalled(): void {
     this.loadCss(`${CJ4FilePaths.PLUGINS_PATH}/CJ4PfdPlugins.css`);
-    new CJ4Fadec(this.binder.bus);
+
+    if (this.binder.isPrimaryInstrument) {
+      new CJ4Fadec(this.binder.bus);
+    }
   }
 }
 

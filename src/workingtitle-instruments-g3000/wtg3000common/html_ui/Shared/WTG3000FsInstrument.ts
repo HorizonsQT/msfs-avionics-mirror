@@ -264,6 +264,7 @@ export abstract class WTG3000FsInstrument implements FsInstrument {
           this.instrumentType === 'MFD' ? 'primary' : 'replica',
           {
             channelCount: 15,
+            sbasChannelCount: 3,
             satInUseMaxCount: 15,
             satInUsePdopTarget: 2,
             satInUseOptimumCount: 5

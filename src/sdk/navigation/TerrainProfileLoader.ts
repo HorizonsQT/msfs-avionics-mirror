@@ -64,6 +64,15 @@ export class TerrainProfileLoader {
   }
 
   /**
+   * Gets a terrain profile for a single lat/long point.
+   * @param point The lat/long point to sample
+   * @returns The elevation of exactly one sample
+   */
+  public async getTerrainProfileAtPoint(point: LatLong): Promise<number> {
+    return (await TerrainProfileLoader.getListener()).call('GET_WORLD_ELEVATION_AT', point);
+  }
+
+  /**
    * Gets the terrain profile for a flight plan leg
    * @param leg The leg object
    * @param terrainDefinition The definition of the terrain, in metres. Defaults to the initial terrain minimum resolution.

@@ -2,9 +2,10 @@
 /// <reference types="@microsoft/msfs-types/js/types" preserve="true" />
 /// <reference types="@microsoft/msfs-types/js/netbingmap" preserve="true" />
 
-import { ReadonlyFloat64Array } from '../../math';
+import { SimAltitudeReference } from '../../geo/SimAltitudeReference';
+import { ReadonlyFloat64Array } from '../../math/VecMath';
 import { Subscribable, SubscribableArray, SubscribableSet } from '../../sub';
-import { BingComponent } from '../bing/BingComponent';
+import { BingCameraRotationReference, BingComponent } from '../bing/BingComponent';
 import { ComponentProps, DisplayComponent, FSComponent, VNode } from '../FSComponent';
 
 /**
@@ -20,14 +21,13 @@ export interface SynVisProps extends ComponentProps {
   /** Whether to skip unbinding the component's bound Bing instance when the component is destroyed. Defaults to `false`. */
   bingSkipUnbindOnDestroy?: boolean;
 
-  /**
-   * A subscribable which provides the internal resolution for the Bing component.
-   */
+  /** The internal resolution for the component, as `[width, height]` in pixels. */
   resolution: Subscribable<ReadonlyFloat64Array>;
 
   /**
-   * The earth colors for the display. Index 0 defines the water color, and indexes 1 to the end of the array define
-   * the terrain colors. If not defined, all colors default to black.
+   * The earth colors for the Bing component. Index 0 defines the water color, and indexes 1 to the end of the array
+   * define the terrain colors. Each color should be expressed as `R + G * 256 + B * 256^2`. If not defined, all colors
+   * default to black.
    */
   earthColors?: SubscribableArray<number>;
 
@@ -40,10 +40,19 @@ export interface SynVisProps extends ComponentProps {
    */
   earthColorsElevationRange?: Subscribable<ReadonlyFloat64Array>;
 
-  /**
-   * A subscribable which provides the sky color.
-   */
+  /** The sky color for the component. The color should be expressed as `R + G * 256 + B * 256^2`. */
   skyColor: Subscribable<number>;
+
+  /**
+   * The field of view for the component, in degrees. The field of view is measured vertically from the top of the
+   * rendered viewport to the bottom. Defaults to 50 degrees.
+   */
+  fov?: Subscribable<number>;
+
+  /**
+   * A callback to call when the underlying Bing component is bound.
+   */
+  onBoundCallback?: (component: SynVisComponent) => void;
 
   /** CSS class(es) to add to the root of the component. */
   class?: string | SubscribableSet<string>;
@@ -62,7 +71,7 @@ export class SynVisComponent extends DisplayComponent<SynVisProps> {
    * A callback which is called when the Bing component is bound.
    */
   protected onBingBound = (): void => {
-    // noop
+    this.props.onBoundCallback && this.props.onBoundCallback(this);
   };
 
   /** @inheritDoc */
@@ -80,6 +89,14 @@ export class SynVisComponent extends DisplayComponent<SynVisProps> {
    */
   public isAwake(): boolean {
     return this._isAwake;
+  }
+
+  /**
+   * Checks whether this display is bound to a Bing map instance.
+   * @returns whether this display is bound to a Bing map instance.
+   */
+  public isBound(): boolean {
+    return this.isRendered && this.bingRef.instance.isBound();
   }
 
   /**
@@ -106,6 +123,31 @@ export class SynVisComponent extends DisplayComponent<SynVisProps> {
     }
   }
 
+  /**
+   * Sets this display's camera transform parameters.
+   * @param pos The camera's nominal position. If null, then the nominal position will sync to the aircraft's position.
+   * @param altitudeRef The altitude reference to use for the camera's nominal position. If null, then the default
+   * reference ({@link SimAltitudeReference.Geoid}) is used. Ignored if `pos` is null.
+   * @param offset The camera's offset from its nominal position, as `[x, y, z]` in meters in the camera's reference
+   * frame after rotation is applied. The positive x axis points to the left. The positive y axis points upward. The
+   * positive z axis points forward. If null, then no offset is applied.
+   * @param rotation The camera's rotation, whose reference frame depends on the value of `rotationRef`. If null, then
+   * the rotation will sync to the aircraft's attitude.
+   * @param rotationRef The reference frame for the camera rotation. If null, then the default reference
+   * ({@link BingCameraRotationReference.World}) is used. Ignored if `rotation` is null.
+   */
+  public set3DMapCameraTransform(
+    pos: LatLongAlt | null,
+    altitudeRef: SimAltitudeReference.Ellipsoid | SimAltitudeReference.Geoid | null,
+    offset: ReadonlyFloat64Array | null,
+    rotation: PitchBankHeading | null,
+    rotationRef: BingCameraRotationReference | null,
+  ): void {
+    if (this.isRendered) {
+      this.bingRef.instance.set3DMapCameraTransform(pos, altitudeRef, offset, rotation, rotationRef);
+    }
+  }
+
   /** @inheritDoc */
   public render(): VNode {
     return (
@@ -118,6 +160,7 @@ export class SynVisComponent extends DisplayComponent<SynVisProps> {
         earthColors={this.props.earthColors}
         earthColorsElevationRange={this.props.earthColorsElevationRange}
         skyColor={this.props.skyColor}
+        fov={this.props.fov}
         delay={this.props.bingDelay}
         skipUnbindOnDestroy={this.props.bingSkipUnbindOnDestroy}
         class={this.props.class}

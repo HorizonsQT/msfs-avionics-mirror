@@ -12,11 +12,11 @@ export default [
       globals: {
           '@microsoft/msfs-sdk': 'msfssdk',
           '@microsoft/msfs-wt21-pfd': 'wt21_pfd',
-          '@microsoft/msfs-wt21-shared': 'wt21_shared'
-      }
+          '@microsoft/msfs-wt21-shared': 'wt21_shared',
+      },
     },
     external: ['@microsoft/msfs-sdk', '@microsoft/msfs-wt21-pfd', '@microsoft/msfs-wt21-shared'],
-    plugins: [image(), css({ output: 'CJ4PfdPlugins.css' }), resolve()]
+    plugins: [image(), css({ output: 'CJ4PfdPlugins.css' }), resolve()],
   },
   {
     input: 'build/Plugins/MFD/index.js',
@@ -27,11 +27,11 @@ export default [
       globals: {
           '@microsoft/msfs-sdk': 'msfssdk',
           '@microsoft/msfs-wt21-mfd': 'wt21_mfd',
-          '@microsoft/msfs-wt21-shared': 'wt21_shared'
-      }
+          '@microsoft/msfs-wt21-shared': 'wt21_shared',
+      },
     },
     external: ['@microsoft/msfs-sdk', '@microsoft/msfs-wt21-mfd', '@microsoft/msfs-wt21-shared'],
-    plugins: [image(), css({ output: 'CJ4MfdPlugins.css' }), resolve()]
+    plugins: [image(), css({ output: 'CJ4MfdPlugins.css' }), resolve()],
   },
   {
     input: 'build/Plugins/FMC/index.js',
@@ -42,10 +42,10 @@ export default [
       globals: {
           '@microsoft/msfs-sdk': 'msfssdk',
           '@microsoft/msfs-wt21-fmc': 'wt21_fmc',
-          '@microsoft/msfs-wt21-shared': 'wt21_shared'
-      }
+          '@microsoft/msfs-wt21-shared': 'wt21_shared',
+      },
     },
     external: ['@microsoft/msfs-sdk', '@microsoft/msfs-wt21-fmc', '@microsoft/msfs-wt21-shared'],
-    plugins: [image(), css({ output: 'CJ4FmcPlugins.css' }), resolve()]
-  }
+    plugins: [image(), css({ output: 'CJ4FmcPlugins.css' }), resolve()],
+  },
 ];

@@ -19,17 +19,18 @@
 }
 
 .fma-box {
+  width: 54.4%;
+  height: 13.1%;
   top: 0;
   left: 22.8%;
-  width: 54.4%;
-  height: 13.1%
 }
 
 .aoa-box {
+  width: 7.9%;
+  height: 300px;
   top: 25%;
   left: 0;
-  width: 7.9%;
-  height: 65%;
+  overflow: hidden;
   box-shadow: inset -3px 0 5px -3px rgba(0, 0, 0, 0.4);
   border-right: 3px solid var(--wt21-colors-dark-gray);
   transform: rotateX(0);
@@ -53,10 +54,12 @@
 }
 
 .mach-box {
+  width: 10%;
+  height: 32px;
   position: absolute;
   top: 94%;
   left: 12%;
-  width: 10%;
+  overflow: hidden;
   text-shadow: var(--wt21-fonts-shadow-normal);
 }
 
@@ -68,28 +71,29 @@
 }
 
 .altimeter-box {
+  width: 16.5%;
+  height: 340px;
   top: 20%;
   right: 7.3%;
-  width: 16.5%;
-  height: 74%;
   box-shadow: 3px 0 5px -3px rgba(0, 0, 0, 0.4);
   border-right: 3px solid var(--wt21-colors-dark-gray);
 }
 
 .altimeter-baro-preset-box {
+  width: 15.7%;
+  height: 60px;
+  overflow: hidden;
   position: absolute;
   top: 94%;
   right: 8%;
-  width: 15.7%;
-  height: 12%;
   z-index: 1;
 }
 
 .vertical-speed-box {
+  width: 7.4%;
+  height: 396px;
   top: 14%;
   right: 0%;
-  width: 7.4%;
-  height: 86.1%;
 }
 
 .lateral-deviation-box {

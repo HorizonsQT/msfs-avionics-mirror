@@ -30,6 +30,7 @@ export * from './modules/MapAirspaceModule';
 export * from './modules/MapAutopilotPropsModule';
 export * from './modules/MapDataIntegrityModule';
 export * from './modules/MapIndexedRangeModule';
+export * from './modules/MapIndexedScaleFactorModule';
 export * from './modules/MapOwnAirplaneIconModule';
 export * from './modules/MapOwnAirplanePropsModule';
 export * from './modules/MapRangeModule';

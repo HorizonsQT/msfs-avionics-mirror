@@ -1,4 +1,7 @@
-import { BitFlags, FacilityLoader, FacilityWaypointCache, FlightPlan, LegDefinition, LegDefinitionFlags, LegType } from '@microsoft/msfs-sdk';
+import {
+  AirportFacilityDataFlags, BitFlags, FacilityLoader, FacilityWaypointCache, FlightPlan, LegDefinition,
+  LegDefinitionFlags, LegType
+} from '@microsoft/msfs-sdk';
 
 import { MapWaypointRenderer, MapWaypointRenderRole } from '../MapWaypointRenderer';
 import {
@@ -6,26 +9,43 @@ import {
 } from './MapFlightPlanWaypointRecord';
 
 /**
+ * Configuration options for {@link ProcMapTransitionWaypointRecordManager}.
+ */
+export type ProcMapTransitionWaypointRecordManagerOptions = {
+  /**
+   * Bitflags describing the requested data to be loaded in airport facilities retrieved by the manager. This controls
+   * what data are available from the airport waypoints that the manager registers with the waypoint renderer. Defaults
+   * to {@link AirportFacilityDataFlags.All}.
+   */
+  airportFacilityDataFlags?: number;
+};
+
+/**
  * Manages transition preview waypoint records.
  */
 export class ProcMapTransitionWaypointRecordManager {
   private readonly legWaypointRecords = new Map<LegDefinition, FlightPlanLegWaypointsRecord>();
 
+  private readonly airportFacilityDataFlags: number;
+
   private _isBusy = false;
 
   /**
-   * Constructor.
+   * Creates a new instance of ProcMapTransitionWaypointRecordManager.
    * @param facLoader This manager's facility loader.
    * @param facWaypointCache This manager's facility waypoint cache.
    * @param waypointRenderer This manager's waypoint renderer.
    * @param renderRole The role(s) under which waypoints should be registered.
+   * @param options Options with which to configure the manager.
    */
-  constructor(
+  public constructor(
     private readonly facLoader: FacilityLoader,
     private readonly facWaypointCache: FacilityWaypointCache,
     private readonly waypointRenderer: MapWaypointRenderer,
     private readonly renderRole: MapWaypointRenderRole,
+    options?: Readonly<ProcMapTransitionWaypointRecordManagerOptions>
   ) {
+    this.airportFacilityDataFlags = options?.airportFacilityDataFlags ?? AirportFacilityDataFlags.All;
   }
 
   /**
@@ -160,9 +180,24 @@ export class ProcMapTransitionWaypointRecordManager {
       case LegType.VI:
         return new FlightPathTerminatorWaypointsRecord(leg, this.waypointRenderer, this.facLoader, this.renderRole, this.renderRole);
       case LegType.PI:
-        return new ProcedureTurnLegWaypointsRecord(leg, this.waypointRenderer, this.facLoader, this.facWaypointCache, this.renderRole, this.renderRole);
+        return new ProcedureTurnLegWaypointsRecord(
+          leg,
+          this.waypointRenderer,
+          this.facLoader,
+          this.facWaypointCache,
+          this.renderRole,
+          this.renderRole,
+          this.airportFacilityDataFlags
+        );
       default:
-        return new FixIcaoWaypointsRecord(leg, this.waypointRenderer, this.facLoader, this.facWaypointCache, this.renderRole, this.renderRole);
+        return new FixIcaoWaypointsRecord(
+          leg, this.waypointRenderer,
+          this.facLoader,
+          this.facWaypointCache,
+          this.renderRole,
+          this.renderRole,
+          this.airportFacilityDataFlags
+        );
     }
   }
 }

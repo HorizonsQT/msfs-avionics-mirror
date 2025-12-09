@@ -4,21 +4,28 @@ import { APValues } from '../APValues';
 import { DirectorState, PlaneDirector } from './PlaneDirector';
 
 /**
- * A pitch level autopilot director.
+ * An autopilot director that generates flight director pitch commands to maintain zero vertical speed.
+ * 
+ * The director requires valid pitch and indicated vertical speed data to arm or activate.
  */
 export class APPitchLvlDirector implements PlaneDirector {
-
+  /** @inheritDoc */
   public state: DirectorState;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
   public onActivate?: () => void;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
   public onArm?: () => void;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
+  public onDeactivate?: () => void;
+
+  /** @inheritDoc */
   public drivePitch?: (pitch: number, adjustForAoa?: boolean, adjustForVerticalWind?: boolean) => void;
 
+  private readonly pitch = this.apValues.dataProvider.getItem('pitch');
+  private readonly indicatedVerticalSpeed = this.apValues.dataProvider.getItem('indicated_vertical_speed');
 
   /**
    * Creates an instance of the APPitchLvlDirector.
@@ -29,38 +36,56 @@ export class APPitchLvlDirector implements PlaneDirector {
   }
 
   /**
-   * Activates this director.
+   * Checks whether the data required for this director to function are valid.
+   * @returns Whether the data required for this director to function are valid.
    */
+  private isDataValid(): boolean {
+    return this.pitch.isValueValid() && this.indicatedVerticalSpeed.isValueValid();
+  }
+
+  /** @inheritDoc */
   public activate(): void {
+    if (this.state === DirectorState.Active || !this.isDataValid()) {
+      return;
+    }
+
     this.state = DirectorState.Active;
+
     if (this.onActivate !== undefined) {
       this.onActivate();
     }
   }
 
-  /**
-   * Arms this director.
-   * This director has no armed mode, so it activates immediately.
-   */
+  /** @inheritDoc */
   public arm(): void {
     if (this.state == DirectorState.Inactive) {
       this.activate();
     }
   }
 
-  /**
-   * Deactivates this director.
-   */
+  /** @inheritDoc */
   public deactivate(): void {
+    if (this.state === DirectorState.Inactive) {
+      return;
+    }
+
     this.state = DirectorState.Inactive;
+
+    if (this.onDeactivate !== undefined) {
+      this.onDeactivate();
+    }
   }
 
-  /**
-   * Updates this director.
-   */
+  /** @inheritDoc */
   public update(): void {
-    if (this.state === DirectorState.Active) {
+    if (this.state !== DirectorState.Active) {
+      return;
+    }
+
+    if (this.isDataValid()) {
       this.drivePitch && this.drivePitch(0, true, true);
+    } else {
+      this.deactivate();
     }
   }
 }

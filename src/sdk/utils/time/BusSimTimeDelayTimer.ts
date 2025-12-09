@@ -1,6 +1,8 @@
-import { EventBus, SimVarValueType } from '../../data';
-import { ClockEvents } from '../../instruments';
-import { BinaryHeap } from '../datastructures';
+import { EventBus } from '../../data/EventBus';
+import { SimVarValueType } from '../../data/SimVars';
+import { ClockEvents } from '../../instruments/Clock';
+import { BinaryHeap } from '../datastructures/BinaryHeap';
+import { TimeUtils } from './TimeUtils';
 
 /** A node in the sim timer queue. */
 interface SimTimerNode {
@@ -21,9 +23,7 @@ interface SimTimerNode {
  * A class that handles queue and dispatch of scheduled callbacks based on sim time.
  */
 class SimTimerQueue {
-  private static readonly SIM_TO_UNIX_TIME_OFFSET = 62135596800;
-
-  private currentTimestamp = (SimVar.GetSimVarValue('E:ABSOLUTE TIME', SimVarValueType.Seconds) - SimTimerQueue.SIM_TO_UNIX_TIME_OFFSET) * 1000;
+  private currentTimestamp = TimeUtils.simAbsoluteTimeToJSTimestamp(SimVar.GetSimVarValue('E:ABSOLUTE TIME', SimVarValueType.Seconds));
   private currentCallbackId = 0;
 
   private queue = new BinaryHeap<SimTimerNode>((a, b) => a.scheduledAt - b.scheduledAt);

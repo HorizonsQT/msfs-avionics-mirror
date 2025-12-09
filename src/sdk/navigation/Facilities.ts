@@ -845,7 +845,7 @@ export enum IntersectionType {
  * DME information with a VorFacility.
  */
 export interface FacilityDme {
-  /** The altitude of the DME transmitter. */
+  /** The altitude of the DME transmitter in metres. */
   readonly alt: number;
 
   /** Whether the DME station is colocated with the glideslope. */
@@ -859,6 +859,12 @@ export interface FacilityDme {
 
   /** The longitude of the DME transmitter. */
   readonly lon: number;
+
+  /**
+   * The bias of the DME facility, in meters. The measured (reported) distance is obtained by subtracting the bias from the true distance
+   * between the aircraft and the DME facility.
+   */
+  readonly dmeBias: number;
 }
 
 export enum TacanMode {
@@ -871,16 +877,16 @@ export enum TacanMode {
  * DME information with a VorFacility.
  */
 export interface FacilityTacan {
-  /** The altitude of the DME transmitter. */
+  /** The altitude of the TACAN transmitter in metres. */
   readonly alt: number;
 
   /** TACAN channel number. */
   readonly channel: number;
 
-  /** The latitude of the DME transmitter. */
+  /** The latitude of the TACAN transmitter. */
   readonly lat: number;
 
-  /** The longitude of the DME transmitter. */
+  /** The longitude of the TACAN transmitter. */
   readonly lon: number;
 
   /** The TACAN mode. */
@@ -923,6 +929,9 @@ export interface VorFacility extends Facility {
 
   /** Whether the facility is referenced to true north (implies {@link magvar} is zero also). */
   readonly trueReferenced: boolean;
+
+  /** The altitude of the transmitter in metres. */
+  readonly alt: number;
 }
 
 /**
@@ -943,6 +952,9 @@ export interface NdbFacility extends Facility {
 
   /** Whether a beat frequency oscillator is required to receive an audible ident signal. */
   readonly bfoRequired: boolean;
+
+  /** The altitude of the NDB transmitter in metres. */
+  readonly alt: number;
 }
 
 /**

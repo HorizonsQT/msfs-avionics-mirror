@@ -1,4 +1,4 @@
-import { BingComponent, NumberUnitReadOnly, UnitFamily, UnitType, Vec2Math } from '@microsoft/msfs-sdk';
+import { AirportFacilityDataFlags, BingComponent, NumberUnitReadOnly, UnitFamily, UnitType, Vec2Math } from '@microsoft/msfs-sdk';
 
 import { MapTerrainColorsDefinition, MapUtils, UnitsDistanceSettingMode, WaypointHighlightLineOptions } from '@microsoft/msfs-garminsdk';
 
@@ -8,6 +8,11 @@ import { GduFormat } from '../../CommonTypes';
  * A utility class for working with G3X Touch maps.
  */
 export class G3XMapUtils {
+  /** Bitflags describing the data required to be loaded in airport facilities used in maps. */
+  public static readonly AIRPORT_DATA_FLAGS
+    = AirportFacilityDataFlags.Frequencies
+    | AirportFacilityDataFlags.Runways;
+
   private static readonly MAP_RANGES = {
     [UnitsDistanceSettingMode.Nautical]: [
       ...[

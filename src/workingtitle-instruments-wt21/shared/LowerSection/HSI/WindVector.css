@@ -1,9 +1,10 @@
 .hsi-wind-container {
+  width: 8%;
+  height: 65px;
   position: absolute;
   top: .5%;
   left: 16%;
-  width: 8%;
-  height: 10%;
+  overflow: hidden;
 }
 
 .MFD .hsi-wind-container {
@@ -18,10 +19,10 @@
 }
 
 .hsi-wind-arrow {
+  height: 43px;
   position: absolute;
-  top: 35%;
+  top: 18px;
   left: 38%;
-  height: 80%;
 }
 
 .hsi-format-plan .hsi-wind-container {

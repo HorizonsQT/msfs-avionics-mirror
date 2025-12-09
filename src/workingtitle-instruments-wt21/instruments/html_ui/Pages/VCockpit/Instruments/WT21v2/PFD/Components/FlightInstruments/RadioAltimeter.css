@@ -1,7 +1,10 @@
 .radio-altimeter-box {
+  width: 68px;
+  height: 30px;
   position: absolute;
-  bottom: 4.95%;
+  bottom: 6.7%;
   right: 46.2%;
+  overflow: hidden;
   text-align: right;
   font-size: 3.1vh;
   color: var(--wt21-colors-green);

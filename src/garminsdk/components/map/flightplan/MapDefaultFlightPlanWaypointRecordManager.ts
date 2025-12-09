@@ -1,4 +1,7 @@
-import { BitFlags, FacilityLoader, FacilityWaypointCache, FlightPlan, LegDefinition, LegDefinitionFlags, LegType } from '@microsoft/msfs-sdk';
+import {
+  AirportFacilityDataFlags, BitFlags, FacilityLoader, FacilityWaypointCache, FlightPlan, LegDefinition,
+  LegDefinitionFlags, LegType
+} from '@microsoft/msfs-sdk';
 
 import { MapWaypointRenderer, MapWaypointRenderRole } from '../MapWaypointRenderer';
 import {
@@ -7,9 +10,23 @@ import {
 import { MapFlightPlanWaypointRecordManager } from './MapFlightPlanWaypointRecordManager';
 
 /**
+ * Configuration options for {@link MapDefaultFlightPlanWaypointRecordManager}.
+ */
+export type MapDefaultFlightPlanWaypointRecordManagerOptions = {
+  /**
+   * Bitflags describing the requested data to be loaded in airport facilities retrieved by the manager. This controls
+   * what data are available from the airport waypoints that the manager registers with the waypoint renderer. Defaults
+   * to {@link AirportFacilityDataFlags.All}.
+   */
+  airportFacilityDataFlags?: number;
+};
+
+/**
  * Manages flight plan waypoint records.
  */
 export class MapDefaultFlightPlanWaypointRecordManager implements MapFlightPlanWaypointRecordManager {
+  private readonly airportFacilityDataFlags: number;
+
   private readonly legWaypointRecords = new Map<LegDefinition, FlightPlanLegWaypointsRecord>();
 
   private _isBusy = false;
@@ -23,14 +40,17 @@ export class MapDefaultFlightPlanWaypointRecordManager implements MapFlightPlanW
    * leg.
    * @param activeRenderRole The role(s) under which waypoints should be registered when they are part of an active
    * leg.
+   * @param options Options with which to configure the manager.
    */
   public constructor(
     private readonly facLoader: FacilityLoader,
     private readonly facWaypointCache: FacilityWaypointCache,
     private readonly waypointRenderer: MapWaypointRenderer,
     private readonly inactiveRenderRole: MapWaypointRenderRole,
-    private readonly activeRenderRole: MapWaypointRenderRole
+    private readonly activeRenderRole: MapWaypointRenderRole,
+    options?: Readonly<MapDefaultFlightPlanWaypointRecordManagerOptions>
   ) {
+    this.airportFacilityDataFlags = options?.airportFacilityDataFlags ?? AirportFacilityDataFlags.All;
   }
 
   /** @inheritDoc */
@@ -133,9 +153,25 @@ export class MapDefaultFlightPlanWaypointRecordManager implements MapFlightPlanW
       case LegType.VI:
         return new FlightPathTerminatorWaypointsRecord(leg, this.waypointRenderer, this.facLoader, this.inactiveRenderRole, this.activeRenderRole);
       case LegType.PI:
-        return new ProcedureTurnLegWaypointsRecord(leg, this.waypointRenderer, this.facLoader, this.facWaypointCache, this.inactiveRenderRole, this.activeRenderRole);
+        return new ProcedureTurnLegWaypointsRecord(
+          leg,
+          this.waypointRenderer,
+          this.facLoader,
+          this.facWaypointCache,
+          this.inactiveRenderRole,
+          this.activeRenderRole,
+          this.airportFacilityDataFlags
+        );
       default:
-        return new FixIcaoWaypointsRecord(leg, this.waypointRenderer, this.facLoader, this.facWaypointCache, this.inactiveRenderRole, this.activeRenderRole);
+        return new FixIcaoWaypointsRecord(
+          leg,
+          this.waypointRenderer,
+          this.facLoader,
+          this.facWaypointCache,
+          this.inactiveRenderRole,
+          this.activeRenderRole,
+          this.airportFacilityDataFlags
+        );
     }
   }
 }

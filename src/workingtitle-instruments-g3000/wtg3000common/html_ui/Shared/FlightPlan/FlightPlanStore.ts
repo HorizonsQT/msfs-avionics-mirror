@@ -1,6 +1,3 @@
-/* eslint-disable max-len */
-/* eslint-disable @typescript-eslint/ban-ts-comment */
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
 import {
   APEvents, ActiveLegType, AdcEvents, AirportFacility, AltitudeRestrictionType, ApproachProcedure, ApproachTransition,
   BasicNavAngleSubject, BasicNavAngleUnit, ClockEvents, ConsumerSubject, DirectToData, EngineEvents, EnrouteTransition,
@@ -9,9 +6,9 @@ import {
   FlightPlanProcedureDetailsEvent, FlightPlanSegment, FlightPlanSegmentEvent, FlightPlanSegmentType,
   FlightPlanUserDataEvent, FlightPlanUtils, GNSSEvents, ICAO, LNavDataEvents, LegDefinition, LegEventType, MagVar,
   MappedSubject, NavAngleUnit, NavAngleUnitFamily, NumberUnitInterface, NumberUnitSubject, OneWayRunway,
-  OriginDestChangeType, Procedure, ReadonlySubEvent, RunwayTransition, RunwayUtils, SegmentEventType, SimVarValueType,
-  SimpleUnit, SpeedRestrictionType, StringUtils, SubEvent, Subject, Subscribable, UnitFamily, UnitType, VNavLeg,
-  VNavPathCalculator, VNavUtils, VerticalFlightPhase,
+  OriginDestChangeType, Procedure, ProcedureDetails, ReadonlySubEvent, RunwayTransition, RunwayUtils, SegmentEventType,
+  SimVarValueType, SimpleUnit, SpeedRestrictionType, StringUtils, SubEvent, Subject, Subscribable, UnitFamily,
+  UnitType, VNavLeg, VNavPathCalculator, VNavUtils, VerticalFlightPhase,
 } from '@microsoft/msfs-sdk';
 
 import { DirectToState, Fms, FmsUtils, UnitsUserSettings } from '@microsoft/msfs-garminsdk';
@@ -324,8 +321,8 @@ export class FlightPlanStore {
     this.fms.flightPlanner.onEvent('fplSegmentChange').handle(this.handleSegmentChange);
     this.fms.flightPlanner.onEvent('fplLegChange').handle(this.handleLegChange);
     this.fms.flightPlanner.onEvent('fplActiveLegChange').handle(this.handleActiveLegChange);
-    this.fms.flightPlanner.onEvent('fplOriginDestChanged').handle(this.handleOriginDestChanged);
-    this.fms.flightPlanner.onEvent('fplProcDetailsChanged').handle(this.handleProcDetailsChanged);
+    this.fms.flightPlanner.onEvent('fplOriginDestChanged').handle(this.handleOriginDestChanged.bind(this));
+    this.fms.flightPlanner.onEvent('fplProcDetailsChanged').handle(this.handleProcDetailsChanged.bind(this));
     this.fms.flightPlanner.onEvent('fplLoaded').handle(e => {
       if (e.planIndex === this.planIndex) {
         this.handleFlightPlanLoaded();
@@ -496,39 +493,86 @@ export class FlightPlanStore {
     }
   };
 
-  private readonly handleOriginDestChanged = async (event: FlightPlanOriginDestEvent): Promise<void> => {
-    if (event.planIndex !== this.planIndex) { return; }
+  private originChangeOpId = 0;
+  private destChangeOpId = 0;
+
+  /**
+   * Handles when the flight plan origin or destination changes.
+   * @param event The event describing the change.
+   */
+  private async handleOriginDestChanged(event: FlightPlanOriginDestEvent): Promise<void> {
+    if (event.planIndex !== this.planIndex) {
+      return;
+    }
 
     switch (event.type) {
       case OriginDestChangeType.OriginAdded: {
-        this._originIdent.set(ICAO.getIdent(event.airport!));
-        const fac = await this.fms.facLoader.getFacility(FacilityType.Airport, event.airport!);
-        this._originFacility.set(fac);
+        const opId = ++this.originChangeOpId;
+
+        const fac = await this.fms.facLoader.tryGetFacility(FacilityType.Airport, event.airportIcao!);
+
+        if (opId !== this.originChangeOpId) {
+          return;
+        }
+
+        if (fac) {
+          this._originIdent.set(fac.icaoStruct.ident);
+          this._originFacility.set(fac);
+          break;
+        } else {
+          this._originIdent.set(undefined);
+          this._originFacility.set(undefined);
+        }
+
         break;
       }
       case OriginDestChangeType.OriginRemoved:
+        ++this.originChangeOpId;
         this._originIdent.set(undefined);
         this._originFacility.set(undefined);
         break;
       case OriginDestChangeType.DestinationAdded: {
-        this._destinationIdent.set(ICAO.getIdent(event.airport!));
-        const fac = await this.fms.facLoader.getFacility(FacilityType.Airport, event.airport!);
-        this._destinationFacility.set(fac);
+        const opId = ++this.destChangeOpId;
+
+        const fac = await this.fms.facLoader.tryGetFacility(FacilityType.Airport, event.airportIcao!);
+
+        if (opId !== this.destChangeOpId) {
+          return;
+        }
+
+        if (fac) {
+          this._destinationIdent.set(fac.icaoStruct.ident);
+          this._destinationFacility.set(fac);
+          break;
+        } else {
+          this._destinationIdent.set(undefined);
+          this._destinationFacility.set(undefined);
+        }
+
         break;
       }
       case OriginDestChangeType.DestinationRemoved:
+        ++this.destChangeOpId;
         this._destinationIdent.set(undefined);
         this._destinationFacility.set(undefined);
         break;
     }
-  };
+  }
 
-  private readonly handleProcDetailsChanged = (event?: FlightPlanProcedureDetailsEvent): void => {
+  /**
+   * Handles when the flight plan procedure details change.
+   * @param event The event describing the change in procedure details. If not defined, then the last received event
+   * describing a change in procedure details will be used.
+   */
+  private handleProcDetailsChanged(event = this.lastProcDetailsEvent): void {
     if (!event) {
-      event = this.lastProcDetailsEvent;
+      return;
     }
-    if (!event) { return; }
-    if (event.planIndex !== this.planIndex) { return; }
+
+    if (event.planIndex !== this.planIndex) {
+      return;
+    }
+
     this.lastProcDetailsEvent = event;
 
     const plan = this.fms.flightPlanner.getFlightPlan(event.planIndex);
@@ -545,32 +589,12 @@ export class FlightPlanStore {
 
     this._destinationRunway.set(event.details.destinationRunway);
 
-    this._arrivalIndex.set(event.details.arrivalIndex);
-    this._arrivalTransitionIndex.set(event.details.arrivalTransitionIndex);
-    this._arrivalRunwayTransitionIndex.set(event.details.arrivalRunwayTransitionIndex);
-    this._arrivalRunway.set(event.details.arrivalRunway);
-    this._arrivalFacilityIcao.set(event.details.arrivalFacilityIcao);
-
-    if (event.details.arrivalFacilityIcao) {
-      this.fms.facLoader.getFacility(FacilityType.Airport, event.details.arrivalFacilityIcao)
-        .then(arrivalFacility => {
-          this._arrivalFacility.set(arrivalFacility);
-          const arrivalProcedure = arrivalFacility?.arrivals[this._arrivalIndex.get()] as Procedure | undefined;
-          this._arrivalProcedure.set(arrivalProcedure);
-          this._arrivalTransition.set(arrivalProcedure?.enRouteTransitions[this._arrivalTransitionIndex.get()]);
-          this._arrivalRunwayTransition.set(arrivalProcedure?.runwayTransitions[this._arrivalRunwayTransitionIndex.get()]);
-        });
-    } else {
-      this._arrivalFacility.set(undefined);
-      this._arrivalProcedure.set(undefined);
-      this._arrivalTransition.set(undefined);
-      this._arrivalRunwayTransition.set(undefined);
-    }
+    this.updateArrivalProcedureData(event.details);
 
     const destinationFac = this.destinationFacility.get();
 
     let approachProcedure = undefined;
-    if (destinationFac && destinationFac.icao === event.details.approachFacilityIcao) {
+    if (destinationFac && event.details.approachFacilityIcaoStruct && ICAO.valueEquals(destinationFac.icaoStruct, event.details.approachFacilityIcaoStruct)) {
       if (event.details.approachIndex >= 0) {
         approachProcedure = destinationFac.approaches[event.details.approachIndex];
       } else if (event.details.destinationRunway) {
@@ -583,7 +607,46 @@ export class FlightPlanStore {
     this._approachTransition.set(approachProcedure?.transitions[this._approachTransitionIndex.get()]);
     this._approachTransitionIndex.set(event.details.approachTransitionIndex);
     this._isApproachLoaded.set(FmsUtils.isApproachLoaded(plan));
-  };
+  }
+
+  private updateArrivalProcedureDataOpId = 0;
+
+  /**
+   * Updates this store's arrival procedure data from a procedure details object.
+   * @param procedureDetails The procedure details object from which to update this store's data.
+   */
+  private async updateArrivalProcedureData(procedureDetails: Readonly<ProcedureDetails>): Promise<void> {
+    const opId = ++this.updateArrivalProcedureDataOpId;
+
+    this._arrivalIndex.set(procedureDetails.arrivalIndex);
+    this._arrivalTransitionIndex.set(procedureDetails.arrivalTransitionIndex);
+    this._arrivalRunwayTransitionIndex.set(procedureDetails.arrivalRunwayTransitionIndex);
+    this._arrivalRunway.set(procedureDetails.arrivalRunway);
+    this._arrivalFacilityIcao.set(procedureDetails.arrivalFacilityIcao);
+
+    let arrivalFacility: AirportFacility | null = null;
+
+    if (procedureDetails.arrivalFacilityIcaoStruct && ICAO.isValueFacility(procedureDetails.arrivalFacilityIcaoStruct, FacilityType.Airport)) {
+      arrivalFacility = await this.fms.facLoader.tryGetFacility(FacilityType.Airport, procedureDetails.arrivalFacilityIcaoStruct);
+
+      if (opId !== this.updateArrivalProcedureDataOpId) {
+        return;
+      }
+    }
+
+    if (arrivalFacility) {
+      this._arrivalFacility.set(arrivalFacility);
+      const arrivalProcedure = arrivalFacility.arrivals[procedureDetails.arrivalIndex] as Procedure | undefined;
+      this._arrivalProcedure.set(arrivalProcedure);
+      this._arrivalTransition.set(arrivalProcedure?.enRouteTransitions[procedureDetails.arrivalTransitionIndex]);
+      this._arrivalRunwayTransition.set(arrivalProcedure?.runwayTransitions[procedureDetails.arrivalRunwayTransitionIndex]);
+    } else {
+      this._arrivalFacility.set(undefined);
+      this._arrivalProcedure.set(undefined);
+      this._arrivalTransition.set(undefined);
+      this._arrivalRunwayTransition.set(undefined);
+    }
+  }
 
   /**
    * Handles the segment event.

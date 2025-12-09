@@ -83,7 +83,7 @@ export class TakeoffPerformanceManager {
       // FIXME hacky! need to change some things to avoid this, as right now this will run before the perf plan proxy
       // has nay active perf plan associated with it
       setTimeout(() => {
-        adc.on('altimeter_baro_setting_inhg_1').handle((value) => {
+        adc.on('altimeter_baro_setting_inhg_1').withPrecision(2).handle((value) => {
           this.performancePlan.takeoffAutoQnh.set(value);
         });
       }, 5_000);

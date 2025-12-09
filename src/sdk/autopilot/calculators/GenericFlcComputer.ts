@@ -1,31 +1,42 @@
-/// <reference types="@microsoft/msfs-types/js/simvar" preserve="true" />
-
-import { SimVarValueType } from '../../data/SimVars';
+import { RegisteredSimVarUtils, SimVarValueType } from '../../data/SimVars';
 import { ExpSmoother } from '../../math/ExpSmoother';
 import { MathUtils } from '../../math/MathUtils';
 import { UnitType } from '../../math/NumberUnit';
 import { Subject } from '../../sub/Subject';
 import { Subscribable } from '../../sub/Subscribable';
 import { PidController } from '../../utils/controllers/PidController';
+import { APDataProvider } from '../APDataProvider';
 
 /**
- * PID Settings for the FLC Computer.
+ * Configuration options for {@link GenericFlcComputer}.
  */
 export interface FlcComputerOptions {
   /** kP The proportional gain of the controller. */
   kP: number;
+
   /** kI The integral gain of the controller. */
   kI: number;
+
   /** kD The differential gain of the controller. */
   kD: number;
+
   /** maxOut The maximum output of the controller. */
   maxOut: number;
+
   /** minOut The minumum output of the controller. */
   minOut: number;
+
   /** maxI The maximum integral gain (optional). */
   maxI?: number;
+
   /** minI The minimum integral gain (optional). */
   minI?: number;
+
+  /**
+   * A provider of data for the computer to use. If not defined, then the computer will source required data from
+   * standard SimVars.
+   */
+  apDataProvider?: APDataProvider;
 }
 
 /**
@@ -33,12 +44,21 @@ export interface FlcComputerOptions {
  */
 export class GenericFlcComputer {
 
+  protected readonly apDataProvider?: APDataProvider;
+  protected readonly getIas: () => number | null;
+  protected readonly getPitch: () => number | null;
+  protected readonly getAoa: () => number | null;
+  protected readonly getAcceleration: () => number | null;
+
   private _isActive = false;
   protected _targetIas = 0;
   protected _climbMode = false;
 
   private readonly _pitchTarget = Subject.create<number | null>(null);
-  /** The current pitch target calculated by this computer, in degrees. Positive values indicate downward pitch. */
+  /**
+   * The current pitch target calculated by this computer, in degrees. Positive values indicate downward pitch. If this
+   * computer is not active or if a pitch target could not be calculated, then this value is null.
+   */
   public readonly pitchTarget: Subscribable<number | null> = this._pitchTarget;
 
   protected _lastTime = 0;
@@ -71,20 +91,77 @@ export class GenericFlcComputer {
 
   /**
    * Creates an instance of GenericFlcComputer.
-   * @param pidControllerOptions The PID controller settings for this computer.
+   * @param options Options with which to configure the computer.
    */
-  constructor(pidControllerOptions: FlcComputerOptions) {
+  public constructor(options: Readonly<FlcComputerOptions>) {
+    this.apDataProvider = options.apDataProvider;
 
-    // this.pitchController = new PidController(2, 0, 0, 15, -15);
+    ({
+      getIas: this.getIas,
+      getPitch: this.getPitch,
+      getAoa: this.getAoa,
+      getAcceleration: this.getAcceleration,
+    } = this.createDataGetters());
+
     this.pitchController = new PidController(
-      pidControllerOptions.kP,
-      pidControllerOptions.kI,
-      pidControllerOptions.kD,
-      pidControllerOptions.maxOut,
-      pidControllerOptions.minOut,
-      pidControllerOptions.maxI,
-      pidControllerOptions.minI
+      options.kP,
+      options.kI,
+      options.kD,
+      options.maxOut,
+      options.minOut,
+      options.maxI,
+      options.minI
     );
+  }
+
+  /**
+   * Creates this computer's data getter functions.
+   * @returns Data getter functions for this computer.
+   */
+  private createDataGetters(): {
+    /** A function that returns the airplane's current indicated airspeed, in knots. */
+    getIas: () => number | null;
+
+    /**
+     * A function that returns the airplane's current pitch, in degrees. Positive values indicate upward pitch.
+     * Negative values indicate downward pitch.
+     */
+    getPitch: () => number | null;
+
+    /** A function that returns the airplane's current angle of attack. */
+    getAoa: () => number | null;
+
+    /**
+     * A function that returns the airplane's current acceleration along its longitudinal axis, in meters per second
+     * squared.
+     */
+    getAcceleration: () => number | null;
+  } {
+    if (this.apDataProvider) {
+      const ias = this.apDataProvider.getItem('ias');
+      const pitch = this.apDataProvider.getItem('pitch');
+      const aoa = this.apDataProvider.getItem('aoa');
+      const accel = this.apDataProvider.getItem('inertial_acceleration_body_z');
+
+      return {
+        getIas: () => ias.isValueValid() ? ias.getValue() : null,
+        getPitch: () => pitch.isValueValid() ? -pitch.getValue() : null,
+        getAoa: () => aoa.getActualValue(),
+        getAcceleration: () => accel.getActualValue(),
+      };
+    } else {
+      const ias = RegisteredSimVarUtils.create('AIRSPEED INDICATED', SimVarValueType.Knots);
+      const pitch = RegisteredSimVarUtils.create('PLANE PITCH DEGREES', SimVarValueType.Degree);
+      const aoa = RegisteredSimVarUtils.create('INCIDENCE ALPHA', SimVarValueType.Degree);
+      const accel = RegisteredSimVarUtils.create('ACCELERATION BODY Z', SimVarValueType.MetersPerSecondSquared);
+
+      return {
+        getIas: () => ias.get(),
+        getPitch: () => -pitch.get(),
+        getAoa: () => aoa.get(),
+        getAcceleration: () => accel.get(),
+      };
+    }
   }
 
   /**
@@ -138,8 +215,13 @@ export class GenericFlcComputer {
    */
   public update(): void {
     if (this._isActive) {
-      // negate the output value to conform with sim standard.
-      this._pitchTarget.set(-this.getDesiredPitch());
+      const desiredPitch = this.getDesiredPitch();
+      if (isFinite(desiredPitch)) {
+        // negate the output value to conform with sim standard.
+        this._pitchTarget.set(-this.getDesiredPitch());
+      } else {
+        this._pitchTarget.set(null);
+      }
     } else {
       this._pitchTarget.set(null);
     }
@@ -156,28 +238,37 @@ export class GenericFlcComputer {
       dt = 0;
     }
 
-    const currentIas = SimVar.GetSimVarValue('AIRSPEED INDICATED:1', SimVarValueType.Knots);
-    // remember PLANE PITCH DEGREES returns a negative value for up
-    const currentPitch = -SimVar.GetSimVarValue('PLANE PITCH DEGREES', SimVarValueType.Degree);
+    const currentIas = this.getIas();
+    const currentPitch = this.getPitch();
+    const currentAoa = this.getAoa();
+    const currentAccel = this.getAcceleration();
+
+    if (
+      currentIas === null
+      || currentPitch === null
+      || currentAoa === null
+      || currentAccel === null
+    ) {
+      return NaN;
+    }
 
     //step 1 - we want to find the IAS error from target and set a target acceleration
     const iasError = currentIas - this._targetIas;
     const targetAcceleration = MathUtils.clamp(iasError / 5, -2, 2) * -1;
 
     //step 2 - we want to find the current acceleration, feed that to the pid to manage to the target acceleration
-    const acceleration = UnitType.FOOT.convertTo(SimVar.GetSimVarValue('ACCELERATION BODY Z', 'feet per second squared'), UnitType.NMILE) * 3600;
+    const acceleration = UnitType.METER.convertTo(currentAccel, UnitType.NMILE) * 3600;
     const accelerationError = acceleration - targetAcceleration;
     const pitchCorrection = this.pitchController.getOutput(dt, accelerationError);
 
-    const aoa = SimVar.GetSimVarValue('INCIDENCE ALPHA', SimVarValueType.Degree);
     this._lastTime = time;
-    let targetPitch = isNaN(pitchCorrection) ? currentPitch - aoa : (currentPitch - aoa) + pitchCorrection;
+    let targetPitch = isNaN(pitchCorrection) ? currentPitch - currentAoa : (currentPitch - currentAoa) + pitchCorrection;
     targetPitch = this.filter.next(targetPitch, dt);
 
     if (this._climbMode) {
-      return Math.max(targetPitch + aoa, aoa);
+      return Math.max(targetPitch + currentAoa, currentAoa);
     } else {
-      return Math.min(targetPitch + aoa, aoa);
+      return Math.min(targetPitch + currentAoa, currentAoa);
     }
   }
 }

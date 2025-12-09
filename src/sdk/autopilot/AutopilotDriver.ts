@@ -1,93 +1,133 @@
-import { ConsumerValue } from '../data';
-import { ConsumerSubject } from '../data/ConsumerSubject';
 import { EventBus, Publisher } from '../data/EventBus';
-import { SimVarValueType } from '../data/SimVars';
-import { AdcEvents } from '../instruments/Adc';
-import { MathUtils } from '../math';
+import { RegisteredSimVarUtils, SimVarValueType } from '../data/SimVars';
 import { ExpSmoother } from '../math/ExpSmoother';
+import { MathUtils } from '../math/MathUtils';
+import { UnitType } from '../math/NumberUnit';
 import { Subscribable } from '../sub/Subscribable';
-import { LinearServo } from '../utils/controllers/LinearServo';
+import { APDataItem } from './APDataProvider';
 import { APValues } from './APValues';
 import { FlightDirectorEvents } from './data/FlightDirectorEvents';
 import { VNavUtils } from './vnav/VNavUtils';
 
 /**
- * Options for {@link AutopilotDriver}.
+ * An output to which an {@link AutopilotDriver} sends pitch and bank reference commands.
+ */
+export interface AutopilotDriverOutput {
+  /**
+   * Sets the commanded bank angle, in degrees.
+   * @param bank The commanded bank angle to set, in degrees. Positive values indicate left bank.
+   */
+  setBank(bank: number): void;
+
+  /**
+   * Drives the commanded bank angle toward a desired value.
+   * @param bank The desired bank angle, in degrees. Positive values indicate left bank.
+   * @param rate The rate at which to drive the commanded bank angle, in degrees per second.
+   */
+  driveBank(bank: number, rate: number): void;
+
+  /**
+   * Sets the commanded pitch angle, in degrees.
+   * @param pitch The commanded pitch angle to set, in degrees. Positive values indicate downward pitch.
+   */
+  setPitch(pitch: number): void;
+
+  /**
+   * Drives the commanded pitch angle toward a desired value.
+   * @param pitch The desired pitch angle, in degrees. Positive values indicate downward pitch.
+   * @param rate The rate at which to drive the commanded pitch angle, in degrees per second.
+   */
+  drivePitch(pitch: number, rate: number): void;
+
+  /**
+   * A method that is called every time this output's parent autopilot is updated.
+   */
+  onUpdate(): void;
+}
+
+/**
+ * Configuration options for {@link AutopilotDriver}.
  */
 export type AutopilotDriverOptions = {
-  /** Whether to set internal flight director values (not required for the default sim FD).  */
+  /** The default rate used to drive changes in commanded pitch, in degrees per second. Defaults to `5`. */
+  pitchServoRate?: number;
+
+  /** The default rate used to drive changes in commanded bank, in degrees per second. Defaults to `10`. */
+  bankServoRate?: number;
+
+  /**
+   * A function that creates an output to which the autopilot driver will send pitch and bank reference commands.
+   * @param apValues Autopilot values from the driver's parent autopilot.
+   * @returns An output to which the autopilot driver will send pitch and bank reference commands.
+   */
+  createOutput?: (apValues: APValues) => AutopilotDriverOutput;
+
+  // NOTE: the following options apply to the default autopilot driver output implementation that is only used when
+  // createOutput is not defined.
+
+  /**
+   * Whether to publish the pitch and bank reference values set by the driver to the event bus using the
+   * `fd_target_pitch` and `fd_target_bank` topics defined by {@link FlightDirectorEvents}. Ignored if `createOutput`
+   * is defined. Defaults to `false`.
+   */
   setInternalFlightDirector?: boolean;
 
-  /** Whether to provide rudder auto-coordination while the autopilot is engaged. Defaults to `false`. */
+  /**
+   * The radio altitude below which all commanded bank angles are forced to zero degrees. If not defined, then
+   * commanded bank angles will not be forced to zero degrees based on radio altitude. Only applicable if
+   * `createOutput` is not defined.
+   */
+  zeroRollHeight?: number;
+
+  /**
+   * Whether to provide turn auto-coordination while the autopilot is engaged. Only applicable if `createOutput` is not
+   * defined. Auto-coordination works by commanding a rudder deflection in the same direction as the commanded bank
+   * angle (e.g. a commanded left bank will result in a commanded left rudder). The commanded rudder deflection is
+   * proportional to the commanded bank angle.
+   */
   autoCoordinationEnabled?: boolean;
 
-  /** The airplane's maximum rudder deflection, in degrees. Defaults to `25`. */
+  /**
+   * The airplane's maximum rudder deflection, in degrees. Only applicable if `createOutput` is not defined. Ignored if
+   * `autoCoordinationEnabled` is false. Defaults to `25`.
+   */
   maxRudderDeflection?: number;
 
   /**
    * The factor to multiply with the commanded bank angle to calculate the rudder deflection commanded by rudder
-   * auto-coordination. Defaults to `0.3`.
+   * auto-coordination. Only applicable if `createOutput` is not defined. Ignored if `autoCoordinationEnabled` is
+   * false. Defaults to `0.3`.
    */
   rudderBankFactor?: number;
 
-  /** The rate used to drive the rudder auto-coordination servo, in degrees per second. Defaults to `1`. */
+  /**
+   * The rate used to drive the rudder auto-coordination servo, in degrees per second. Only applicable if
+   * `createOutput` is not defined. Ignored if `autoCoordinationEnabled` is false. Defaults to `1`.
+   */
   rudderServoRate?: number;
-
-  /** The default rate used to drive the pitch servo, in degrees per second. Defaults to `5`. */
-  pitchServoRate?: number;
-
-  /** The default rate used to drive the bank servo, in degrees per second. Defaults to `10`. */
-  bankServoRate?: number;
-
-  /** The RA height below which zero roll is forced, defaults to none. */
-  zeroRollHeight?: number;
 };
 
-
 /**
- * An autopilot driver to set pitch and bank values in the sim AP.
- *
- * This driver follows the sim's convention for negative and positive values:
- * AUTOPILOT BANK HOLD REF/PLANE BANK DEGREES: negative = right, positive = left
- * AUTOPILOT PITCH HOLD REF/PLANE PITCH DEGREES: negative = up, positive = down
- * INCIDENCE ALPHA: negative = down, positive = up
- * AMBIENT WIND Y: negative = down, positive = up
+ * Processes pitch and bank commands for an autopilot.
  */
 export class AutopilotDriver {
-  private static readonly PITCH_SERVO_RATE = 5; // degrees per second
-  private static readonly BANK_SERVO_RATE = 10; // degrees per second
-  private static readonly RUDDER_SERVO_RATE = 1; // degrees per second
+  private static readonly DEFAULT_PITCH_SERVO_RATE = 5; // degrees per second
+  private static readonly DEFAULT_BANK_SERVO_RATE = 10; // degrees per second
 
   private static readonly VERTICAL_WIND_SMOOTHING_TAU = 500 / Math.LN2;
 
+  private readonly output: AutopilotDriverOutput;
+
   private readonly pitchServoRate: number;
-  private readonly pitchServo: LinearServo;
-  private _lastPitchSetTime?: number;
-  private currentPitchRef = 0;
-
   private readonly bankServoRate: number;
-  private readonly bankServo: LinearServo;
-  private _lastBankSetTime?: number;
-  private currentBankRef = 0;
 
-  private readonly rudderBankFactor: number = 0.3;
-  private readonly maxRudderDeflection: number = 25;
-  private autoCoordinationEnabled = false;
-
-  private zeroRollHeight?: number;
-
-  private readonly rudderServoRate: number;
-  private readonly rudderServo: LinearServo;
-  private rudderSet = 0;
+  private readonly verticalWind = RegisteredSimVarUtils.create('AMBIENT WIND Y', SimVarValueType.FPM);
+  private readonly tas = this.apValues.dataProvider.getItem('tas');
+  private readonly aoa = this.apValues.dataProvider.getItem('aoa');
 
   private readonly verticalWindSmoother = new ExpSmoother(AutopilotDriver.VERTICAL_WIND_SMOOTHING_TAU);
   private verticalWindAverageValue = 0;
-  private _lastVerticalWindTime?: number;
-
-  private readonly fdPublisher?: Publisher<FlightDirectorEvents>;
-
-  private readonly onGround = ConsumerSubject.create(null, true);
-  private readonly raHeight = ConsumerValue.create<number | null>(null, null);
+  private lastVerticalWindTime?: number;
 
   /**
    * Creates an instance of this Autopilot Driver.
@@ -96,143 +136,67 @@ export class AutopilotDriver {
    * @param apMasterOn Whether the AP is engaged.
    * @param options Options for this driver.
    */
-  constructor(
+  public constructor(
     bus: EventBus,
     private readonly apValues: APValues,
-    private readonly apMasterOn: Subscribable<boolean>,
+    apMasterOn: Subscribable<boolean>,
     options?: Readonly<AutopilotDriverOptions>
   ) {
-    if (options?.setInternalFlightDirector) {
-      this.fdPublisher = bus.getPublisher<FlightDirectorEvents>();
-    }
+    this.output = options?.createOutput?.(apValues) ?? new DefaultOutput(bus, apValues, options);
 
-    this.pitchServoRate = options?.pitchServoRate ?? AutopilotDriver.PITCH_SERVO_RATE;
-    this.pitchServo = new LinearServo(this.pitchServoRate);
-    this.currentPitchRef = SimVar.GetSimVarValue('AUTOPILOT PITCH HOLD REF', SimVarValueType.Degree);
-
-    this.bankServoRate = options?.bankServoRate ?? AutopilotDriver.BANK_SERVO_RATE;
-    this.bankServo = new LinearServo(this.bankServoRate);
-    this.currentBankRef = SimVar.GetSimVarValue('AUTOPILOT BANK HOLD REF', SimVarValueType.Degree);
-
-    if (options?.autoCoordinationEnabled) {
-      if (options.rudderBankFactor !== undefined) {
-        this.rudderBankFactor = options.rudderBankFactor;
-      }
-
-      if (options.maxRudderDeflection !== undefined) {
-        this.maxRudderDeflection = options.maxRudderDeflection;
-      }
-
-      this.autoCoordinationEnabled = true;
-      this.onGround.setConsumer(bus.getSubscriber<AdcEvents>().on('on_ground'));
-      this.raHeight.setConsumer(bus.getSubscriber<AdcEvents>().on('radio_alt'));
-      this.apMasterOn.sub(isOn => {
-        if (!isOn) {
-          this.resetRudder();
-        }
-      });
-      this.onGround.sub(onGround => {
-        if (onGround) {
-          this.resetRudder();
-        }
-      });
-    }
-
-    if (options?.zeroRollHeight) {
-      this.zeroRollHeight = options.zeroRollHeight;
-    }
-
-    this.rudderServoRate = (options?.rudderServoRate ?? AutopilotDriver.RUDDER_SERVO_RATE) / this.maxRudderDeflection * 16384;
-    this.rudderServo = new LinearServo(this.rudderServoRate);
-
-    this.apValues.simRate.sub(this.onSimRateChanged.bind(this), true);
+    this.pitchServoRate = options?.pitchServoRate ?? AutopilotDriver.DEFAULT_PITCH_SERVO_RATE;
+    this.bankServoRate = options?.bankServoRate ?? AutopilotDriver.DEFAULT_BANK_SERVO_RATE;
   }
 
   /**
-   * Responds to when the simulation rate changes.
-   * @param simRate The new simulation rate.
-   */
-  private onSimRateChanged(simRate: number): void {
-    this.pitchServo.rate = this.pitchServoRate * simRate;
-    this.bankServo.rate = this.bankServoRate * simRate;
-    this.rudderServo.rate = this.rudderServoRate * simRate;
-  }
-
-  /**
-   * Update loop to keep Ambient Wind Y constantly updated.
+   * Updates this driver.
    */
   public update(): void {
-    const verticalWind = SimVar.GetSimVarValue('AMBIENT WIND Y', SimVarValueType.FPM);
-    const time = Date.now();
+    const verticalWind = this.verticalWind.get();
+    const time = this.apValues.activeSimDuration.get();
 
-    if (this._lastVerticalWindTime === undefined) {
+    if (this.lastVerticalWindTime === undefined) {
       this.verticalWindAverageValue = this.verticalWindSmoother.reset(verticalWind);
     } else {
-      this.verticalWindAverageValue = this.verticalWindSmoother.next(verticalWind, time - this._lastVerticalWindTime);
+      this.verticalWindAverageValue = this.verticalWindSmoother.next(verticalWind, Math.max(time - this.lastVerticalWindTime, 0));
     }
 
-    this._lastVerticalWindTime = time;
+    this.lastVerticalWindTime = time;
 
-    if (this.autoCoordinationEnabled && this.apMasterOn.get() === true && this.onGround.get() === false) {
-      this.manageAutoRudder();
-    }
+    this.output.onUpdate();
   }
 
   /**
-   * Drives the commanded autopilot bank angle toward a desired value using a linear servo.
+   * Drives the commanded bank angle toward a desired value.
    * @param bank The desired bank angle, in degrees. Positive values indicate left bank.
-   * @param rate The rate at which to drive the commanded bank angle, in degrees per second. Defaults to the bank
-   * servo's default rate.
+   * @param rate The rate at which to drive the commanded bank angle, in degrees per second. Defaults to this driver's
+   * default bank servo rate.
    */
-  public driveBank(bank: number, rate?: number): void {
+  public driveBank(bank: number, rate = this.bankServoRate): void {
     if (isFinite(bank)) {
-      const currentTime = Date.now();
-      if (this._lastBankSetTime !== undefined) {
-        const deltaTime = currentTime - this._lastBankSetTime;
-        if (deltaTime > 1000) {
-          this.bankServo.reset();
-        }
-      } else {
-        this.bankServo.reset();
-      }
-
-      this._lastBankSetTime = currentTime;
-
-      this.setBank(this.bankServo.drive(this.currentBankRef, bank, currentTime, rate), false);
-
+      this.output.driveBank(bank, rate);
     } else {
       console.warn('AutopilotDriver: Non-finite bank angle was attempted to be set.');
     }
   }
 
   /**
-   * Sets the commanded autopilot bank angle, in degrees.
-   * @param bank The commanded bank angle, in degrees. Positive values indicate left bank.
-   * @param resetServo Whether to reset the bank servo. Defaults to `true`.
+   * Sets the commanded bank angle, in degrees.
+   * @param bank The commanded bank angle to set, in degrees. Positive values indicate left bank.
+   * @param resetServo This parameter is deprecated and has no effect.
    */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   public setBank(bank: number, resetServo = true): void {
-    if (this.zeroRollHeight !== undefined) {
-      const raHeight = this.raHeight.get();
-      if (raHeight !== null && raHeight < this.zeroRollHeight) {
-        bank = 0;
-      }
-    }
-
     if (isFinite(bank)) {
-      this.currentBankRef = bank;
-      SimVar.SetSimVarValue('AUTOPILOT BANK HOLD REF', SimVarValueType.Degree, this.currentBankRef);
-      this.fdPublisher?.pub('fd_target_bank', this.currentBankRef, true, true);
+      this.output.setBank(bank);
     } else {
       console.warn('AutopilotDriver: Non-finite bank angle was attempted to be set.');
-    }
-    if (resetServo) {
-      this._lastBankSetTime = undefined;
     }
   }
 
   /**
-   * Drives the commanded autopilot pitch angle toward a desired value using a linear servo while optionally correcting
-   * for angle of attack and vertical wind.
+   * Drives the commanded pitch angle toward a desired value while optionally correcting for angle of attack and
+   * vertical wind.
    * @param pitch The desired pitch angle, in degrees. Positive values indicate downward pitch.
    * @param adjustForAoa Whether to adjust the commanded pitch angle for angle of attack. If `true`, the provided pitch
    * angle is treated as a desired flight path angle and a new commanded pitch angle will be calculated to produce the
@@ -242,61 +206,49 @@ export class AutopilotDriver {
    * the provided pitch angle is treated as a desired flight path angle and a new commanded pitch angle will be
    * calculated to produce the desired FPA given the current vertical wind component. This correction can be used in
    * conjunction with the angle of attack correction. Defaults to `false`.
-   * @param rate The rate at which to drive the commanded pitch angle, in degrees per second. Defaults to the pitch
-   * servo's default rate.
-   * @param maxNoseDownPitch The maximum nose down pitch angle, defaults to the global AP pitch limit.
-   * @param maxNoseUpPitch The maximum nose up pitch angle, defaults to the global AP pitch limit.
+   * @param rate The rate at which to drive the commanded pitch angle, in degrees per second. Defaults to this driver's
+   * default pitch servo rate.
+   * @param maxNoseDownPitch The maximum nose-down pitch angle, in degrees. Defaults to the global autopilot nose-down
+   * pitch limit.
+   * @param maxNoseUpPitch The maximum nose-up pitch angle, in degrees. Defaults to the global autopilot nose-up pitch
+   * limit.
    */
   public drivePitch(
     pitch: number,
     adjustForAoa = false,
     adjustForVerticalWind = false,
-    rate?: number,
+    rate = this.pitchServoRate,
     maxNoseDownPitch = this.apValues.maxNoseDownPitchAngle.get(),
     maxNoseUpPitch = this.apValues.maxNoseUpPitchAngle.get()
   ): void {
     pitch = this.getAdjustedPitch(pitch, adjustForAoa, adjustForVerticalWind);
     if (isFinite(pitch)) {
-      const currentTime = Date.now();
-      if (this._lastPitchSetTime !== undefined) {
-        const deltaTime = currentTime - this._lastPitchSetTime;
-        if (deltaTime > 1000) {
-          this.pitchServo.reset();
-        }
-      } else {
-        this.pitchServo.reset();
-      }
-
-      this._lastPitchSetTime = currentTime;
-      const limitedPitch = MathUtils.clamp(pitch, -maxNoseDownPitch, maxNoseUpPitch);
-      this.setPitch(this.pitchServo.drive(this.currentPitchRef, limitedPitch, currentTime, rate), false, maxNoseDownPitch, maxNoseUpPitch);
+      this.output.drivePitch(MathUtils.clamp(pitch, -maxNoseUpPitch, maxNoseDownPitch), rate);
     } else {
       console.warn('AutopilotDriver: Non-finite pitch angle was attempted to be set.');
     }
   }
 
   /**
-   * Sets the commanded autopilot pitch angle, in degrees.
-   * @param pitch The commanded pitch angle, in degrees. Positive values indicate downward pitch.
-   * @param resetServo Whether to reset the pitch servo. Defaults to `true`.
-   * @param maxNoseDownPitch The maximum nose down pitch angle, defaults to the global AP pitch limit.
-   * @param maxNoseUpPitch The maximum nose up pitch angle, defaults to the global AP pitch limit.
+   * Sets the commanded pitch angle, in degrees.
+   * @param pitch The commanded pitch angle to set, in degrees. Positive values indicate downward pitch.
+   * @param resetServo This parameter is deprecated and has no effect.
+   * @param maxNoseDownPitch The maximum nose-down pitch angle, in degrees. Defaults to the global autopilot nose-down
+   * pitch limit.
+   * @param maxNoseUpPitch The maximum nose-up pitch angle, in degrees. Defaults to the global autopilot nose-up pitch
+   * limit.
    */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   public setPitch(pitch: number, resetServo = true, maxNoseDownPitch = this.apValues.maxNoseDownPitchAngle.get(), maxNoseUpPitch = this.apValues.maxNoseUpPitchAngle.get()): void {
     if (isFinite(pitch)) {
-      this.currentPitchRef = MathUtils.clamp(pitch, -maxNoseDownPitch, maxNoseUpPitch);
-      SimVar.SetSimVarValue('AUTOPILOT PITCH HOLD REF', SimVarValueType.Degree, this.currentPitchRef);
-      this.fdPublisher?.pub('fd_target_pitch', this.currentPitchRef, true, true);
+      this.output.setPitch(MathUtils.clamp(pitch, -maxNoseUpPitch, maxNoseDownPitch));
     } else {
       console.warn('AutopilotDriver: Non-finite pitch angle was attempted to be set.');
-    }
-    if (resetServo) {
-      this._lastPitchSetTime = undefined;
     }
   }
 
   /**
-   * Adjusts a pitch angle optionally for AOA and vertical wind.
+   * Adjusts a pitch angle optionally for angle of attack and vertical wind.
    * @param pitch The desired pitch angle, in degrees. Positive values indicate downward pitch.
    * @param adjustForAoa Whether to adjust the commanded pitch angle for angle of attack. If `true`, the provided pitch
    * angle is treated as a desired flight path angle and a new commanded pitch angle will be calculated to produce the
@@ -306,7 +258,7 @@ export class AutopilotDriver {
    * the provided pitch angle is treated as a desired flight path angle and a new commanded pitch angle will be
    * calculated to produce the desired FPA given the current vertical wind component. This correction can be used in
    * conjunction with the angle of attack correction. Defaults to `false`.
-   * @returns The adjusted pitch.
+   * @returns The adjusted pitch angle, in degrees.
    */
   public getAdjustedPitch(pitch: number, adjustForAoa = false, adjustForVerticalWind = false): number {
     if (!isFinite(pitch)) {
@@ -325,7 +277,7 @@ export class AutopilotDriver {
       // if our AOA is 1 degree, we want to set our pitch to 5 + 1 = 6 degrees to achieve a 5 degree FPA.
       // since pitch is inverse and AOA is not, we want to subtract the aoa value -5 - (+1) = -6 (6 degree up pitch)
       // if we are wanting to fly an FPA of -3 degrees, and our AOA is +1 degree, we would set +3 - (+1) = 2 (2 degree down pitch)
-      pitch -= SimVar.GetSimVarValue('INCIDENCE ALPHA', SimVarValueType.Degree);
+      pitch -= this.aoa.getActualValue();
     }
     return pitch;
   }
@@ -336,22 +288,231 @@ export class AutopilotDriver {
    */
   private getVerticalWindCorrection(): number {
     // Wind correction FPA will be the FPA required to negate the vertical wind (so negative verticalWindAverageValue)
-    return VNavUtils.getFpa(SimVar.GetSimVarValue('AIRSPEED TRUE', SimVarValueType.FPM), -this.verticalWindAverageValue);
+    return VNavUtils.getFpa(UnitType.KNOT.convertTo(this.tas.getActualValue(), UnitType.FPM), -this.verticalWindAverageValue);
+  }
+}
+
+/**
+ * Configuration options for {@link DefaultOutput}.
+ */
+type DefaultOutputOptions = {
+  /**
+   * Whether to publish the pitch and bank reference values set by the driver to the event bus using the
+   * `fd_target_pitch` and `fd_target_bank` topics defined by {@link FlightDirectorEvents}. Defaults to `false`.
+   */
+  setInternalFlightDirector?: boolean;
+
+  /**
+   * The radio altitude below which all commanded bank angles are forced to zero degrees. If not defined, then
+   * commanded bank angles will not be forced to zero degrees based on radio altitude.
+   */
+  zeroRollHeight?: number;
+
+  /**
+   * Whether to provide turn auto-coordination while the autopilot is engaged. Auto-coordination works by commanding a
+   * rudder deflection in the same direction as the commanded bank angle (e.g. a commanded left bank will result in a
+   * commanded left rudder). The commanded rudder deflection is proportional to the commanded bank angle.
+   */
+  autoCoordinationEnabled?: boolean;
+
+  /**
+   * The airplane's maximum rudder deflection, in degrees. Ignored if `autoCoordinationEnabled` is false. Defaults to
+   * `25`.
+   */
+  maxRudderDeflection?: number;
+
+  /**
+   * The factor to multiply with the commanded bank angle to calculate the rudder deflection commanded by rudder
+   * auto-coordination. Ignored if `autoCoordinationEnabled` is false. Defaults to `0.3`.
+   */
+  rudderBankFactor?: number;
+
+  /**
+   * The rate used to drive the rudder auto-coordination servo, in degrees per second.  Ignored if
+   * `autoCoordinationEnabled` is false. Defaults to `1`.
+   */
+  rudderServoRate?: number;
+};
+
+/**
+ * A default implementation of {@link AutopilotDriverOutput} that writes commanded bank and pitch reference values to
+ * the `AUTOPILOT BANK HOLD REF` and `AUTOPILOT PITCH HOLD REF` SimVars. Also optionally publishes the reference values
+ * to the event bus using the `fd_target_bank` and `fd_target_pitch` topics defined by {@link FlightDirectorEvents}.
+ * Also supports automatic turn coordination using the rudder while the autopilot is engaged.
+ */
+class DefaultOutput implements AutopilotDriverOutput {
+  private static readonly DEFAULT_RUDDER_BANK_FACTOR = 0.3;
+  private static readonly DEFAULT_MAX_RUDDER_DEFLECTION = 25; // degrees
+  private static readonly DEFAULT_RUDDER_SERVO_RATE = 1; // degrees per second
+
+  private readonly bankRefSimVar = RegisteredSimVarUtils.create('AUTOPILOT BANK HOLD REF', SimVarValueType.Degree);
+  private currentBankRef = this.bankRefSimVar.get();
+  private lastBankSetTime?: number;
+
+  private readonly pitchRefSimVar = RegisteredSimVarUtils.create('AUTOPILOT PITCH HOLD REF', SimVarValueType.Degree);
+  private currentPitchRef = this.pitchRefSimVar.get();
+  private lastPitchSetTime?: number;
+
+  private readonly isOnGround: APDataItem<boolean>;
+  private readonly radioAltitude: APDataItem<number>;
+
+  private readonly activeSimDuration: Subscribable<number>;
+  private readonly apMasterOn: Subscribable<boolean>;
+
+  private readonly fdPublisher?: Publisher<FlightDirectorEvents>;
+
+  private readonly zeroRollHeight?: number;
+
+  private readonly isAutoCoordinationEnabled: boolean;
+  private readonly setRudderAxisSimVar = RegisteredSimVarUtils.create('K:AXIS_RUDDER_SET', SimVarValueType.Number);
+  private readonly rudderBankFactor: number = DefaultOutput.DEFAULT_RUDDER_BANK_FACTOR;
+  private readonly maxRudderDeflection: number = DefaultOutput.DEFAULT_MAX_RUDDER_DEFLECTION;
+  private readonly rudderServoRate: number = 0;
+  private isAutoCoordinationActive = false;
+  private rudderSet = 0;
+
+  private lastUpdateTime?: number;
+  private lastDt = 0;
+
+  /**
+   * Creates a new instance of DefaultOutput.
+   * @param bus The event bus.
+   * @param apValues Autopilot values from the output's parent autopilot.
+   * @param options Options with which to configure the output.
+   */
+  public constructor(bus: EventBus, apValues: APValues, options?: Readonly<DefaultOutputOptions>) {
+    this.isOnGround = apValues.dataProvider.getItem('is_on_ground');
+    this.radioAltitude = apValues.dataProvider.getItem('radio_altitude');
+
+    this.activeSimDuration = apValues.activeSimDuration;
+    this.apMasterOn = apValues.apMasterOn;
+
+    if (options?.setInternalFlightDirector) {
+      this.fdPublisher = bus.getPublisher<FlightDirectorEvents>();
+    }
+
+    this.zeroRollHeight = options?.zeroRollHeight;
+
+    if (options?.autoCoordinationEnabled) {
+      this.isAutoCoordinationEnabled = true;
+
+      if (options.rudderBankFactor !== undefined) {
+        this.rudderBankFactor = options.rudderBankFactor;
+      }
+
+      if (options.maxRudderDeflection !== undefined) {
+        this.maxRudderDeflection = options.maxRudderDeflection;
+      }
+
+      this.rudderServoRate = (options?.rudderServoRate ?? DefaultOutput.DEFAULT_RUDDER_SERVO_RATE) / this.maxRudderDeflection * 16384;
+
+      this.apMasterOn.sub(this.onApMasterOnChanged.bind(this));
+    } else {
+      this.isAutoCoordinationEnabled = false;
+    }
   }
 
   /**
-   * Manages the Auto Rudder in Autopilot.
+   * Responds to when the autopilot master ON/OFF state changes.
+   * @param isApMasterOn Whether the autopilot master ON/OFF state is ON.
    */
-  private manageAutoRudder(): void {
-    this.rudderSet = this.rudderServo.drive(this.rudderSet, (this.rudderBankFactor * this.currentBankRef / this.maxRudderDeflection) * 16384);
-    SimVar.SetSimVarValue('K:AXIS_RUDDER_SET', SimVarValueType.Number, this.rudderSet);
+  private onApMasterOnChanged(isApMasterOn: boolean): void {
+    if (!isApMasterOn) {
+      this.deactivateAutoCoordination();
+    }
+  }
+
+  /** @inheritDoc */
+  public setBank(bank: number): void {
+    if (this.zeroRollHeight !== undefined) {
+      if (this.radioAltitude.isValueValid() && this.radioAltitude.getValue() < this.zeroRollHeight) {
+        bank = 0;
+      }
+    }
+
+    this.currentBankRef = bank;
+    this.bankRefSimVar.set(bank);
+    this.fdPublisher?.pub('fd_target_bank', this.currentBankRef, true, true);
+
+    this.lastBankSetTime = this.activeSimDuration.get();
+  }
+
+  /** @inheritDoc */
+  public driveBank(bank: number, rate: number): void {
+    let dt: number;
+    if (this.lastBankSetTime === undefined) {
+      dt = this.lastDt;
+    } else {
+      dt = Math.min(this.activeSimDuration.get() - this.lastBankSetTime, this.lastDt);
+    }
+
+    this.setBank(MathUtils.driveLinear(this.currentBankRef, bank, rate, dt / 1000));
+  }
+
+  /** @inheritDoc */
+  public setPitch(pitch: number): void {
+    this.currentPitchRef = pitch;
+    this.pitchRefSimVar.set(pitch);
+    this.fdPublisher?.pub('fd_target_pitch', this.currentPitchRef, true, true);
+
+    this.lastPitchSetTime = this.activeSimDuration.get();
+  }
+
+  /** @inheritDoc */
+  public drivePitch(pitch: number, rate: number): void {
+    let dt: number;
+    if (this.lastPitchSetTime === undefined) {
+      dt = this.lastDt;
+    } else {
+      dt = Math.min(this.activeSimDuration.get() - this.lastPitchSetTime, this.lastDt);
+    }
+
+    this.setPitch(MathUtils.driveLinear(this.currentPitchRef, pitch, rate, dt / 1000));
+  }
+
+  /** @inheritDoc */
+  public onUpdate(): void {
+    const time = this.activeSimDuration.get();
+    const dt = this.lastUpdateTime === undefined ? 0 : Math.max(time - this.lastUpdateTime, 0);
+
+    if (this.isAutoCoordinationEnabled && this.apMasterOn.get()) {
+      this.updateAutoCoordination(dt);
+    }
+
+    this.lastUpdateTime = time;
+    this.lastDt = dt;
   }
 
   /**
-   * Resets the rudder to 0.
+   * Updates turn auto-coordination.
+   * @param dt The elapsed time since the last update, in milliseconds.
    */
-  private resetRudder(): void {
-    SimVar.SetSimVarValue('K:AXIS_RUDDER_SET', SimVarValueType.Number, 0);
-    this.rudderServo.reset();
+  private updateAutoCoordination(dt: number): void {
+    const isOnGround = this.isOnGround.isValueValid() && this.isOnGround.getValue();
+
+    if (isOnGround) {
+      if (this.isAutoCoordinationActive) {
+        this.deactivateAutoCoordination();
+      }
+    } else {
+      this.isAutoCoordinationActive = true;
+
+      this.rudderSet = MathUtils.driveLinear(
+        this.rudderSet,
+        (this.rudderBankFactor * this.currentBankRef / this.maxRudderDeflection) * 16384,
+        this.rudderServoRate,
+        dt / 1000
+      );
+      this.setRudderAxisSimVar.set(this.rudderSet);
+    }
+  }
+
+  /**
+   * Deactivates turn auto-coordination. This will set the rudder to the neutral position.
+   */
+  private deactivateAutoCoordination(): void {
+    this.rudderSet = 0;
+    this.setRudderAxisSimVar.set(0);
+    this.isAutoCoordinationActive = false;
   }
 }

@@ -1,3 +1,4 @@
+import { APDataItem } from '../APDataProvider';
 import { APValues } from '../APValues';
 import { DirectorState, PlaneDirector } from './PlaneDirector';
 
@@ -25,25 +26,38 @@ export type APTogaPitchDirectorOptions = {
 };
 
 /**
- * An autopilot TOGA Pitch Director to be used for either a vertical TO or GA mode.
+ * An autopilot director that generates flight director pitch commands to hold a pitch attitude and sets the
+ * `L:WT_TOGA_ACTIVE` SimVar state to true (1) when it is armed or activated, and to false (0) when it is
+ * deactivated.
+ * 
+ * If the director is created with access to an {@link APValues} object, then the director requires valid pitch data to
+ * arm or activate.
  */
 export class APTogaPitchDirector implements PlaneDirector {
-
+  /** @inheritDoc */
   public state: DirectorState;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
   public onActivate?: () => void;
-  /** @inheritdoc */
+
+  /** @inheritDoc */
   public onArm?: () => void;
-  /** @inheritdoc */
+
+  /** @inheritDoc */
+  public onDeactivate?: () => void;
+
+  /** @inheritDoc */
   public drivePitch?: (pitch: number, adjustForAoa?: boolean, adjustForVerticalWind?: boolean, rate?: number) => void;
-  /** @inheritdoc */
+
+  /** @inheritDoc */
   public setPitch?: (pitch: number) => void;
 
   private readonly isConstantPitch: boolean;
 
   private readonly targetPitchAngleFunc: () => number;
   private readonly drivePitchFunc?: (pitch: number) => void;
+
+  private readonly pitch?: APDataItem<number>;
 
   /**
    * Creates a new instance of APTogaPitchDirector.
@@ -106,12 +120,27 @@ export class APTogaPitchDirector implements PlaneDirector {
 
     this.isConstantPitch = typeof targetPitchAngleOpt === 'number' && this.drivePitchFunc === undefined;
 
+    this.pitch = apValues?.dataProvider.getItem('pitch');
+
     this.state = DirectorState.Inactive;
+  }
+
+  /**
+   * Checks whether the data required for this director to function are valid.
+   * @returns Whether the data required for this director to function are valid.
+   */
+  private isDataValid(): boolean {
+    return this.pitch === undefined || this.pitch.isValueValid();
   }
 
   /** @inheritDoc */
   public activate(): void {
+    if (this.state === DirectorState.Active || !this.isDataValid()) {
+      return;
+    }
+
     this.state = DirectorState.Active;
+
     if (this.onActivate !== undefined) {
       this.onActivate();
     }
@@ -134,7 +163,15 @@ export class APTogaPitchDirector implements PlaneDirector {
 
   /** @inheritDoc */
   public deactivate(): void {
+    if (this.state === DirectorState.Inactive) {
+      return;
+    }
+
     this.state = DirectorState.Inactive;
+
+    if (this.onDeactivate !== undefined) {
+      this.onDeactivate();
+    }
 
     // TODO: The simvar is not currently writeable, so the line below has no effect.
     SimVar.SetSimVarValue('AUTOPILOT TAKEOFF POWER ACTIVE', 'Bool', false);
@@ -143,6 +180,15 @@ export class APTogaPitchDirector implements PlaneDirector {
 
   /** @inheritDoc */
   public update(): void {
+    if (this.state !== DirectorState.Active) {
+      return;
+    }
+
+    if (!this.isDataValid()) {
+      this.deactivate();
+      return;
+    }
+
     if (!this.isConstantPitch) {
       if (this.drivePitchFunc) {
         this.drivePitchFunc(-this.targetPitchAngleFunc());

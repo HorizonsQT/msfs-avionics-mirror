@@ -792,7 +792,7 @@ export class GarminPrimaryFlightPlanRouteLoader implements GarminFlightPlanRoute
       indexes.push(...this.getInUseUserFacilityIndexesFromPlan(this.fms.getPrimaryFlightPlan()));
     }
 
-    return indexes.sort();
+    return indexes.sort((a, b) => a - b);
   }
 
   /**

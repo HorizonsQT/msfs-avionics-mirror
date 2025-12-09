@@ -1,6 +1,7 @@
 import { EventBus, EventBusMetaEvents } from '../data/EventBus';
 import { PublishPacer } from '../data/EventBusPacer';
 import { SimVarValueType } from '../data/SimVars';
+import { TimeUtils } from '../utils/time/TimeUtils';
 import { BasePublisher, SimVarPublisher } from './BasePublishers';
 
 /**
@@ -93,7 +94,7 @@ export class ClockPublisher extends BasePublisher<ClockEvents> {
     super(bus, pacer);
 
     this.simVarPublisher = new SimVarPublisher<ClockEvents>([
-      ['simTime', { name: 'E:ABSOLUTE TIME', type: SimVarValueType.Seconds, map: ClockPublisher.absoluteTimeToUNIXTime }],
+      ['simTime', { name: 'E:ABSOLUTE TIME', type: SimVarValueType.Seconds, map: TimeUtils.simAbsoluteTimeToJSTimestamp }],
       ['activeSimDuration', { name: 'E:SIMULATION TIME', type: SimVarValueType.Seconds, map: seconds => seconds * 1000 }],
       ['simRate', { name: 'E:SIMULATION RATE', type: SimVarValueType.Number }],
       ['zulu_sunrise', { name: 'E:ZULU SUNRISE TIME', type: SimVarValueType.Seconds }],
@@ -142,7 +143,7 @@ export class ClockPublisher extends BasePublisher<ClockEvents> {
         if (!this.hiFreqTopicsToPublish.simTime) {
           this.hiFreqTopicsToPublish.simTime = true;
           if (this.publishActive) {
-            this.publish('simTimeHiFreq', ClockPublisher.absoluteTimeToUNIXTime(SimVar.GetSimVarValueFastReg(this.registeredSimVarIds.absoluteTime)));
+            this.publish('simTimeHiFreq', TimeUtils.simAbsoluteTimeToJSTimestamp(SimVar.GetSimVarValueFastReg(this.registeredSimVarIds.absoluteTime)));
           }
         }
         break;
@@ -198,22 +199,12 @@ export class ClockPublisher extends BasePublisher<ClockEvents> {
     }
 
     if (this.hiFreqTopicsToPublish.simTime) {
-      this.publish('simTimeHiFreq', ClockPublisher.absoluteTimeToUNIXTime(SimVar.GetSimVarValueFastReg(this.registeredSimVarIds.absoluteTime)));
+      this.publish('simTimeHiFreq', TimeUtils.simAbsoluteTimeToJSTimestamp(SimVar.GetSimVarValueFastReg(this.registeredSimVarIds.absoluteTime)));
     }
 
     if (this.hiFreqTopicsToPublish.activeSimDuration) {
       this.publish('activeSimDurationHiFreq', SimVar.GetSimVarValueFastReg(this.registeredSimVarIds.simulationTime) * 1000);
     }
-  }
-
-  /**
-   * Converts the sim's absolute time to a UNIX timestamp. The sim's absolute time value is equivalent to a .NET
-   * DateTime.Ticks value (epoch = 00:00:00 01 Jan 0001).
-   * @param absoluteTime an absolute time value, in units of seconds.
-   * @returns the UNIX timestamp corresponding to the absolute time value.
-   */
-  private static absoluteTimeToUNIXTime(absoluteTime: number): number {
-    return (absoluteTime - 62135596800) * 1000;
   }
 }
 

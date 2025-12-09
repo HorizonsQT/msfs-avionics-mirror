@@ -40,7 +40,7 @@ export class FlightPathAccelerationChevron extends DisplayComponent<FlightPathAc
     this.translateTransform.transform.getChild(0).set(0, -50);
 
     const pxOffsetSub = this.pxOffset.sub((v) => {
-      this.translateTransform.transform.getChild(1).set(0, v, 0);
+      this.translateTransform.transform.getChild(1).set(0, v, 0, undefined, 0.5);
       this.translateTransform.resolve();
     }, false, true);
 

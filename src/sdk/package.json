@@ -1,12 +1,12 @@
 {
   "name": "@microsoft/msfs-sdk",
-  "version": "2.2.3",
+  "version": "2.3.3",
   "description": "HTML and Typescript SDK for MSFS Coherent based instruments and aircraft development.",
   "main": "msfssdk.js",
   "typings": "msfssdk.d.ts",
   "scripts": {
     "build": "npm run build:compile && npm run build:rollup",
-    "build:compile": "tsc",
+    "build:compile": "tspc",
     "build:rollup": "rollup -c rollup.config.mjs"
   },
   "repository": {
@@ -16,11 +16,13 @@
   "author": "Working Title Simulations",
   "license": "MIT",
   "devDependencies": {
+    "@microsoft/msfs-ts-transformer": "^1.0.0",
+    "@microsoft/msfs-types": "^1.14.6",
     "@rollup/plugin-node-resolve": "^15.0.1",
     "@types/node": "^18.11.18",
-    "@microsoft/msfs-types": "^1.14.6",
     "rollup": "^4.27.3",
-    "rollup-plugin-dts": "^6.1.1",
+    "rollup-plugin-dts": "^6.2.3",
+    "ts-patch": "^3.3.0",
     "typescript": "5.8.3"
   }
 }

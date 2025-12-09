@@ -1,8 +1,5 @@
-import { ConsumerValue } from '../../data/ConsumerValue';
 import { EventBus } from '../../data/EventBus';
-import { SimVarValueType } from '../../data/SimVars';
 import { NavMath } from '../../geo/NavMath';
-import { GNSSEvents, GNSSPublisher } from '../../instruments/GNSS';
 import { APValues } from '../APValues';
 import { DirectorState, PlaneDirector } from './PlaneDirector';
 
@@ -25,31 +22,38 @@ export type APTrkHoldDirectorOptions = {
 };
 
 /**
- * An autopilot track hold director.
- * Levels the wings upon activation, and then holds the captured track
+ * An autopilot director that generates flight director bank commands to level the wings upon activation and then hold
+ * the resultant magnetic ground track once the wings are level.
+ * 
+ * The director requires valid bank and magnetic ground track data to arm or activate.
  */
 export class APTrkHoldDirector implements PlaneDirector {
   /** bank angle below which we capture the track */
   private static readonly MIN_BANK_THRESHOLD = 1;
 
+  /** @inheritDoc */
   public state: DirectorState;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
   public onActivate?: () => void;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
   public onArm?: () => void;
 
-  /** @inheritdoc */
-  public driveBank?: (bank: number, rate?: number) => void;
+  /** @inheritDoc */
+  public onDeactivate?: () => void;
 
-  private readonly magVar = ConsumerValue.create(null, 0);
+  /** @inheritDoc */
+  public driveBank?: (bank: number, rate?: number) => void;
 
   private readonly maxBankAngleFunc: () => number;
   private readonly driveBankFunc: (bank: number) => void;
 
   /** track captured at wings level, or null if not yet captured */
   private capturedTrack: number | null = null;
+
+  private readonly bank = this.apValues.dataProvider.getItem('bank');
+  private readonly trackMagnetic = this.apValues.dataProvider.getItem('ground_track_magnetic');
 
   /**
    * Creates an instance of the track hold director.
@@ -101,70 +105,73 @@ export class APTrkHoldDirector implements PlaneDirector {
     }
 
     this.state = DirectorState.Inactive;
-
-    this.magVar.setConsumer(this.bus.getSubscriber<GNSSEvents>().on('magvar'));
-
-    this.pauseSubs();
-  }
-
-  /** Resumes Subscriptions. */
-  private resumeSubs(): void {
-    this.magVar.resume();
-  }
-
-  /** Pauses Subscriptions. */
-  private pauseSubs(): void {
-    this.magVar.pause();
   }
 
   /**
-   * Activates this director.
+   * Checks whether the data required for this director to function are valid.
+   * @returns Whether the data required for this director to function are valid.
    */
+  private isDataValid(): boolean {
+    return this.bank.isValueValid() && this.trackMagnetic.isValueValid();
+  }
+
+  /** @inheritDoc */
   public activate(): void {
-    this.resumeSubs();
+    if (this.state === DirectorState.Active || !this.isDataValid()) {
+      return;
+    }
+
     this.state = DirectorState.Active;
 
-    this.capturedTrack = null;
     if (this.onActivate !== undefined) {
       this.onActivate();
     }
+
+    this.capturedTrack = null;
     SimVar.SetSimVarValue('AUTOPILOT HEADING LOCK', 'Bool', true);
   }
 
-  /**
-   * Arms this director.
-   * This director has no armed mode, so it activates immediately.
-   */
+  /** @inheritDoc */
   public arm(): void {
     if (this.state == DirectorState.Inactive) {
       this.activate();
     }
   }
 
-  /**
-   * Deactivates this director.
-   */
+  /** @inheritDoc */
   public deactivate(): void {
-    this.state = DirectorState.Inactive;
-    SimVar.SetSimVarValue('AUTOPILOT HEADING LOCK', 'Bool', false);
+    if (this.state === DirectorState.Inactive) {
+      return;
+    }
 
-    this.pauseSubs();
+    this.state = DirectorState.Inactive;
+
+    if (this.onDeactivate !== undefined) {
+      this.onDeactivate();
+    }
+
+    SimVar.SetSimVarValue('AUTOPILOT HEADING LOCK', 'Bool', false);
   }
 
-  /**
-   * Updates this director.
-   */
+  /** @inheritDoc */
   public update(): void {
-    if (this.state === DirectorState.Active) {
-      if (this.capturedTrack === null) {
-        const currentBank = SimVar.GetSimVarValue('PLANE BANK DEGREES', SimVarValueType.Degree);
-        if (Math.abs(currentBank) < APTrkHoldDirector.MIN_BANK_THRESHOLD) {
-          this.capturedTrack = this.getMagneticTrack();
-        }
-      }
-
-      this.driveBankFunc(this.capturedTrack !== null ? this.desiredBank(this.capturedTrack) : 0);
+    if (this.state !== DirectorState.Active) {
+      return;
     }
+
+    if (!this.isDataValid()) {
+      this.deactivate();
+      return;
+    }
+
+    if (this.capturedTrack === null) {
+      const currentBank = this.bank.getValue();
+      if (Math.abs(currentBank) < APTrkHoldDirector.MIN_BANK_THRESHOLD) {
+        this.capturedTrack = this.trackMagnetic.getValue();
+      }
+    }
+
+    this.driveBankFunc(this.capturedTrack !== null ? this.desiredBank(this.capturedTrack) : 0);
   }
 
   /**
@@ -173,7 +180,7 @@ export class APTrkHoldDirector implements PlaneDirector {
    * @returns The desired bank angle.
    */
   private desiredBank(targetTrack: number): number {
-    const magneticTrack = this.getMagneticTrack();
+    const magneticTrack = this.trackMagnetic.getValue();
 
     const turnDirection = NavMath.getTurnDirection(magneticTrack, targetTrack);
     const trackDiff = Math.abs(NavMath.diffAngle(magneticTrack, targetTrack));
@@ -182,14 +189,5 @@ export class APTrkHoldDirector implements PlaneDirector {
     baseBank *= (turnDirection === 'left' ? 1 : -1);
 
     return baseBank;
-  }
-
-  /**
-   * Gets the instantanious magnetic track.
-   * @returns Magnetic Track, in degrees.
-   */
-  private getMagneticTrack(): number {
-    const trueTrack = GNSSPublisher.getInstantaneousTrack();
-    return NavMath.normalizeHeading(trueTrack - this.magVar.get());
   }
 }

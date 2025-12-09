@@ -32,6 +32,8 @@ interface BaseIndexedHydraulicsSystemEvents {
   hyd_accumulator_pressure: number;
   /** Whether the hydraulic valve is open or closed */
   hyd_valve_open: boolean;
+  /** The hydraulic pressure at an actuator, in PSI. */
+  hyd_actuator_pressure: number;
 }
 
 /**
@@ -71,6 +73,7 @@ export class HydraulicsPublisher extends SimVarPublisher<HydraulicsEvents, BaseI
       ['hyd_accumulator_quantity', { name: 'HYDRAULIC ACCUMULATOR QUANTITY:#index#', type: SimVarValueType.Liters, indexed: true, defaultIndex: null }],
       ['hyd_accumulator_pressure', { name: 'HYDRAULIC ACCUMULATOR PRESSURE:#index#', type: SimVarValueType.PSI, indexed: true, defaultIndex: null }],
       ['hyd_valve_open', { name: 'HYDRAULIC VALVE ACTIVE:#index#', type: SimVarValueType.Bool, indexed: true, defaultIndex: null }],
+      ['hyd_actuator_pressure', { name: 'HYDRAULIC ACTUATOR PRESSURE:#index#', type: SimVarValueType.PSI, indexed: true, defaultIndex: null }],
     ], bus, pacer);
   }
 }

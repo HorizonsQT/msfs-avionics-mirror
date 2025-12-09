@@ -19,6 +19,7 @@ import { MapAirspaceLayer, MapAirspaceLayerModules, MapAirspaceLayerProps } from
 import { MapBingLayer } from '../map/layers/MapBingLayer';
 import { MapCullableTextLayer } from '../map/layers/MapCullableTextLayer';
 import { MapOwnAirplaneLayer, MapOwnAirplaneLayerModules } from '../map/layers/MapOwnAirplaneLayer';
+import { MapSyncedCanvasLayer } from '../map/layers/MapSyncedCanvasLayer';
 import { MapAirspaceRenderer } from '../map/MapAirspaceRenderer';
 import { MapCullableTextLabelManager } from '../map/MapCullableTextLabel';
 import { MapLayer } from '../map/MapLayer';
@@ -37,6 +38,7 @@ import { MapOwnAirplanePropsController, MapOwnAirplanePropsControllerBinding, Ma
 import { MapRotationController, MapRotationControllerContext, MapRotationControllerModules } from './controllers/MapRotationController';
 import { FlightPlanDisplayBuilder } from './FlightPlanDisplayBuilder';
 import { MapSystemFlightPlanLayer, MapSystemFlightPlanLayerModules } from './layers/MapSystemFlightPlanLayer';
+import { MapSystemSharedFlightPlanLayer, MapSystemSharedFlightPlanLayerModules, MapSystemSharedFlightPlanWaypointFactory } from './layers/MapSystemSharedFlightPlanLayer';
 import { MapSystemTrafficLayer, MapSystemTrafficLayerModules, MapTrafficIntruderIconFactory } from './layers/MapSystemTrafficLayer';
 import { MapSystemWaypointsLayer, MapSystemWaypointsLayerModules } from './layers/MapSystemWaypointsLayer';
 import { MapSystemComponent, MapSystemComponentProps } from './MapSystemComponent';
@@ -176,6 +178,73 @@ export type MapSystemBuilderBingLayerOptions = {
 };
 
 /**
+ * Configuration options for displaying flight plans in a shared layer.
+ */
+export type MapSystemSharedFlightPlansOptions = {
+  /**
+   * A function that gets the canvas 2D rendering context to use to render flight plan waypoints for a given flight
+   * plan and render role. This function is called after all map layers have been attached. If not defined, then a
+   * {@link MapSyncedCanvasLayer} will be added to the map and its canvas context will be used to render all flight
+   * plan waypoints. This layer will be added under the `MapSystemKeys.FlightPlanWaypoints` key and placed just above
+   * the layer that displays the flight paths of the flight plans.
+   * @param context The map context.
+   * @param planIndex The index of the flight plan for which to get the canvas context.
+   * @param renderRole The render role for which to get the canvas context.
+   * @returns The canvas 2D rendering context to use to render flight plan waypoints for the specified flight plan and
+   * render role, or `null` if flight plan waypoints should not be rendered.
+   */
+  getWaypointRenderToContext?: <
+    Modules extends ModuleRecord = EmptyRecord,
+    Layers extends LayerRecord = EmptyRecord,
+    Controllers extends ControllerRecord = EmptyRecord,
+    Context extends ContextRecord = EmptyRecord
+  >(
+    context: MapSystemContext<Modules, Layers, Controllers, Context>,
+    planIndex: number,
+    renderRole: number
+  ) => CanvasRenderingContext2D | null;
+
+  /**
+   * Whether to enable text culling on the text manager that is added to the map to display flight plan waypoint
+   * labels. Defaults to `false`.
+   */
+  enableTextCulling?: boolean;
+
+  /**
+   * CSS class(es) to apply to the canvas layer added to the map to display flight plan waypoints. Ignored if
+   * `getWaypointRenderToContext` is defined.
+   */
+  waypointLayerCssClass?: string | SubscribableSet<string>;
+};
+
+/**
+ * A definition describing the display of a flight plan by a shared flight plan layer.
+ */
+export type MapSystemSharedFlightPlanDefinition = {
+  /** The index of the flight plan to display. */
+  planIndex: number;
+
+  /** A factory from which to get waypoints for flight plan legs to display. */
+  waypointFactory: MapSystemSharedFlightPlanWaypointFactory;
+
+  /**
+   * A function to configure the display of the flight plan.
+   * @param builder The builder to use to configure the display of the flight plan.
+   * @param context The map context.
+   */
+  configure: (builder: FlightPlanDisplayBuilder, context: MapSystemContext<
+    { [MapSystemKeys.FlightPlan]: MapFlightPlanModule },
+    any, any,
+    {
+      [MapSystemKeys.WaypointRenderer]: MapSystemWaypointsRenderer;
+      [MapSystemKeys.IconFactory]: MapSystemIconFactory;
+      [MapSystemKeys.LabelFactory]: MapSystemLabelFactory;
+      [MapSystemKeys.FlightPathRenderer]: MapSystemPlanRenderer;
+    }
+  >) => void;
+};
+
+/**
  * Options for handling off-scale and out-of-bounds traffic intruders on a traffic layer.
  */
 export type MapSystemBuilderTrafficOffScaleOobOptions = {
@@ -233,6 +302,7 @@ export class MapSystemBuilder<
   protected readonly controllerFactories = new Map<string, ControllerFactory>();
   protected readonly contextFactories = new Map<string, ContextFactory>();
   protected readonly initCallbacks = new Map<string, (context: MapSystemContext<any, any, any, any>) => void>();
+  protected readonly onAfterRenderCallbacks = new Map<string, (context: MapSystemContext<any, any, any, any>) => void>();
   protected readonly destroyCallbacks = new Map<string, (context: MapSystemContext<any, any, any, any>) => void>();
 
   protected projectedSize: Subscribable<ReadonlyFloat64Array> = Subject.create(Vec2Math.create(100, 100));
@@ -456,6 +526,35 @@ export class MapSystemBuilder<
     ) => void
   ): this {
     this.initCallbacks.set(key, callback);
+    return this;
+  }
+
+  /**
+   * Configures this builder to execute a callback function immediately after the map has been rendered to DOM. The
+   * function is guaranteed to be called after the `onAttached()` callbacks of all map layers and the `onAfterRender()`
+   * callbacks of all map controllers have been called. If an existing callback has been added to this builder with the
+   * same key, it will be replaced.
+   * @param key The key of the callback.
+   * @param callback The callback function to add.
+   * @returns This builder, after the callback has been added.
+   */
+  public withOnAfterRender<
+    UseModules extends ModuleRecord = any,
+    UseLayers extends LayerRecord = any,
+    UseControllers extends ControllerRecord = any,
+    UseContext extends ContextRecord = any
+  >(
+    key: string,
+    callback: (
+      context: MapSystemContext<
+        DefaultIfAny<UseModules, Modules>,
+        DefaultIfAny<UseLayers, Layers>,
+        DefaultIfAny<UseControllers, Controllers>,
+        DefaultIfAny<UseContext, Context>
+      >
+    ) => void
+  ): this {
+    this.onAfterRenderCallbacks.set(key, callback);
     return this;
   }
 
@@ -808,6 +907,9 @@ export class MapSystemBuilder<
     cssClass?: string | SubscribableSet<string>,
   ): this {
     return this.withContext(MapSystemKeys.TextManager, () => new MapCullableTextLabelManager(enableCulling))
+      .withDestroy<
+        any, any, any, { [MapSystemKeys.TextManager]: MapCullableTextLabelManager }
+      >(MapSystemKeys.TextManager, context => { context[MapSystemKeys.TextManager].destroy(); })
       .withLayer(MapSystemKeys.TextLayer, (context): VNode => {
         return (
           <MapCullableTextLayer
@@ -892,6 +994,9 @@ export class MapSystemBuilder<
   > {
     return this
       .withContext(MapSystemKeys.WaypointRenderer, context => new MapSystemWaypointsRenderer(context[MapSystemKeys.TextManager]))
+      .withDestroy<
+        any, any, any, { [MapSystemKeys.TextManager]: MapCullableTextLabelManager }
+      >(MapSystemKeys.TextManager, context => { context[MapSystemKeys.TextManager].destroy(); })
       .withController<
         MapSystemGenericController<any, any, any, { [MapSystemKeys.WaypointRenderer]: MapSystemWaypointsRenderer }>,
         any, any, any,
@@ -914,6 +1019,11 @@ export class MapSystemBuilder<
    * If a facility loader has been added to the map context under the `MapSystemKeys.FacilityLoader` key, then it will
    * be used to retrieve facilities for the display of nearest waypoints. Otherwise, a new default facility loader
    * instance will be used instead.
+   * 
+   * Airport waypoints registered to the waypoint renderer by the waypoints layer will have at least as much data
+   * available from them as described by the `AirportFacilityDataFlags` bitflags saved to the map context's
+   * `MapSystemKeys.WaypointRendererAirportDataFlags` property. If the context property does not exist, then all
+   * possible data will be made available from the airport waypoints.
    *
    * If a text layer has already been added to the builder, its order will be changed so that it is rendered above the
    * waypoint layer. Otherwise, a text layer will be added to the builder after the waypoint layer.
@@ -980,6 +1090,7 @@ export class MapSystemBuilder<
           [MapSystemKeys.IconFactory]: MapSystemIconFactory;
           [MapSystemKeys.LabelFactory]: MapSystemLabelFactory;
           'useTargetAsWaypointSearchCenter': boolean;
+          [MapSystemKeys.WaypointRendererAirportDataFlags]?: number;
         }
       >(MapSystemKeys.NearestWaypoints, context => {
         return (
@@ -993,6 +1104,7 @@ export class MapSystemBuilder<
             labelFactory={context[MapSystemKeys.LabelFactory]}
             useMapTargetAsSearchCenter={context.useTargetAsWaypointSearchCenter}
             waypointCache={facilityWaypointCache}
+            airportFacilityDataFlags={context[MapSystemKeys.WaypointRendererAirportDataFlags]}
             class={cssClass}
           />
         );
@@ -1007,6 +1119,11 @@ export class MapSystemBuilder<
    * If a facility loader has been added to the map context under the `MapSystemKeys.FacilityLoader` key, then it will
    * be used to retrieve facilities for the display of flight pan waypoints. Otherwise, a new default facility loader
    * instance will be used instead.
+   * 
+   * Airport waypoints registered to the waypoint renderer by the flight plan layer will have at least as much data
+   * available from them as described by the `AirportFacilityDataFlags` bitflags saved to the map context's
+   * `MapSystemKeys.WaypointRendererAirportDataFlags` property. If the context property does not exist, then all
+   * possible data will be made available from the airport waypoints.
    *
    * If a text layer has already been added to the builder, its order will be changed so that it is rendered above the
    * waypoint layer. Otherwise, a text layer will be added to the builder after the waypoint layer.
@@ -1104,6 +1221,7 @@ export class MapSystemBuilder<
           [MapSystemKeys.IconFactory]: MapSystemIconFactory;
           [MapSystemKeys.LabelFactory]: MapSystemLabelFactory;
           [MapSystemKeys.FlightPathRenderer]: MapSystemPlanRenderer;
+          [MapSystemKeys.WaypointRendererAirportDataFlags]?: number;
         }
       >(`${MapSystemKeys.FlightPlan}${planIndex}`, (context) => {
         return (
@@ -1117,11 +1235,245 @@ export class MapSystemBuilder<
             labelFactory={context[MapSystemKeys.LabelFactory]}
             flightPathRenderer={context[MapSystemKeys.FlightPathRenderer]}
             planIndex={planIndex}
+            airportFacilityDataFlags={context[MapSystemKeys.WaypointRendererAirportDataFlags]}
             class={cssClass}
           />
         );
       }, order)
       .withLayerOrder(MapSystemKeys.TextLayer, order ?? layerCount);
+  }
+
+  /**
+   * Configures this builder to generate a map which displays flight plans using a shared layer. Waypoints displayed as
+   * part of the flight plan are rendered by a {@link MapSystemWaypointsRenderer}.
+   * 
+   * Airport waypoints registered to the waypoint renderer by the flight plan layer will have at least as much data
+   * available from them as described by the `AirportFacilityDataFlags` bitflags saved to the map context's
+   * `MapSystemKeys.WaypointRendererAirportDataFlags` property. If the context property does not exist, then all
+   * possible data will be made available from the airport waypoints.
+   *
+   * If a text layer has already been added to the builder, then its order will be changed so that it is rendered above
+   * the flight plan layer. Otherwise, a text layer will be added to the builder after the flight plan layer.
+   * 
+   * The flight plans to display are taken from the map context property under the `MapSystemKeys.FlightPlan` key. The
+   * property should be a map of {@link MapSystemSharedFlightPlanDefinition} objects, keyed by flight plan index. Each
+   * definition object describes the display of a single flight plan. It is recommended to use the
+   * {@link withSharedFlightPlanDefinition | withSharedFlightPlanDefinition()} build step to add flight plans to
+   * display.
+   * 
+   * Requires the following context properties:
+   * * `[MapSystemKeys.FacilityLoader]: FacilityLoader`
+   *
+   * Adds the following...
+   *
+   * Context properties:
+   * * `[MapSystemKeys.FlightPlanner]: FlightPlanner`
+   * * `[MapSystemKeys.TextManager]: MapCullableTextLabelManager`
+   * * `[MapSystemKeys.IconFactory]: MapSystemIconFactory`
+   * * `[MapSystemKeys.LabelFactory]: MapSystemLabelFactory`
+   * * `[MapSystemKeys.FlightPathRenderer]: MapSystemPlanRenderer`
+   *
+   * Modules:
+   * * `[MapSystemKeys.FlightPlan]: MapFlightPlanModule`
+   *
+   * Layers:
+   * * `[MapSystemKeys.FlightPlan]`: MapSystemSharedFlightPlanLayer`
+   * * `[MapSystemKeys.TextLayer]: MapCullableTextLayer`
+   *
+   * Controllers:
+   * * `[MapSystemKeys.FlightPlan]: MapFlightPlanController`
+   * @param flightPlanner The flight planner.
+   * @param options Options with which to configure the layer.
+   * @param order The order to assign to the shared flight plan layer. Layers with lower assigned order will be
+   * attached to the map before and appear below layers with greater assigned order values. Defaults to the number of
+   * layers already added to this builder.
+   * @param cssClass CSS class(es) to apply to the shared flight plan layer.
+   * @returns This builder, after it has been configured.
+   */
+  public withSharedFlightPlans<UseContext = any>(
+    flightPlanner: FlightPlanner,
+    options?: Readonly<MapSystemSharedFlightPlansOptions>,
+    order?: number,
+    cssClass?: string | SubscribableSet<string>
+  ): ConditionalReturn<
+    any, any,
+    any, any,
+    DefaultIfAny<UseContext, Context>,
+    { [MapSystemKeys.FacilityLoader]: FacilityLoader; },
+    this
+  > {
+    const getWaypointRenderToContextOption = options?.getWaypointRenderToContext;
+    const addWaypointLayer = !getWaypointRenderToContextOption;
+    const waypointLayerCssClass = options?.waypointLayerCssClass;
+
+    this
+      .withTextLayer(options?.enableTextCulling ?? false)
+      .withModule(MapSystemKeys.FlightPlan, () => new MapFlightPlanModule())
+      .withWaypoints()
+      .withContext(MapSystemKeys.FlightPlanner, () => flightPlanner)
+      .withContext(MapSystemKeys.IconFactory, () => new MapSystemIconFactory())
+      .withContext(MapSystemKeys.LabelFactory, () => new MapSystemLabelFactory())
+      .withContext(MapSystemKeys.FlightPathRenderer, () => new MapSystemPlanRenderer(1))
+      .withController<
+        MapFlightPlanController,
+        MapFlightPlanControllerModules,
+        any, any,
+        MapFlightPlanControllerContext
+      >(MapSystemKeys.FlightPlan, context => new MapFlightPlanController(context))
+      .withOnAfterRender<
+        { [MapSystemKeys.FlightPlan]: MapFlightPlanModule; },
+        any, any,
+        {
+          [MapSystemKeys.FlightPlan]?: Map<number, MapSystemSharedFlightPlanDefinition>;
+          [MapSystemKeys.WaypointRenderer]: MapSystemWaypointsRenderer;
+          [MapSystemKeys.IconFactory]: MapSystemIconFactory;
+          [MapSystemKeys.LabelFactory]: MapSystemLabelFactory;
+          [MapSystemKeys.FlightPathRenderer]: MapSystemPlanRenderer;
+        }
+      >(MapSystemKeys.FlightPlan, context => {
+        const defs = context[MapSystemKeys.FlightPlan];
+
+        if (defs) {
+          const getWaypointRenderToContext = getWaypointRenderToContextOption
+            ?? (
+              (contextInner: MapSystemContext<any, { [MapSystemKeys.FlightPlanWaypoints]?: MapSyncedCanvasLayer }>) => {
+                return contextInner.getLayer(MapSystemKeys.FlightPlanWaypoints)?.display.context ?? null;
+              }
+            );
+
+          let hasDefaultRole = false;
+
+          for (const def of defs.values()) {
+            const waypointRenderer = context[MapSystemKeys.WaypointRenderer];
+            const iconFactory = context[MapSystemKeys.IconFactory];
+            const labelFactory = context[MapSystemKeys.LabelFactory];
+            const flightPathRenderer = context[MapSystemKeys.FlightPathRenderer];
+
+            const builder = new FlightPlanDisplayBuilder(
+              iconFactory,
+              labelFactory,
+              waypointRenderer,
+              flightPathRenderer,
+              def.planIndex
+            );
+
+            def.configure(builder, context);
+
+            const flightPlanRoles = waypointRenderer.getRoleNamesByGroup(builder.getRoleGroup());
+
+            for (let i = 0; i < flightPlanRoles.length; i++) {
+              const renderRole = waypointRenderer.getRoleFromName(flightPlanRoles[i]);
+
+              if (renderRole !== undefined) {
+                const canvasContext = getWaypointRenderToContext(context, def.planIndex, renderRole);
+
+                if (canvasContext) {
+                  waypointRenderer.setCanvasContext(renderRole, canvasContext);
+                  waypointRenderer.setIconFactory(renderRole, iconFactory);
+                  waypointRenderer.setLabelFactory(renderRole, labelFactory);
+                }
+
+                if (!hasDefaultRole) {
+                  flightPathRenderer.defaultRoleId = renderRole;
+                  hasDefaultRole = true;
+                }
+              }
+            }
+          }
+
+          delete (context as any)[MapSystemKeys.FlightPlan];
+        }
+      });
+
+    const layerCount = this.layerCount;
+
+    this.withLayer<
+      MapSystemSharedFlightPlanLayer,
+      MapSystemSharedFlightPlanLayerModules,
+      {
+        [MapSystemKeys.FlightPlan]?: Map<number, MapSystemSharedFlightPlanDefinition>;
+        [MapSystemKeys.FacilityLoader]: FacilityLoader;
+        [MapSystemKeys.WaypointRenderer]: MapSystemWaypointsRenderer;
+        [MapSystemKeys.IconFactory]: MapSystemIconFactory;
+        [MapSystemKeys.LabelFactory]: MapSystemLabelFactory;
+        [MapSystemKeys.FlightPathRenderer]: MapSystemPlanRenderer;
+        [MapSystemKeys.WaypointRendererAirportDataFlags]?: number;
+      }
+    >(MapSystemKeys.FlightPlan, (context) => {
+      const defs = context[MapSystemKeys.FlightPlan];
+      return (
+        <MapSystemSharedFlightPlanLayer
+          model={context.model}
+          mapProjection={context.projection}
+          planConfigs={
+            defs
+              ? [...defs.values()].map(def => ({ planIndex: def.planIndex, waypointFactory: def.waypointFactory }))
+              : []
+          }
+          waypointRenderer={context[MapSystemKeys.WaypointRenderer]}
+          facilityLoader={context[MapSystemKeys.FacilityLoader]}
+          flightPathRenderer={context[MapSystemKeys.FlightPathRenderer]}
+          airportFacilityDataFlags={context[MapSystemKeys.WaypointRendererAirportDataFlags]}
+          class={cssClass}
+        />
+      );
+    }, order ?? layerCount);
+
+    if (addWaypointLayer) {
+      this.withLayer(MapSystemKeys.FlightPlanWaypoints, context => {
+        return (
+          <MapSyncedCanvasLayer
+            model={context.model}
+            mapProjection={context.projection}
+            class={waypointLayerCssClass}
+          />
+        );
+      }, order ?? layerCount);
+    }
+
+    return this.withLayerOrder(MapSystemKeys.TextLayer, order ?? layerCount) as any;
+  }
+
+  /**
+   * Configures this builder to provide a definition for displaying a flight plan in a shared flight plan layer. The
+   * definition is added to the map stored in the map context under the `MapSystemKeys.FlightPlan` key.
+   * @param planIndex The index of the flight plan to display.
+   * @param waypointFactory A factory from which to get waypoints for flight plan legs to display.
+   * @param configure A function to configure the display of the flight plan.
+   * @returns The map builder, after it has been configured.
+   */
+  public withSharedFlightPlanDefinition(
+    planIndex: number,
+    waypointFactory: MapSystemSharedFlightPlanWaypointFactory,
+    configure: (builder: FlightPlanDisplayBuilder, context: MapSystemContext<
+      { [MapSystemKeys.FlightPlan]: MapFlightPlanModule },
+      any, any,
+      {
+        [MapSystemKeys.WaypointRenderer]: MapSystemWaypointsRenderer;
+        [MapSystemKeys.IconFactory]: MapSystemIconFactory;
+        [MapSystemKeys.LabelFactory]: MapSystemLabelFactory;
+        [MapSystemKeys.FlightPathRenderer]: MapSystemPlanRenderer;
+      }
+    >) => void
+  ): this {
+    return this
+      .withContext<{
+        [MapSystemKeys.FlightPlan]?: Map<number, MapSystemSharedFlightPlanDefinition>;
+      }>(
+        `sharedFlightPlanDefinition_${planIndex}`,
+        context => {
+          const factories = (context[MapSystemKeys.FlightPlan] as Map<number, MapSystemSharedFlightPlanDefinition>) ??= new Map();
+          factories.set(planIndex,
+            {
+              planIndex,
+              waypointFactory,
+              configure,
+            }
+          );
+
+          return undefined;
+        }
+      );
   }
 
   /**
@@ -1342,6 +1694,17 @@ export class MapSystemBuilder<
             console.error(e.stack);
           }
         }
+
+        for (const callback of this.onAfterRenderCallbacks.values()) {
+          try {
+            callback(context);
+          } catch (e) {
+            console.error(`MapSystem: error in on after render callback: ${e}`);
+            if (e instanceof Error) {
+              console.error(e.stack);
+            }
+          }
+        }
       }
     };
 
@@ -1491,6 +1854,7 @@ export class MapSystemBuilder<
         projection={context.projection}
         bus={context.bus}
         projectedSize={this.projectedSize}
+        deadZone={context.deadZone}
         onAfterRender={onAfterRender}
         onDeadZoneChanged={onDeadZoneChanged}
         onMapProjectionChanged={onMapProjectionChanged}

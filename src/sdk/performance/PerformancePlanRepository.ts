@@ -41,15 +41,29 @@ export type PerformancePlanSyncEventsForId<ID extends string> = {
 type PerformancePlanSyncEvents = BasePerformancePlanSyncEvents & PerformancePlanSyncEventsForId<string>;
 
 /**
+ * An entry for a performance plan key definition.
+ */
+type DefinitionEntry<P extends PerformancePlan, K extends keyof P & string> = {
+  /** The key. */
+  key: K;
+
+  /** The definition for the key. */
+  definition: PerformancePlanDefinition<P[K] extends MutableSubscribable<infer U> ? U : never>;
+};
+
+/**
  * Correlates flight plan indices with performance plan objects
  */
 export class PerformancePlanRepository<P extends PerformancePlan, ID extends string = any> {
   public static DEFAULT_VALUES_PLAN_INDEX = Number.MAX_SAFE_INTEGER;
 
-  private static SYNC_PLAN_INDEX = PerformancePlanRepository.DEFAULT_VALUES_PLAN_INDEX - 1;
+  private static readonly SYNC_PLAN_INDEX = PerformancePlanRepository.DEFAULT_VALUES_PLAN_INDEX - 1;
+
   private readonly repoId = Math.floor(Math.random() * 10000000);
 
   private readonly eventSuffix = (this.id === '' ? '' : `_${this.id}`) as FlightPlannerEventSuffix<ID>;
+
+  private readonly definitionEntries: DefinitionEntry<P, keyof P & string>[];
 
   private _plans: P[] = [];
 
@@ -67,8 +81,14 @@ export class PerformancePlanRepository<P extends PerformancePlan, ID extends str
     private readonly id: ID,
     private readonly bus: EventBus,
     private readonly flightPlanner: FlightPlanner,
-    private readonly definitions: PerformancePlanDefinitionObject<P>
+    definitions: PerformancePlanDefinitionObject<P>
   ) {
+    this.definitionEntries = [];
+    for (const key in definitions) {
+      const definition = definitions[key];
+      this.definitionEntries.push({ key, definition });
+    }
+
     this._plans[PerformancePlanRepository.DEFAULT_VALUES_PLAN_INDEX] = this.createPlanFromDefinitions();
     this._plans[PerformancePlanRepository.SYNC_PLAN_INDEX] = this.createPlanFromDefinitions();
     this._plans[flightPlanner.activePlanIndex] = this.createPlanFromDefinitions();
@@ -235,7 +255,7 @@ export class PerformancePlanRepository<P extends PerformancePlan, ID extends str
   private createPlanFromDefinitions(): P {
     const plan: Record<string, MutableSubscribable<any>> = {};
 
-    for (const [key, definition] of Object.entries(this.definitions)) {
+    for (const { key, definition } of this.definitionEntries) {
       plan[key] = Subject.create((definition as PerformancePlanDefinition<any>).defaultValue);
     }
 
@@ -251,18 +271,16 @@ export class PerformancePlanRepository<P extends PerformancePlan, ID extends str
    */
   public createPerformancePlanProxy(callbacks: PerformancePlanProxyCallbacks<P>): PerformancePlanProxy<P> {
     const defaultValuesPlan = this.defaultValuesPlan();
-    const definitions = this.definitions;
+    const definitionEntries = this.definitionEntries;
 
     const proxy: PerformancePlanProxy<P> = {
       defaultValuesPlan,
 
       /** @inheritDoc */
       switchToPlan(plan: P, initial: boolean) {
-        for (const [key, definition] of Object.entries(definitions)) {
+        for (const { key, definition } of definitionEntries) {
           if (initial || (definition as PerformancePlanDefinition<any>).differentiateBetweenFlightPlans) {
-            const typedKey = key as keyof P;
-
-            (this as PerformancePlanProxy<P>)[typedKey].switchToPlan(plan);
+            (this as PerformancePlanProxy<P>)[key].switchToPlan(plan);
           }
         }
       },
@@ -278,26 +296,20 @@ export class PerformancePlanRepository<P extends PerformancePlan, ID extends str
       },
     } as unknown as PerformancePlanProxy<P>;
 
-    for (const [key, definition] of Object.entries(definitions)) {
-      const typedKey = key as keyof P;
-      const typedDefinition = definition as PerformancePlanDefinition<any>;
-
-      const property = new ProxiedPerformancePlanProperty<P, typeof typedKey>(
+    for (const { key, definition } of definitionEntries) {
+      const property = new ProxiedPerformancePlanProperty<P, typeof key>(
         proxy,
-        typedKey,
-        typedDefinition.differentiateBetweenFlightPlans ?? false,
+        key,
+        definition.differentiateBetweenFlightPlans ?? false,
       );
 
-      (proxy as unknown as Record<keyof P, ProxiedPerformancePlanProperty<P, typeof typedKey>>)[typedKey] = property;
+      (proxy as unknown as Record<keyof P, ProxiedPerformancePlanProperty<P, typeof key>>)[key] = property;
     }
 
     proxy.switchToPlan(this.getActivePlan(), true);
 
-    for (const [key, definition] of Object.entries(definitions)) {
-      const typedKey = key as keyof P;
-      const typedDefinition = definition as PerformancePlanDefinition<any>;
-
-      proxy[typedKey].set(typedDefinition.defaultValue);
+    for (const { key, definition } of definitionEntries) {
+      proxy[key].set(definition.defaultValue);
     }
 
     return proxy;

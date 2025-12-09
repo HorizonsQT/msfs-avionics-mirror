@@ -83,7 +83,7 @@ export class ArrayUtils {
    * @returns The element at the specified index in the array.
    * @throws RangeError if the index is out of bounds.
    */
-  public static at<T>(array: readonly T[], index: number): T {
+  public static at<T>(array: ArrayLike<T>, index: number): T {
     if (index < 0) {
       index += array.length;
     }
@@ -102,7 +102,7 @@ export class ArrayUtils {
    * array (`-1` accesses the last element, `-2` the second to last element, etc).
    * @returns The element at the specified index in the array, or `undefined` if the index is out of bounds.
    */
-  public static peekAt<T>(array: readonly T[], index: number): T | undefined {
+  public static peekAt<T>(array: ArrayLike<T>, index: number): T | undefined {
     if (index < 0) {
       index += array.length;
     }
@@ -116,7 +116,7 @@ export class ArrayUtils {
    * @returns The first element of the specified array.
    * @throws RangeError if the array is empty.
    */
-  public static first<T>(array: readonly T[]): T {
+  public static first<T>(array: ArrayLike<T>): T {
     if (array.length === 0) {
       throw new RangeError();
     }
@@ -129,7 +129,7 @@ export class ArrayUtils {
    * @param array An array.
    * @returns The first element of an array if it is not empty, or `undefined` otherwise.
    */
-  public static peekFirst<T>(array: readonly T[]): T | undefined {
+  public static peekFirst<T>(array: ArrayLike<T>): T | undefined {
     return array[0];
   }
 
@@ -139,7 +139,7 @@ export class ArrayUtils {
    * @returns The last element of the specified array.
    * @throws RangeError if the array is empty.
    */
-  public static last<T>(array: readonly T[]): T {
+  public static last<T>(array: ArrayLike<T>): T {
     if (array.length === 0) {
       throw new RangeError();
     }
@@ -152,7 +152,7 @@ export class ArrayUtils {
    * @param array An array.
    * @returns The last element of an array if it is not empty, or `undefined` otherwise.
    */
-  public static peekLast<T>(array: readonly T[]): T | undefined {
+  public static peekLast<T>(array: ArrayLike<T>): T | undefined {
     return array[array.length - 1];
   }
 
@@ -176,7 +176,7 @@ export class ArrayUtils {
    * to a function which uses the strict equality operator (`===`).
    * @returns Whether the two specified arrays are equal.
    */
-  public static equals<T1, T2>(a: readonly T1[], b: readonly T2[], equalsFunc: (a: T1, b: T2) => boolean = ArrayUtils.STRICT_EQUALS): boolean {
+  public static equals<T1, T2>(a: ArrayLike<T1>, b: ArrayLike<T2>, equalsFunc: (a: T1, b: T2) => boolean = ArrayUtils.STRICT_EQUALS): boolean {
     if (a.length !== b.length) {
       return false;
     }
@@ -311,7 +311,7 @@ export class ArrayUtils {
    * the query element would be found if it were contained in the sorted array, if no element in the array has a
    * sorting order equal to the query.
    */
-  public static binarySearch<T>(array: readonly T[], element: T, comparator: (a: T, b: T) => number, first = true): number {
+  public static binarySearch<T>(array: ArrayLike<T>, element: T, comparator: (a: T, b: T) => number, first = true): number {
     let min = 0;
     let max = array.length;
     let index = Math.floor((min + max) / 2);

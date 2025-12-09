@@ -301,6 +301,7 @@ export class FlightPathCalculator {
 
     this.state = new FlightPathStateClass(
       this.dataProvider,
+      this.facilityCache,
       this.options,
       this.bankAngleTable,
       this.holdBankAngleTable,
@@ -800,6 +801,7 @@ class FlightPathStateClass implements FlightPathState {
   private readonly anticipatedData: FlightPathAnticipatedData[] = [];
 
   private readonly anticipatedSpeedsContext = {
+    facilityCache: this.facilityCache,
     activeLegIndex: 0,
     altitude: NaN,
     verticalSpeed: NaN,
@@ -814,8 +816,9 @@ class FlightPathStateClass implements FlightPathState {
   } satisfies FlightPathAnticipatedDataContext;
 
   /**
-   * Creates an instance of a plane state class.
+   * Creates an instance of FlightPathStateClass.
    * @param dataProvider A provider of flight path calculator data.
+   * @param facilityCache A cache containing facilities referenced by flight plan legs to be calculated.
    * @param options Flight path calculator options.
    * @param bankAngleTable A lookup table for general turn bank angle, in degrees, versus airplane speed.
    * @param holdBankAngleTable A lookup table for hold turn bank angle, in degrees, versus airplane speed, in knots.
@@ -828,6 +831,7 @@ class FlightPathStateClass implements FlightPathState {
    */
   public constructor(
     private readonly dataProvider: FlightPathCalculatorDataProvider,
+    private readonly facilityCache: FlightPathCalculatorFacilityCache,
     private options: Readonly<FlightPathStateClassCalculatorOptions>,
     private bankAngleTable: LerpLookupTable,
     private holdBankAngleTable: LerpLookupTable | undefined,

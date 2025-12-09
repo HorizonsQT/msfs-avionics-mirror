@@ -4,11 +4,9 @@ import { CdiEvents } from '../cdi/CdiEvents';
 import { CdiUtils } from '../cdi/CdiUtils';
 import { ControlEvents } from '../data/ControlPublisher';
 import { EventBus } from '../data/EventBus';
-import { SimVarValueType } from '../data/SimVars';
+import { RegisteredSimVarUtils, SimVarValueType } from '../data/SimVars';
 import { FlightPlanner } from '../flightplan/FlightPlanner';
-import { AdcEvents } from '../instruments/Adc';
 import { APEvents } from '../instruments/APPublisher';
-import { ClockEvents } from '../instruments/Clock';
 import { NavComEvents } from '../instruments/NavCom';
 import { NavSourceId, NavSourceType } from '../instruments/NavProcessor';
 import { MSFSAPStates } from '../navigation/AutopilotListener';
@@ -19,6 +17,7 @@ import { AutopilotModeVars } from './APModeVars';
 import { APAltitudeModes, APLateralModes, APVerticalModes } from './APTypes';
 import { APValues } from './APValues';
 import { AutopilotDriver } from './AutopilotDriver';
+import { DefaultAPDataProvider } from './DefaultAPDataProvider';
 import { APNoneLateralDirector, APNoneVerticalDirector } from './directors/APNoneDirectors';
 import { DirectorState, PlaneDirector } from './directors/PlaneDirector';
 import { APModePressEvent, APStateManager } from './managers/APStateManager';
@@ -51,6 +50,10 @@ export class Autopilot<Config extends APConfig = APConfig> {
   protected verticalAltitudeArmed: APAltitudeModes = APAltitudeModes.NONE;
   protected verticalApproachArmed: number = APVerticalModes.NONE;
   protected altCapArmed = false;
+
+  /**
+   * @deprecated Mode failure and reversion logic should be handled by subclasses of `Autopilot`.
+   */
   protected lateralModeFailed = false;
 
   protected inClimb = false;
@@ -62,10 +65,18 @@ export class Autopilot<Config extends APConfig = APConfig> {
   /** Can be set to false in child classes to override behavior for certain aircraft. */
   protected requireApproachIsActiveForNavToNav = true;
 
+  protected readonly dataProvider = this.config.getDataProvider?.() ?? new DefaultAPDataProvider();
+
+  protected readonly simRateSimVar = RegisteredSimVarUtils.create('E:SIMULATION RATE', SimVarValueType.Number);
+  protected readonly activeSimDurationSimVar = RegisteredSimVarUtils.create('E:SIMULATION TIME', SimVarValueType.Seconds);
+
   protected readonly _apValues = {
+    dataProvider: this.dataProvider,
     cdiId: this.config.cdiId ?? '',
     cdiSource: Subject.create<Readonly<NavSourceId>>(this.cdiSource, CdiUtils.navSourceIdEquals),
-    simRate: Subject.create(0),
+    simRate: Subject.create(this.simRateSimVar.get()),
+    activeSimDuration: Subject.create(this.activeSimDurationSimVar.get() * 1000),
+    apMasterOn: Subject.create(false),
     selectedAltitude: Subject.create(0),
     selectedVerticalSpeed: Subject.create(0),
     selectedFlightPathAngle: Subject.create(0),
@@ -90,7 +101,7 @@ export class Autopilot<Config extends APConfig = APConfig> {
     lateralArmed: Subject.create<APLateralModes>(APLateralModes.NONE),
     verticalArmed: Subject.create<APVerticalModes>(APVerticalModes.NONE),
     apApproachModeOn: Subject.create<boolean>(false)
-  };
+  } satisfies APValues;
 
   public readonly apValues: APValues = this._apValues;
 
@@ -256,6 +267,7 @@ export class Autopilot<Config extends APConfig = APConfig> {
       case APVerticalModes.ALT:
         director.onArm = () => { this.setVerticalArmed(mode); };
         director.onActivate = () => {
+          this.verticalModes.get(APVerticalModes.CAP)?.deactivate();
           this.altCapArmed = false;
           this.setVerticalActive(mode);
         };
@@ -271,6 +283,9 @@ export class Autopilot<Config extends APConfig = APConfig> {
           this.altCapArmed = false;
           this.setVerticalActive(mode);
           this.verticalModes.get(APVerticalModes.ALT)?.arm();
+        };
+        director.onDeactivate = () => {
+          this.altCapArmed = false;
         };
         break;
       case APVerticalModes.PATH:
@@ -342,7 +357,7 @@ export class Autopilot<Config extends APConfig = APConfig> {
    */
   protected initVNavManager(): void {
     if (this.vnavManager) {
-      this.vnavManager.armMode = (mode: APVerticalModes): void => {
+      this.vnavManager.armMode = (mode: number): void => {
         const armedMode = this.apValues.verticalArmed.get();
         if (mode === APVerticalModes.NONE && (armedMode === APVerticalModes.PATH || armedMode === APVerticalModes.FLC)) {
           this.setVerticalArmed(mode);
@@ -350,11 +365,16 @@ export class Autopilot<Config extends APConfig = APConfig> {
           this.verticalModes.get(mode)?.arm();
         }
       };
-      this.vnavManager.activateMode = (mode: APVerticalModes): void => {
+      this.vnavManager.activateMode = (mode: number): void => {
         if (mode === APVerticalModes.NONE && this.apValues.verticalActive.get() === APVerticalModes.PATH) {
           this.verticalModes.get(this.getDefaultVerticalMode())?.activate();
         } else {
           this.verticalModes.get(mode)?.activate();
+        }
+      };
+      this.vnavManager.deactivateMode = (mode: number): void => {
+        if (mode !== APVerticalModes.NONE) {
+          this.verticalModes.get(mode)?.deactivate();
         }
       };
     }
@@ -365,7 +385,12 @@ export class Autopilot<Config extends APConfig = APConfig> {
    */
   public update(): void {
     if (this.autopilotInitialized) {
+      this._apValues.simRate.set(this.simRateSimVar.get());
+      this._apValues.activeSimDuration.set(this.activeSimDurationSimVar.get() * 1000);
+
       this.onBeforeUpdate();
+      this.dataProvider.onBeforeUpdate();
+      this.updateCachedAltitudeData();
       this.stateManager.onBeforeUpdate();
       this.updateNavToNavManagerBefore();
       this.apDriver.update();
@@ -374,8 +399,17 @@ export class Autopilot<Config extends APConfig = APConfig> {
       this.updateModes();
       this.updateNavToNavManagerAfter();
       this.stateManager.onAfterUpdate();
+      this.dataProvider.onAfterUpdate();
       this.onAfterUpdate();
     }
+  }
+
+  /**
+   * Updates this autopilot's cached altitude data.
+   */
+  protected updateCachedAltitudeData(): void {
+    this.inClimb = this.dataProvider.getItem('indicated_vertical_speed').getValue() >= 1;
+    this.currentAltitude = this.dataProvider.getItem('indicated_altitude').getValue();
   }
 
   /**
@@ -796,57 +830,93 @@ export class Autopilot<Config extends APConfig = APConfig> {
       return;
     }
 
-    const { lateralActive, lateralArmed, verticalActive, verticalArmed } = this.apValues;
-
-    if (!this.lateralModes.has(lateralActive.get()) || this.lateralModes.get(lateralActive.get())?.state !== DirectorState.Active) {
-      if (lateralActive.get() !== APLateralModes.NONE) {
-        this.lateralModeFailed = true;
-      }
-      this.lateralModes.get(this.getDefaultLateralMode())?.arm();
+    const lateralActiveMode = this.apValues.lateralActive.get();
+    if (this.lateralModes.get(lateralActiveMode)?.state !== DirectorState.Active) {
+      this.handleLateralActiveModeReversion(lateralActiveMode);
     }
-    if (lateralArmed.get() !== APLateralModes.NONE
-      && (!this.lateralModes.has(lateralArmed.get()) || this.lateralModes.get(lateralArmed.get())?.state !== DirectorState.Armed)) {
+
+    const lateralArmedMode = this.apValues.lateralArmed.get();
+    if (
+      lateralArmedMode !== APLateralModes.NONE
+      && this.lateralModes.get(lateralArmedMode)?.state !== DirectorState.Armed
+    ) {
       this.setLateralArmed(APLateralModes.NONE);
     }
-    if (!this.verticalModes.has(verticalActive.get()) || this.verticalModes.get(verticalActive.get())?.state !== DirectorState.Active) {
-      this.verticalModes.get(this.getDefaultVerticalMode())?.arm();
+
+    const verticalActiveMode = this.apValues.verticalActive.get();
+    if (this.verticalModes.get(verticalActiveMode)?.state !== DirectorState.Active) {
+      this.handleVerticalActiveModeReversion(verticalActiveMode);
     }
-    if (verticalArmed.get() !== APVerticalModes.NONE
-      && (!this.verticalModes.has(verticalArmed.get()) || this.verticalModes.get(verticalArmed.get())?.state !== DirectorState.Armed)) {
+
+    const verticalArmedMode = this.apValues.verticalArmed.get();
+    if (
+      verticalArmedMode !== APVerticalModes.NONE
+      && this.verticalModes.get(verticalArmedMode)?.state !== DirectorState.Armed
+    ) {
       this.setVerticalArmed(APVerticalModes.NONE);
     }
-    if (this.verticalApproachArmed !== APVerticalModes.NONE &&
-      (!this.verticalModes.has(this.verticalApproachArmed) || this.verticalModes.get(this.verticalApproachArmed)?.state !== DirectorState.Armed)) {
+
+    if (
+      this.verticalApproachArmed !== APVerticalModes.NONE
+      && this.verticalModes.get(this.verticalApproachArmed)?.state !== DirectorState.Armed
+    ) {
       this.setVerticalApproachArmed(APVerticalModes.NONE);
     }
+  }
+
+  /**
+   * Handles when the active lateral mode must be reverted to another mode.
+   * @param mode The active lateral mode that must be reverted.
+   */
+  protected handleLateralActiveModeReversion(mode: number): void {
+    if (mode !== APLateralModes.NONE) {
+      this.lateralModeFailed = true;
+    }
+
+    this.lateralModes.get(this.getDefaultLateralMode())?.arm();
+  }
+
+  /**
+   * Handles when the active vertical mode must be reverted to another mode.
+   * @param mode The active vertical mode that must be reverted.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  protected handleVerticalActiveModeReversion(mode: number): void {
+    this.verticalModes.get(this.getDefaultVerticalMode())?.arm();
   }
 
   /**
    * Runs update on each of the active and armed modes.
    */
   protected updateModes(): void {
-    const { lateralActive, lateralArmed, verticalActive, verticalArmed } = this.apValues;
+    const lateralActiveMode = this.apValues.lateralActive.get();
+    if (lateralActiveMode !== APLateralModes.NONE) {
+      this.lateralModes.get(lateralActiveMode)?.update();
+    }
 
-    if (lateralActive.get() !== APLateralModes.NONE && this.lateralModes.has(lateralActive.get())) {
-      this.lateralModes.get(lateralActive.get())?.update();
+    const lateralArmedMode = this.apValues.lateralArmed.get();
+    if (lateralArmedMode !== APLateralModes.NONE) {
+      this.lateralModes.get(lateralArmedMode)?.update();
     }
-    if (lateralArmed.get() !== APLateralModes.NONE && this.lateralModes.has(lateralArmed.get())) {
-      this.lateralModes.get(lateralArmed.get())?.update();
+
+    const verticalActiveMode = this.apValues.verticalActive.get();
+    if (verticalActiveMode !== APVerticalModes.NONE) {
+      this.verticalModes.get(verticalActiveMode)?.update();
     }
-    if (verticalActive.get() !== APVerticalModes.NONE && this.verticalModes.has(verticalActive.get())) {
-      this.verticalModes.get(verticalActive.get())?.update();
+
+    const verticalArmedMode = this.apValues.verticalArmed.get();
+    if (verticalArmedMode !== APVerticalModes.NONE) {
+      this.verticalModes.get(verticalArmedMode)?.update();
     }
-    if (verticalArmed.get() !== APVerticalModes.NONE && this.verticalModes.has(verticalArmed.get())) {
-      this.verticalModes.get(verticalArmed.get())?.update();
-    }
-    if (this.verticalApproachArmed !== APVerticalModes.NONE && this.verticalModes.has(this.verticalApproachArmed)) {
+
+    if (this.verticalApproachArmed !== APVerticalModes.NONE) {
       this.verticalModes.get(this.verticalApproachArmed)?.update();
     }
+
     if (this.altCapArmed) {
       this.verticalModes.get(APVerticalModes.CAP)?.update();
     }
-    //while vnav and vnav director are one in the same we always want to
-    //run the vnav update cycle no matter the director state
+
     this.vnavManager?.update();
   }
 
@@ -910,6 +980,8 @@ export class Autopilot<Config extends APConfig = APConfig> {
    * Monitors subevents and bus events.
    */
   protected monitorEvents(): void {
+    this.stateManager.apMasterOn.pipe(this.apValues.apMasterOn);
+
     this.stateManager.lateralPressed.on((sender, data) => {
       if (this.autopilotInitialized && data !== undefined) {
         this.lateralPressed(data);
@@ -947,9 +1019,6 @@ export class Autopilot<Config extends APConfig = APConfig> {
       this._apValues.cdiSource.set(src);
     });
 
-    const clock = this.bus.getSubscriber<ClockEvents>();
-    clock.on('simRate').withPrecision(0).handle(this.apValues.simRate.set.bind(this.apValues.simRate));
-
     const ap = this.bus.getSubscriber<APEvents>();
     ap.on(`ap_altitude_selected_${this.config.altitudeHoldSlotIndex ?? 1}`).withPrecision(0).handle((alt) => {
       this.apValues.selectedAltitude.set(alt);
@@ -983,14 +1052,6 @@ export class Autopilot<Config extends APConfig = APConfig> {
     });
     navproc.on('nav_glideslope_4').whenChanged().handle((hasgs) => {
       this.apValues.nav4HasGs.set(hasgs);
-    });
-
-    const adc = this.bus.getSubscriber<AdcEvents>();
-    adc.on('vertical_speed').withPrecision(0).handle((vs) => {
-      this.inClimb = vs < 1 ? false : true;
-    });
-    adc.on('indicated_alt').withPrecision(0).handle(alt => {
-      this.currentAltitude = alt;
     });
 
     const vnav = this.bus.getSubscriber<VNavEvents>();

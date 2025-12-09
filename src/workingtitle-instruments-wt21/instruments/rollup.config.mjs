@@ -11,15 +11,15 @@ export default [
       file: 'dist/workingtitle-instruments-wt21-v2/html_ui/Pages/VCockpit/Instruments/WT21v2/MFD/MFD.js',
       format: 'iife',
       sourcemap: false,
-      name: 'mfd',
+      name: 'wt21_mfd',
       globals: {
         '@microsoft/msfs-sdk': 'msfssdk',
         '@microsoft/msfs-wtlinesdk': 'wtlinesdk',
-        '@microsoft/msfs-wt21-shared': 'msfs-wt21-shared',
-      }
+        '@microsoft/msfs-wt21-shared': 'wt21_shared',
+      },
     },
     external: ['@microsoft/msfs-sdk', '@microsoft/msfs-wtlinesdk', '@microsoft/msfs-wt21-shared'],
-    plugins: [image(), css({ output: 'MFD.css' }), resolve()]
+    plugins: [image(), css({ output: 'MFD.css' }), resolve()],
   },
   {
     input: 'build/workingtitle-instruments-wt21-v2/html_ui/Pages/VCockpit/Instruments/WT21v2/PFD/WT21_PFD.js',
@@ -27,14 +27,15 @@ export default [
       file: 'dist/workingtitle-instruments-wt21-v2/html_ui/Pages/VCockpit/Instruments/WT21v2/PFD/PFD.js',
       format: 'iife',
       sourcemap: false,
-      name: 'pfd',
+      name: 'wt21_pfd',
       globals: {
         '@microsoft/msfs-sdk': 'msfssdk',
         '@microsoft/msfs-wtlinesdk': 'wtlinesdk',
-        '@microsoft/msfs-wt21-shared': 'msfs-wt21-shared'
-      }    },
+        '@microsoft/msfs-wt21-shared': 'wt21_shared'
+      },
+    },
     external: ['@microsoft/msfs-sdk', '@microsoft/msfs-wtlinesdk', '@microsoft/msfs-wt21-shared'],
-    plugins: [image(), css({ output: 'PFD.css' }), resolve()]
+    plugins: [image(), css({ output: 'PFD.css' }), resolve()],
   },
   {
     input: 'build/workingtitle-instruments-wt21-v2/html_ui/Pages/VCockpit/Instruments/WT21v2/FMC/WT21_FMC.js',
@@ -42,13 +43,14 @@ export default [
       file: 'dist/workingtitle-instruments-wt21-v2/html_ui/Pages/VCockpit/Instruments/WT21v2/FMC/FMC.js',
       format: 'iife',
       sourcemap: false,
-      name: 'fmc',
+      name: 'wt21_fmc',
       globals: {
         '@microsoft/msfs-sdk': 'msfssdk',
         '@microsoft/msfs-wtlinesdk': 'wtlinesdk',
-        '@microsoft/msfs-wt21-shared': 'msfs-wt21-shared'
-      }    },
+        '@microsoft/msfs-wt21-shared': 'wt21_shared'
+      },
+    },
     external: ['@microsoft/msfs-sdk', '@microsoft/msfs-wtlinesdk', '@microsoft/msfs-wt21-shared'],
-    plugins: [image(), css({ output: 'FMC.css' }), resolve()]
+    plugins: [image(), css({ output: 'FMC.css' }), resolve()],
   },
 ];

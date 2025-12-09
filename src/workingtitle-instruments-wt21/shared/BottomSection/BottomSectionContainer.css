@@ -126,6 +126,12 @@
   visibility: hidden;
 }
 
+/* NOTE: Explicit dimensions are specified to minimize reflow. */
+.bottom-section-data-value.utc-value {
+  width: 105px;
+  height: 32px;
+}
+
 .bottom-section-xpdr-failed {
   font-size: 22px;
   color: var(--wt21-colors-yellow);

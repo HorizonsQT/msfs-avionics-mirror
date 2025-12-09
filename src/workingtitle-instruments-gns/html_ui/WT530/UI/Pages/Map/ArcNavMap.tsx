@@ -1,6 +1,6 @@
 import {
-  ActiveLegType, ClockEvents, FlightPlanActiveLegEvent, FocusPosition, FSComponent, GPSSatComputerEvents, GPSSystemState, LegType, Subject,
-  TcasAdvisoryDataProvider, UserSetting, UserSettingValue, VNode
+  ActiveLegType, ClockEvents, FlightPlan, FlightPlanActiveLegEvent, FlightPlanIndicationEvent, FocusPosition, FSComponent, GPSSatComputerEvents, GPSSystemState, LegType,
+  Subject, TcasAdvisoryDataProvider, UserSetting, UserSettingValue, VNode
 } from '@microsoft/msfs-sdk';
 
 import { DefaultNavDataBarFieldModelFactory, DirectToState, Fms, NavDataFieldGpsValidity, NavDataFieldType, TrafficSystem } from '@microsoft/msfs-garminsdk';
@@ -114,6 +114,7 @@ export class ArcNavMap extends Page<ArcNavMapProps> {
     super.onAfterRender(node);
     this.ArcMap.ref.instance.sleep();
 
+    this.props.fms.flightPlanner.onEvent('fplIndexChanged').handle(this.onPlanIndexChanged.bind(this));
     this.props.fms.flightPlanner.onEvent('fplActiveLegChange').handle(this.onActiveLegChanged.bind(this));
     this.legIcon.instance.updateLegIcon(true, false, LegType.TF);
 
@@ -143,8 +144,44 @@ export class ArcNavMap extends Page<ArcNavMapProps> {
       const valid = state === GPSSystemState.SolutionAcquired || state === GPSSystemState.DiffSolutionAcquired;
       this.gpsValidity.set(valid ? NavDataFieldGpsValidity.Valid : NavDataFieldGpsValidity.Invalid);
     });
+  }
 
+  /**
+   * Handles the active plan index changes in Flight Planner.
+   * @param evt The event describing the active plan index change.
+   */
+  private onPlanIndexChanged(evt: FlightPlanIndicationEvent): void {
+    let plan: FlightPlan | undefined = undefined;
+    if (evt.planIndex === Fms.PRIMARY_PLAN_INDEX && this.props.fms.hasPrimaryFlightPlan()) {
+      plan = this.props.fms.getPrimaryFlightPlan();
+    } else if (evt.planIndex === Fms.DTO_RANDOM_PLAN_INDEX && this.props.fms.hasDirectToFlightPlan()) {
+      plan = this.props.fms.getDirectToFlightPlan();
+    }
 
+    let foundLeg = false;
+    if (plan !== undefined) {
+      const index = plan.getLegIndexesFromGlobalLegIndex(plan.activeLateralLeg);
+      const leg = plan.tryGetLeg(plan.getLegIndexesFromGlobalLegIndex(plan.activeLateralLeg));
+
+      if (leg !== null) {
+        foundLeg = true;
+        this.onActiveLegChanged({
+          planIndex: evt.planIndex,
+          index: plan.activeLateralLeg,
+          segmentIndex: index.segmentIndex,
+          legIndex: index.segmentLegIndex,
+          previousSegmentIndex: index.segmentLegIndex,
+          previousLegIndex: index.segmentLegIndex,
+          type: ActiveLegType.Lateral
+        });
+      }
+    }
+
+    if (!foundLeg) {
+      this.fromWaypoint.instance.setLeg(null);
+      this.toWaypoint.instance.setLeg(null);
+      this.legIcon.instance.updateLegIcon(false);
+    }
   }
 
   /**
@@ -156,8 +193,15 @@ export class ArcNavMap extends Page<ArcNavMapProps> {
       return;
     }
 
-    if (this.props.fms.hasPrimaryFlightPlan() && data.type === ActiveLegType.Lateral) {
-      const plan = this.props.fms.getPrimaryFlightPlan();
+    const fms = this.props.fms;
+    const hasValidPlan = (fms.flightPlanner.activePlanIndex === Fms.PRIMARY_PLAN_INDEX && fms.hasPrimaryFlightPlan())
+      || (fms.flightPlanner.activePlanIndex === Fms.DTO_RANDOM_PLAN_INDEX && fms.hasDirectToFlightPlan());
+
+    if (hasValidPlan && data.type === ActiveLegType.Lateral) {
+      const plan = fms.flightPlanner.activePlanIndex === Fms.PRIMARY_PLAN_INDEX
+        ? fms.getPrimaryFlightPlan()
+        : fms.getDirectToFlightPlan();
+
       const toLeg = plan.tryGetLeg(data.segmentIndex, data.legIndex);
       this.toWaypoint.instance.setLeg(toLeg);
 

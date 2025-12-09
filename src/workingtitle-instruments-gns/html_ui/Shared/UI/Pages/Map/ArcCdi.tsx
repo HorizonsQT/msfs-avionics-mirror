@@ -60,6 +60,7 @@ export abstract class ArcCdi extends DisplayComponent<ArcCdiProps> {
     this.xtkSource.setConsumer(sub.on(`lnavdata_xtk${lnavTopicSuffix}`));
     sub.on('realTime').atFrequency(6).handle(this.onXtkChanged.bind(this));
 
+    this.props.fms.flightPlanner.onEvent('fplIndexChanged').handle(this.onActiveLegChanged.bind(this));
     this.props.fms.flightPlanner.onEvent('fplActiveLegChange').handle(this.onActiveLegChanged.bind(this));
 
     this.toFlagVisible.sub(this.setElementVisibility(this.toFlag), true);
@@ -177,7 +178,16 @@ export abstract class ArcCdi extends DisplayComponent<ArcCdiProps> {
    * Handles when the active leg changes.
    */
   private onActiveLegChanged(): void {
-    if (this.props.fms.hasPrimaryFlightPlan() && this.props.fms.getPrimaryFlightPlan().length > 1) {
+    const fms = this.props.fms;
+    const hasPrimaryLeg = fms.flightPlanner.activePlanIndex === Fms.PRIMARY_PLAN_INDEX
+      && this.props.fms.hasPrimaryFlightPlan()
+      && this.props.fms.getPrimaryFlightPlan().length > 1;
+
+    const hasDtoLeg = fms.flightPlanner.activePlanIndex === Fms.DTO_RANDOM_PLAN_INDEX
+      && this.props.fms.hasDirectToFlightPlan()
+      && this.props.fms.getDirectToFlightPlan().length > 1;
+
+    if (hasPrimaryLeg || hasDtoLeg) {
       this.hasActiveLeg = true;
     } else {
       this.hasActiveLeg = false;

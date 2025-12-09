@@ -20,12 +20,15 @@
       "*": [
         "/*"
       ]
-    }
+    },
+    "plugins": [
+      { "transform": "@microsoft/msfs-ts-transformer" },
+    ],
   },
   "exclude": [
     "**/build",
     "**/dist",
     "**/node_modules",
-    "wtg3000common"
-  ]
+    "wtg3000common",
+  ],
 }

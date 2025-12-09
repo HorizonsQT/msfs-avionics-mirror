@@ -7,7 +7,7 @@ import { Subject } from '../sub';
  * This registers routes and handles setting the appropriate page and params.
  */
 export class FmcRouter<T extends AbstractFmcPage<any>> {
-  private readonly routes: { [k: string]: PageConstructor<T, any> } = {};
+  private readonly routes = new Map<string, PageConstructor<T, any>>();
 
   private readonly routesDefaultProps = new Map<PageConstructor<T, any>, any>();
 
@@ -25,7 +25,7 @@ export class FmcRouter<T extends AbstractFmcPage<any>> {
    * @param defaultProps the default props to pass in to the page
    */
   public addRoute<P extends object | null>(route: string, page: PageConstructor<T, P>, defaultProps: P): void {
-    this.routes[route] = page;
+    this.routes.set(route, page);
     this.routesDefaultProps.set(page, defaultProps);
   }
 
@@ -37,7 +37,7 @@ export class FmcRouter<T extends AbstractFmcPage<any>> {
    * @returns the associated page
    */
   public getPageForRoute(routeString: string): PageConstructor<T, any> | undefined {
-    return this.routes[routeString.split('#', 2)[0].trim()];
+    return this.routes.get(routeString.split('#', 2)[0].trim());
   }
 
   /**
@@ -48,7 +48,7 @@ export class FmcRouter<T extends AbstractFmcPage<any>> {
    * @returns the associated route
    */
   public getRouteForPage(pageCtor: PageConstructor<T, any>): string | undefined {
-    for (const [route, ctor] of Object.entries(this.routes)) {
+    for (const [route, ctor] of this.routes) {
       if (ctor === pageCtor) {
         return route;
       }
@@ -129,7 +129,7 @@ export class FmcRouter<T extends AbstractFmcPage<any>> {
   public setSubpage(index: number): boolean {
     const currentIndex = this.currentSubpageIndex.get();
 
-    if (index < 1  || index > this.currentSubpageCount.get() || currentIndex === index) {
+    if (index < 1 || index > this.currentSubpageCount.get() || currentIndex === index) {
       return false;
     }
 

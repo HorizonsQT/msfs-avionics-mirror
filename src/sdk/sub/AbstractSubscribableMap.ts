@@ -159,8 +159,8 @@ export abstract class AbstractSubscribableMap<K, V> implements SubscribableMap<K
    */
   protected initialNotify(sub: HandlerSubscription<SubscribableMapHandler<K, V>>): void {
     const map = this.get();
-    for (const [key, value] of map) {
-      sub.handler(map, SubscribableMapEventType.Added, key, value);
+    for (const entry of map) {
+      sub.handler(map, SubscribableMapEventType.Added, entry[0], entry[1]);
     }
   }
 

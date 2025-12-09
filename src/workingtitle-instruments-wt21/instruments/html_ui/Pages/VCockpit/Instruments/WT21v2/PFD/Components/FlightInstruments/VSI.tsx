@@ -61,7 +61,7 @@ export class VSI extends DisplayComponent<VSIProps> {
       this.adcSubs = [];
 
       this.adcSubs.push(
-        adc.on(`adc_vertical_speed_${adcIndex}`).withPrecision(1).handle(this.updateVerticalSpeed.bind(this)),
+        adc.on(`adc_vertical_speed_${adcIndex}`).withPrecision(-1).handle(this.updateVerticalSpeed.bind(this)),
         adc.on(`adc_altitude_data_valid_${adcIndex}`).whenChanged().handle(this.onAltitudeDataValidityChanged.bind(this)),
       );
     }, true);

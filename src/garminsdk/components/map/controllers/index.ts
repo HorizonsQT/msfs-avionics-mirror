@@ -23,6 +23,7 @@ export * from './MapWaypointsVisController';
 export * from './MapWindVectorController';
 export * from './MapWxrController';
 export * from './NearestMapRTRController';
+export * from './TrafficMapFlightPlanVisController';
 export * from './TrafficMapRangeController';
 export * from './WaypointMapHighlightController';
 export * from './WaypointMapRTRController';

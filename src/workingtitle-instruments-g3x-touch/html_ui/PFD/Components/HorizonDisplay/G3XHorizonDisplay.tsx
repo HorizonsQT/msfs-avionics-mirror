@@ -1,9 +1,8 @@
 import {
-  AdcEvents, AhrsEvents, APEvents, ArraySubject, BitFlags, ClockEvents, ComponentProps, ConsumerSubject,
-  DisplayComponent, EventBus, FSComponent, GeoPoint, GNSSEvents, HorizonComponent, HorizonProjection,
-  HorizonProjectionChangeType, HorizonSharedCanvasLayer, MappedSubject, MutableSubscribable, ReadonlyFloat64Array,
-  Subject, Subscribable, SubscribableArray, SubscribableMapFunctions, SubscribableUtils, Subscription,
-  UserSettingManager, VecNMath, VecNSubject, VNode
+  AdcEvents, AhrsEvents, APEvents, ArraySubject, ClockEvents, ComponentProps, ConsumerSubject, DisplayComponent,
+  EventBus, FSComponent, GeoPoint, GNSSEvents, HorizonComponent, HorizonProjection, HorizonSharedCanvasLayer,
+  MappedSubject, MutableSubscribable, ReadonlyFloat64Array, Subject, Subscribable, SubscribableArray,
+  SubscribableMapFunctions, SubscribableUtils, Subscription, UserSettingManager, VecNMath, VNode
 } from '@microsoft/msfs-sdk';
 
 import {
@@ -103,8 +102,11 @@ export interface G3XHorizonDisplayProps extends ComponentProps {
    */
   flightDirectorDualCueOptions?: Readonly<FlightDirectorDualCueOptions>;
 
-  /** Default field of view, in degrees. Defaults to 110 degrees. */
+  /** The field of view of the horizon display when SVT is not enabled, in degrees. Defaults to 110 degrees. */
   defaultFov?: number;
+
+  /** The field of view of the horizon display when SVT is enabled, in degrees. Defaults to 55 degrees. */
+  svtFov?: number;
 
   /** Whether to include the display of unusual attitude warning chevrons on the pitch ladder. */
   includeUnusualAttitudeChevrons: boolean;
@@ -130,8 +132,8 @@ export interface G3XHorizonDisplayProps extends ComponentProps {
  * aircraft symbol, flight director, and synthetic vision technology (SVT) display.
  */
 export class G3XHorizonDisplay extends DisplayComponent<G3XHorizonDisplayProps> {
-  private static readonly BING_FOV = 50; // degrees
-  private static readonly DEFAULT_FOV = 110; // degrees
+  private static readonly DEFAULT_DEFAULT_FOV = 110; // degrees
+  private static readonly DEFAULT_SVT_FOV = 55; // degrees
 
   private static readonly SVT_SUPPORTED_FMS_POS_MODES = [
     FmsPositionMode.Gps,
@@ -155,10 +157,8 @@ export class G3XHorizonDisplay extends DisplayComponent<G3XHorizonDisplayProps> 
     this.isAdcTemperatureDataValid
   );
 
-  private readonly nonSvtFovEndpoints = VecNMath.create(4, 0.5, 0, 0.5, 1);
-  private readonly svtFovEndpoints = VecNSubject.create(VecNMath.create(4, 0.5, 0, 0.5, 1));
-  private readonly fovEndpoints = VecNSubject.create(VecNMath.create(4, 0.5, 0, 0.5, 1));
-  private readonly defaultFov = this.props.defaultFov ?? G3XHorizonDisplay.DEFAULT_FOV;
+  private readonly defaultFov = this.props.defaultFov ?? G3XHorizonDisplay.DEFAULT_DEFAULT_FOV;
+  private readonly svtFov = this.props.svtFov ?? G3XHorizonDisplay.DEFAULT_SVT_FOV;
 
   private readonly occlusions = this.props.occlusions ?? ArraySubject.create();
 
@@ -188,7 +188,7 @@ export class G3XHorizonDisplay extends DisplayComponent<G3XHorizonDisplayProps> 
 
   private readonly updateFreq = SubscribableUtils.toSubscribable(this.props.updateFreq, true);
 
-  private readonly fov = this.isSvtEnabled.map(isEnabled => isEnabled ? G3XHorizonDisplay.BING_FOV : this.defaultFov);
+  private readonly fov = this.props.pfdSettingManager.getSetting('svtEnabled').map(isEnabled => isEnabled ? this.svtFov : this.defaultFov);
 
   private readonly projectionParams = {
     position: new GeoPoint(0, 0),
@@ -269,8 +269,6 @@ export class G3XHorizonDisplay extends DisplayComponent<G3XHorizonDisplayProps> 
 
   /** @inheritdoc */
   public onAfterRender(): void {
-    this.horizonRef.instance.projection.onChange(this.onProjectionChanged.bind(this));
-
     if (!this.isAwake) {
       this.horizonRef.instance.sleep();
     }
@@ -334,17 +332,6 @@ export class G3XHorizonDisplay extends DisplayComponent<G3XHorizonDisplayProps> 
       this.isAdcTemperatureDataValid.setConsumer(sub.on(`adc_temperature_data_valid_${index}`));
     }, true);
 
-    const svtEndpointsPipe = this.svtFovEndpoints.pipe(this.fovEndpoints, true);
-
-    this.isSvtEnabled.sub(isEnabled => {
-      if (isEnabled) {
-        svtEndpointsPipe.resume(true);
-      } else {
-        svtEndpointsPipe.pause();
-        this.fovEndpoints.set(this.nonSvtFovEndpoints);
-      }
-    }, true);
-
     this.fdDataProvider?.init(!this.isAwake);
 
     if (this.props.isSvtEnabled) {
@@ -359,49 +346,6 @@ export class G3XHorizonDisplay extends DisplayComponent<G3XHorizonDisplayProps> 
         .atFrequency(freq)
         .handle(this.updateCycleHandler, !this.isAwake);
     }, true);
-
-    this.recomputeSvtFovEndpoints(this.horizonRef.instance.projection);
-  }
-
-  /**
-   * Recomputes the endpoints at which the field of view of this display's projection is measured when synthetic
-   * vision is enabled.
-   * @param projection This display's horizon projection.
-   */
-  private recomputeSvtFovEndpoints(projection: HorizonProjection): void {
-    const projectedSize = projection.getProjectedSize();
-    const projectedOffset = projection.getProjectedOffset();
-    const offsetCenterProjected = projection.getOffsetCenterProjected();
-
-    // If there is a projected offset, then the Bing texture for synthetic vision needs to be overdrawn. This reduces
-    // the effective FOV of the Bing texture if it is overdrawn vertically. In order to match this reduced FOV with the
-    // horizon projection, we need to adjust the FOV endpoints so that they span the height of the entire Bing texture.
-
-    const yOverdraw = Math.abs(projectedOffset[1]);
-    const bingHeight = projectedSize[1] + yOverdraw * 2;
-
-    const top = offsetCenterProjected[1] - bingHeight / 2;
-    const bottom = top + bingHeight;
-
-    this.svtFovEndpoints.set(
-      0.5, top / projectedSize[1],
-      0.5, bottom / projectedSize[1]
-    );
-  }
-
-  /**
-   * Responds to changes in this horizon display's projection.
-   * @param projection This display's horizon projection.
-   * @param changeFlags The types of changes made to the projection.
-   */
-  private onProjectionChanged(projection: HorizonProjection, changeFlags: number): void {
-    if (BitFlags.isAny(
-      changeFlags,
-      HorizonProjectionChangeType.ProjectedOffset
-      | HorizonProjectionChangeType.ProjectedSize
-    )) {
-      this.recomputeSvtFovEndpoints(projection);
-    }
   }
 
   /**
@@ -489,7 +433,7 @@ export class G3XHorizonDisplay extends DisplayComponent<G3XHorizonDisplayProps> 
         projection={projection}
         projectedSize={this.props.projectedSize}
         fov={this.fov}
-        fovEndpoints={this.fovEndpoints}
+        fovEndpoints={VecNMath.create(4, 0.5, 0, 0.5, 1)}
         projectedOffset={this.props.projectedOffset}
         class='horizon-display'
       >
@@ -594,6 +538,7 @@ export class G3XHorizonDisplay extends DisplayComponent<G3XHorizonDisplayProps> 
 
     'destroy' in this.isSvtEnabled && this.isSvtEnabled.destroy();
     this.showFpm.destroy();
+    this.fov.destroy();
     this.apEngaged.destroy();
 
     this.updateFreqSub?.destroy();

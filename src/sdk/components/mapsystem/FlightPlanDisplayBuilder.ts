@@ -5,7 +5,7 @@ import { MapSystemIconFactory, MapSystemLabelFactory, MapSystemWaypointsRenderer
 import { WaypointDisplayBuilder } from './WaypointDisplayBuilder';
 
 /**
- * A class that builds the configuration for the flight plan display.
+ * A class that builds a configuration for the display of flight plans on the map.
  */
 export class FlightPlanDisplayBuilder extends WaypointDisplayBuilder {
 
@@ -24,15 +24,9 @@ export class FlightPlanDisplayBuilder extends WaypointDisplayBuilder {
     super(iconFactory, labelFactory, waypointRenderer);
 
     this.roleGroup = `${MapSystemWaypointRoles.FlightPlan}_${planIndex}`;
-    flightPlanRenderer.legStyleHandlers;
   }
 
-  /**
-   * Registers a waypoint display role for use with the flight plan rendering
-   * system.
-   * @param name The name of the role to register.
-   * @returns The modified builder.
-   */
+  /** @inheritDoc */
   public registerRole(name: string): this {
     this.waypointRenderer.insertRenderRole(name, MapSystemWaypointRoles.Normal, undefined, this.roleGroup);
     return this;

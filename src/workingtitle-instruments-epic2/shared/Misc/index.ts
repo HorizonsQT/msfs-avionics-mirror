@@ -8,7 +8,9 @@ export * from './Epic2DuControlEvents';
 export * from './Epic2DuController';
 export * from './Epic2DuControlPublisher';
 export * from './Epic2GraphicsModule';
+export * from './Epic2PfdAlertTypes';
 export * from './Epic2PfdControlEvents';
 export * from './Epic2StartupScreen';
 export * from './FmcSimVars';
 export * from './SpeedOverrideController';
+

@@ -67,7 +67,10 @@ export class WTG3000PfdInstrument extends WTG3000FsInstrument {
 
   private readonly flightPlanListManager = new FlightPlanListManager(this.bus, this.flightPlanStore, this.fms, Fms.PRIMARY_PLAN_INDEX, Subject.create(false));
 
-  private readonly trafficInstrument = new TrafficInstrument(this.bus, { realTimeUpdateFreq: 2, simTimeUpdateFreq: 1, contactDeprecateTime: 10 });
+  private readonly trafficInstrument = new TrafficInstrument(this.bus, {
+    syncRole: 'replica',
+    syncId: 'g3000',
+  });
   private readonly trafficAvionicsSystem = this.config.traffic.resolve()(this.bus, this.trafficInstrument, 10000);
   private readonly trafficSystem = this.trafficAvionicsSystem.trafficSystem;
 

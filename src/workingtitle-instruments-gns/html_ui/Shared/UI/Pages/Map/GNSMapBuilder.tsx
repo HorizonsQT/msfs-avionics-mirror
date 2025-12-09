@@ -1,12 +1,16 @@
 
 
 import {
-  BitFlags, DefaultLodBoundaryCache, EventBus, FlightPlanDisplayBuilder, FSComponent, IntersectionType, MapAirspaceModule, MapDataIntegrityModule,
-  MapFlightPlanModule, MapOwnAirplaneIconOrientation, MapSystemBuilder, MapSystemFlightPlanLayer, MapSystemIconFactory, MapSystemKeys, MapSystemLabelFactory,
-  MapSystemPlanRenderer, MapSystemWaypointRoles, MapSystemWaypointsRenderer, MapWaypointDisplayModule, NumberUnit, TcasAdvisoryDataProvider, UnitType, Vec2Math
+  BitFlags, DefaultLodBoundaryCache, EventBus, FacilityLoader, FlightPlanDisplayBuilder, FSComponent, IntersectionType,
+  MapAirspaceModule, MapDataIntegrityModule, MapFlightPlanModule, MapOwnAirplaneIconOrientation, MapSyncedCanvasLayer,
+  MapSystemBuilder, MapSystemDefaultSharedFlightPlanWaypointFactory, MapSystemIconFactory, MapSystemKeys,
+  MapSystemLabelFactory, MapSystemPlanRenderer, MapSystemSharedFlightPlanLayer, MapSystemSharedFlightPlanLayerModules,
+  MapSystemWaypointsRenderer, MapWaypointDisplayModule, NumberUnit, TcasAdvisoryDataProvider, UnitType, Vec2Math
 } from '@microsoft/msfs-sdk';
 
-import { Fms, GarminAirspaceShowTypeMap, GarminMapBuilder, MapUnitsModule, TrafficSystem } from '@microsoft/msfs-garminsdk';
+import {
+  Fms, GarminAirspaceShowTypeMap, GarminFacilityWaypointCache, GarminMapBuilder, MapUnitsModule, TrafficSystem
+} from '@microsoft/msfs-garminsdk';
 
 import { GnsFacilityUtils } from '../../../Navigation/GnsFacilityUtils';
 import { GNSSettingsProvider } from '../../../Settings/GNSSettingsProvider';
@@ -49,7 +53,11 @@ export class GNSMapBuilder {
   public static withArcMap(bus: EventBus, fms: Fms, settingsProvider: GNSSettingsProvider, gnsType: GNSType,
     instrumentIndex: number, trafficSystem: TrafficSystem, tcasDataProvider: TcasAdvisoryDataProvider):
     MapSystemBuilder<GNSMapModules, GNSMapLayers, GNSMapControllers, GNSMapContextProps> {
+
+    const flightPlanWaypointFactory = new MapSystemDefaultSharedFlightPlanWaypointFactory(GarminFacilityWaypointCache.getCache(bus));
+
     const builder = MapSystemBuilder.create(bus)
+      .withContext(MapSystemKeys.FacilityLoader, () => fms.facLoader)
       .withBing(`${gnsType}_${instrumentIndex}-navmap`)
       .withProjectedSize(Vec2Math.create(255, 138))
       .withTargetOffset(Vec2Math.create(0, 60))
@@ -82,8 +90,9 @@ export class GNSMapBuilder {
       })
       .withOwnAirplaneIcon(gnsType === 'wt430' ? 22 : 16, OwnshipIconPath, Vec2Math.create(0.5, 0.5))
       .withOwnAirplaneIconOrientation(MapOwnAirplaneIconOrientation.TrackUp)
-      .withFlightPlan(MapSystemConfig.configureFlightPlan(settingsProvider, gnsType, bus, fms), fms.flightPlanner, 0, true)
-      .withFlightPlan(MapSystemConfig.configureFlightPlan(settingsProvider, gnsType, bus, fms), fms.flightPlanner, 1, true)
+      .withSharedFlightPlanDefinition(0, flightPlanWaypointFactory, MapSystemConfig.configureFlightPlan(settingsProvider, gnsType, bus, fms))
+      .withSharedFlightPlanDefinition(1, flightPlanWaypointFactory, MapSystemConfig.configureFlightPlan(settingsProvider, gnsType, bus, fms))
+      .withSharedFlightPlans(fms.flightPlanner, { enableTextCulling: true })
       .withLayer(GNSMapKeys.Obs, c => <ObsLayer bus={bus} model={c.model} mapProjection={c.projection} fms={fms} />)
       .with(GarminMapBuilder.traffic, trafficSystem, GNSTrafficIcons.IconOptions(gnsType), false)
       .withLayer(GNSMapKeys.TrafficBanner, c => <TrafficBannerLayer model={c.model} tcasDataProvider={tcasDataProvider} mapProjection={c.projection} />)
@@ -120,7 +129,11 @@ export class GNSMapBuilder {
   public static withStandardMap(bus: EventBus, fms: Fms, settingsProvider: GNSSettingsProvider, gnsType: GNSType,
     instrumentIndex: number, supportDataIntegrity: boolean, trafficSystem?: TrafficSystem, tcasDataProvider?: TcasAdvisoryDataProvider):
     MapSystemBuilder<GNSMapModules, GNSMapLayers, GNSMapControllers, GNSMapContextProps> {
+
+    const flightPlanWaypointFactory = new MapSystemDefaultSharedFlightPlanWaypointFactory(GarminFacilityWaypointCache.getCache(bus));
+
     const builder = MapSystemBuilder.create(bus)
+      .withContext(MapSystemKeys.FacilityLoader, () => fms.facLoader)
       .withBing(`${gnsType}_${instrumentIndex}-navmap`)
       .withTargetOffset(Vec2Math.create(0, 0))
       .with(b => GNSMapBuilder.airportRunways(b, gnsType))
@@ -145,8 +158,9 @@ export class GNSMapBuilder {
         });
         module.usersFilter.set(facility => facility.icaoStruct.airport === GnsFacilityUtils.USER_FACILITY_SCOPE);
       })
-      .withFlightPlan(MapSystemConfig.configureFlightPlan(settingsProvider, gnsType, bus, fms), fms.flightPlanner, 0, true)
-      .withFlightPlan(MapSystemConfig.configureFlightPlan(settingsProvider, gnsType, bus, fms), fms.flightPlanner, 1, true)
+      .withSharedFlightPlanDefinition(0, flightPlanWaypointFactory, MapSystemConfig.configureFlightPlan(settingsProvider, gnsType, bus, fms))
+      .withSharedFlightPlanDefinition(1, flightPlanWaypointFactory, MapSystemConfig.configureFlightPlan(settingsProvider, gnsType, bus, fms))
+      .withSharedFlightPlans(fms.flightPlanner, { enableTextCulling: true })
       .withLayer(GNSMapKeys.Obs, c => <ObsLayer bus={bus} model={c.model} mapProjection={c.projection} fms={fms} />)
       .withModule(MapSystemKeys.DataIntegrity, () => new MapDataIntegrityModule())
       .withModule(GNSMapKeys.Declutter, () => new MapDeclutterModule());
@@ -182,14 +196,21 @@ export class GNSMapBuilder {
   /**
    * Creates an airport page nav map.
    * @param bus The event bus to use with this map.
+   * @param facLoader The facility loader to use with the map.
    * @param settingsProvider The GNS system settings provider.
    * @param gnsType The GNS type (430 or 530) that this map will display on.
    * @param instrumentIndex The index of this instrument.
    * @returns The modified builder.
    */
-  public static withAirportMap(bus: EventBus, settingsProvider: GNSSettingsProvider, gnsType: GNSType, instrumentIndex: number):
-    MapSystemBuilder<GNSMapModules, GNSMapLayers, GNSMapControllers, GNSMapContextProps> {
+  public static withAirportMap(
+    bus: EventBus,
+    facLoader: FacilityLoader,
+    settingsProvider: GNSSettingsProvider,
+    gnsType: GNSType,
+    instrumentIndex: number
+  ): MapSystemBuilder<GNSMapModules, GNSMapLayers, GNSMapControllers, GNSMapContextProps> {
     const builder = MapSystemBuilder.create(bus)
+      .withContext(MapSystemKeys.FacilityLoader, () => facLoader)
       .withBing(`${gnsType}_${instrumentIndex}-navmap`)
       .withProjectedSize(Vec2Math.create(165, gnsType === 'wt530' ? this.WT530_PREVIEW_MAP_HEIGHT : this.WT430_PREVIEW_MAP_HEIGHT))
       .with(b => GNSMapBuilder.airportRunways(b, gnsType))
@@ -236,14 +257,21 @@ export class GNSMapBuilder {
   /**
    * Creates an procedure preview nav map.
    * @param bus The event bus to use with this map.
+   * @param facLoader The facility loader to use with the map.
    * @param settingsProvider The GNS system settings provider.
    * @param gnsType The GNS type (430 or 530) that this map will display on.
    * @param instrumentIndex The index of this instrument.
    * @returns The modified builder.
    */
-  public static withProcedurePreviewMap(bus: EventBus, settingsProvider: GNSSettingsProvider, gnsType: GNSType, instrumentIndex: number):
-    MapSystemBuilder<GNSMapModules, GNSMapLayers, GNSMapControllers, GNSMapContextProps> {
+  public static withProcedurePreviewMap(
+    bus: EventBus,
+    facLoader: FacilityLoader,
+    settingsProvider: GNSSettingsProvider,
+    gnsType: GNSType,
+    instrumentIndex: number
+  ): MapSystemBuilder<GNSMapModules, GNSMapLayers, GNSMapControllers, GNSMapContextProps> {
     const builder = MapSystemBuilder.create(bus)
+      .withContext(MapSystemKeys.FacilityLoader, () => facLoader)
       .withBing(`${gnsType}_${instrumentIndex}-navmap`)
       .withProjectedSize(Vec2Math.create(165, gnsType === 'wt530' ? this.WT530_PREVIEW_MAP_HEIGHT : this.WT430_PREVIEW_MAP_HEIGHT))
       .with(b => GNSMapBuilder.airportRunways(b, gnsType))
@@ -270,10 +298,12 @@ export class GNSMapBuilder {
    * @param configureTransitions The transition flight plan display configuration.
    * @returns The modified builder.
    */
-  private static previewPlan(builder: MapSystemBuilder<GNSMapModules, GNSMapLayers, GNSMapControllers, GNSMapContextProps>,
+  private static previewPlan(
+    builder: MapSystemBuilder<GNSMapModules, GNSMapLayers, GNSMapControllers, GNSMapContextProps>,
     configureProc: (b: FlightPlanDisplayBuilder) => void,
-    configureTransitions: (b: FlightPlanDisplayBuilder) => void): MapSystemBuilder {
-    builder.withModule(MapSystemKeys.FlightPlan, () => new MapFlightPlanModule())
+    configureTransitions: (b: FlightPlanDisplayBuilder) => void
+  ): MapSystemBuilder {
+    return builder.withModule(MapSystemKeys.FlightPlan, () => new MapFlightPlanModule())
       .withModule(MapSystemKeys.NearestWaypoints, () => new MapWaypointDisplayModule())
       .withModule(MapSystemKeys.Airspace, () => new MapAirspaceModule(GarminAirspaceShowTypeMap.MAP))
       .withTargetControlModerator()
@@ -281,52 +311,75 @@ export class GNSMapBuilder {
       .withContext(MapSystemKeys.LabelFactory, () => new MapSystemLabelFactory())
       .withWaypoints()
       .withContext(MapSystemKeys.FlightPathRenderer, () => new MapSystemPlanRenderer(1))
-      .withLayer(`${MapSystemKeys.FlightPlan}_0`, c =>
-        <MapSystemFlightPlanLayer
-          bus={c.bus}
-          waypointRenderer={c.waypointRenderer}
-          iconFactory={c.iconFactory}
-          labelFactory={c.labelFactory}
-          flightPathRenderer={c.flightPathRenderer}
-          planIndex={0}
-          model={c.model}
-          mapProjection={c.projection} />)
-      .withLayer(`${MapSystemKeys.FlightPlan}_1`, c =>
-        <MapSystemFlightPlanLayer
-          bus={c.bus}
-          waypointRenderer={c.waypointRenderer}
-          iconFactory={c.iconFactory}
-          labelFactory={c.labelFactory}
-          flightPathRenderer={c.flightPathRenderer}
-          planIndex={1}
-          model={c.model}
-          mapProjection={c.projection} />)
+      .withLayer<
+        MapSystemSharedFlightPlanLayer,
+        MapSystemSharedFlightPlanLayerModules
+      >(MapSystemKeys.FlightPlan, context => {
+        const waypointFactory = new MapSystemDefaultSharedFlightPlanWaypointFactory(GarminFacilityWaypointCache.getCache(context.bus));
+
+        return (
+          <MapSystemSharedFlightPlanLayer
+            model={context.model}
+            mapProjection={context.projection}
+            planConfigs={[
+              { planIndex: 0, waypointFactory },
+              { planIndex: 1, waypointFactory },
+            ]}
+            waypointRenderer={context[MapSystemKeys.WaypointRenderer]}
+            facilityLoader={context[MapSystemKeys.FacilityLoader]}
+            flightPathRenderer={context[MapSystemKeys.FlightPathRenderer]}
+            airportFacilityDataFlags={context[MapSystemKeys.WaypointRendererAirportDataFlags]}
+          />
+        );
+      })
+      .withLayer(MapSystemKeys.FlightPlanWaypoints, context => {
+        return (
+          <MapSyncedCanvasLayer
+            model={context.model}
+            mapProjection={context.projection}
+          />
+        );
+      })
       .withTextLayer(false)
-      .withInit(MapSystemKeys.FlightPlan, c => {
-        const procBuilder = new FlightPlanDisplayBuilder(
-          c.iconFactory,
-          c.labelFactory,
-          c.waypointRenderer,
-          c.flightPathRenderer,
-          0
-        );
+      .withOnAfterRender(MapSystemKeys.FlightPlan, context => {
+        const waypointRenderer = context[MapSystemKeys.WaypointRenderer];
+        const iconFactory = context[MapSystemKeys.IconFactory];
+        const labelFactory = context[MapSystemKeys.LabelFactory];
+        const flightPathRenderer = context[MapSystemKeys.FlightPathRenderer];
+        const waypointLayerContext = context.getLayer(MapSystemKeys.FlightPlanWaypoints)!.display.context;
 
-        const transitionBuilder = new FlightPlanDisplayBuilder(
-          c.iconFactory,
-          c.labelFactory,
-          c.waypointRenderer,
-          c.flightPathRenderer,
-          1
-        );
+        let hasDefaultRole = false;
 
-        c[MapSystemKeys.WaypointRenderer].insertRenderRole(MapSystemWaypointRoles.FlightPlan, MapSystemWaypointRoles.Normal, undefined, `${MapSystemWaypointRoles.FlightPlan}_0`);
-        c[MapSystemKeys.WaypointRenderer].insertRenderRole(MapSystemWaypointRoles.FlightPlan, MapSystemWaypointRoles.Normal, undefined, `${MapSystemWaypointRoles.FlightPlan}_1`);
+        const configures = [configureProc, configureTransitions];
+        for (let index = 0; index < configures.length; index++) {
+          const displayBuilder = new FlightPlanDisplayBuilder(
+            iconFactory,
+            labelFactory,
+            waypointRenderer,
+            flightPathRenderer,
+            index
+          );
 
-        configureProc(procBuilder);
-        configureTransitions(transitionBuilder);
+          configures[index](displayBuilder);
+
+          const flightPlanRoles = waypointRenderer.getRoleNamesByGroup(displayBuilder.getRoleGroup());
+
+          for (let i = 0; i < flightPlanRoles.length; i++) {
+            const renderRole = waypointRenderer.getRoleFromName(flightPlanRoles[i]);
+
+            if (renderRole !== undefined) {
+              waypointRenderer.setCanvasContext(renderRole, waypointLayerContext);
+              waypointRenderer.setIconFactory(renderRole, iconFactory);
+              waypointRenderer.setLabelFactory(renderRole, labelFactory);
+
+              if (!hasDefaultRole) {
+                flightPathRenderer.defaultRoleId = renderRole;
+                hasDefaultRole = true;
+              }
+            }
+          }
+        }
       });
-
-    return builder;
   }
 
   /**

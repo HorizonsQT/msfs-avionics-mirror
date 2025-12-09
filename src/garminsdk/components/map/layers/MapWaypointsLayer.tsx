@@ -1,9 +1,10 @@
 import {
-  AirportFacility, BitFlags, EventBus, FacilityLoader, FacilitySearchType, FacilityType, FacilityWaypointUtils,
-  FSComponent, ICAO, IntersectionType, MapLayer, MapLayerProps, MapNearestWaypointsLayer,
-  MapNearestWaypointsLayerSearchTypes, MapProjection, MapSyncedCanvasLayer, MapSystemKeys, NearestAirportSearchSession,
-  NearestIcaoSearchSession, NearestIcaoSearchSessionDataType, NearestIntersectionSearchSession,
-  NearestRepoFacilitySearchSession, NearestVorSearchSession, RunwayUtils, UnitType, VNode, Waypoint
+  AirportFacility, AirportFacilityDataFlags, BitFlags, EventBus, Facility, FacilityLoader, FacilitySearchType,
+  FacilityType, FacilityWaypointUtils, FSComponent, ICAO, IcaoValue, IntersectionType, MapLayer, MapLayerProps,
+  MapNearestWaypointsLayer, MapNearestWaypointsLayerSearchTypes, MapProjection, MapSyncedCanvasLayer, MapSystemKeys,
+  NearestAirportSearchSession, NearestIcaoSearchSession, NearestIcaoSearchSessionDataType,
+  NearestIntersectionSearchSession, NearestRepoFacilitySearchSession, NearestVorSearchSession, RunwayUtils, UnitType,
+  VNode, Waypoint
 } from '@microsoft/msfs-sdk';
 
 import { AirportSize, AirportWaypoint } from '../../../navigation/AirportWaypoint';
@@ -24,7 +25,7 @@ export interface MapWaypointsLayerModules {
 }
 
 /**
- * Component props for MapWaypointsLayer.
+ * Component props for {@link MapWaypointsLayer}.
  */
 export interface MapWaypointsLayerProps extends MapLayerProps<MapWaypointsLayerModules> {
   /** The event bus. */
@@ -38,6 +39,14 @@ export interface MapWaypointsLayerProps extends MapLayerProps<MapWaypointsLayerM
 
   /** Whether to support the rendering of runway outlines. */
   supportRunwayOutlines: boolean;
+
+  /**
+   * Bitflags describing the requested data to be loaded in airport facilities retrieved by the layer. This controls
+   * what data are available from the airport waypoints that the layer registers with the waypoint renderer. If
+   * `supportRunwayOutlines` is `true`, then runway data ({@link AirportFacilityDataFlags.Runways}) will always be
+   * requested, regardless of the value of this option. Defaults to {@link AirportFacilityDataFlags.All}.
+   */
+  airportFacilityDataFlags?: number;
 
   /**
    * A function that filters user facilities to be displayed by the layer based on their scopes. If not defined, then
@@ -67,6 +76,9 @@ export class MapWaypointsLayer extends MapLayer<MapWaypointsLayerProps> {
   private readonly waypointCache = GarminFacilityWaypointCache.getCache(this.props.bus);
   private readonly runwayOutlineWaypointCache = MapRunwayOutlineWaypointCache.getCache();
   private readonly runwayLabelWaypointCache = MapRunwayLabelWaypointCache.getCache();
+
+  private readonly airportFacilityDataFlags = (this.props.airportFacilityDataFlags ?? AirportFacilityDataFlags.All)
+    | (this.props.supportRunwayOutlines ? AirportFacilityDataFlags.Runways : 0);
 
   private isAirportVisible = {
     [AirportSize.Large]: false,
@@ -182,7 +194,22 @@ export class MapWaypointsLayer extends MapLayer<MapWaypointsLayerProps> {
     }
   }
 
-  /** @inheritdoc */
+  /**
+   * Retrieves a facility for a given ICAO.
+   * @param facilityLoader The facility loader used by this layer. 
+   * @param icao The ICAO for which to retrieve a facility.
+   * @returns A Promise which is fulfilled with the facility for the specified ICAO, or `null` if a facility could not
+   * be retrieved.
+   */
+  private facilityForIcao(facilityLoader: FacilityLoader, icao: IcaoValue): Promise<Facility | null> {
+    return facilityLoader.tryGetFacility(ICAO.getFacilityTypeFromValue(icao), icao, this.airportFacilityDataFlags);
+  }
+
+  /**
+   * Initializes the waypoint renderer used by this layer.
+   * @param renderer The waypoint renderer to initialize.
+   * @param canvasLayer The canvas layer to which this layer's waypoints will be rendered.
+   */
   private initWaypointRenderer(renderer: MapWaypointRenderer, canvasLayer: MapSyncedCanvasLayer): void {
     renderer.setCanvasContext(MapWaypointRenderRole.Normal, canvasLayer.display.context);
     renderer.setVisibilityHandler(MapWaypointRenderRole.Normal, this.isWaypointVisible.bind(this));
@@ -337,6 +364,7 @@ export class MapWaypointsLayer extends MapLayer<MapWaypointsLayerProps> {
         bus={this.props.bus}
         facilityLoader={this.props.facilityLoader}
         waypointRenderer={this.props.waypointRenderer}
+        facilityForIcao={this.facilityForIcao.bind(this)}
         waypointForFacility={(facility): Waypoint => this.waypointCache.get(facility)}
         initRenderer={this.initWaypointRenderer.bind(this)}
         onSessionsStarted={this.onSessionsStarted.bind(this)}

@@ -1,11 +1,11 @@
 {
   "name": "workingtitle-instruments-g3000",
-  "version": "2.2.3",
+  "version": "2.2.8",
   "description": "Working Title MSFS G3000",
   "main": "wtg3000.js",
   "scripts": {
     "build": "npm run build:compile && npm run build:rollup && npm run build:copies",
-    "build:compile": "npx tsc",
+    "build:compile": "npx tspc",
     "build:rollup": "robocopy html_ui *.css build/html_ui /s & npx rollup -c rollup.config.mjs",
     "build:copies": "npm run build:copies:extras & npm run build:copies:sdk & npm run build:copies:3000common & npm run build:copies:behaviors",
     "build:copies:extras": "robocopy html_ui *.svg *.png *.html *.json *.ttf dist/workingtitle-instruments-g3000-v2/html_ui/Pages/VCockpit/Instruments/NavSystems/WTG3000v2 /s",
@@ -24,15 +24,17 @@
   "author": "Working Title Simulations, LLC",
   "license": "Modified MIT",
   "devDependencies": {
-    "@microsoft/msfs-sdk": "2.2.3",
+    "@microsoft/msfs-garminsdk": "2.3.4",
+    "@microsoft/msfs-sdk": "2.3.3",
+    "@microsoft/msfs-ts-transformer": "^1.0.0",
     "@microsoft/msfs-types": "1.14.6",
-    "@microsoft/msfs-garminsdk": "2.2.3",
-    "@microsoft/msfs-wtg3000-common": "./wtg3000common/dist/wtg3000common-2.2.3.tgz",
+    "@microsoft/msfs-wtg3000-common": "./wtg3000common/dist/wtg3000common-2.2.8.tgz",
     "@rollup/plugin-image": "^3.0.2",
     "@rollup/plugin-node-resolve": "^15.0.1",
     "rollup": "^4.27.3",
-    "rollup-plugin-dts": "^6.1.1",
+    "rollup-plugin-dts": "^6.2.3",
     "rollup-plugin-import-css": "^3.1.0",
+    "ts-patch": "^3.3.0",
     "typescript": "5.8.3"
   }
 }

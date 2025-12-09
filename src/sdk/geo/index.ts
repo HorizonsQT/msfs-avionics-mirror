@@ -1,5 +1,4 @@
 export * from './GeoInterfaces';
-export * from './MagVar';
 export * from './GeoMath';
 export * from './GeoPoint';
 export * from './GeoCircle';
@@ -7,5 +6,7 @@ export * from './GeoPointSubject';
 export * from './GeoProjection';
 export * from './GeodesicResampler';
 export * from './GeoCircleResampler';
+export * from './MagVar';
 export * from './NavMath';
 export * from './NavAngle';
+export * from './SimAltitudeReference';

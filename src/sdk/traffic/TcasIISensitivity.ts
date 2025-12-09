@@ -103,20 +103,20 @@ export class TcasIISensitivityParameters {
 
   /**
    * Selects a sensitivity level for a specified environment.
-   * @param altitude The indicated altitude of the own airplane.
-   * @param radarAltitude The radar altitude of the own airplane.
+   * @param altitude The pressure altitude of the own airplane, or `NaN` if the pressure altitude is not known.
+   * @param radarAltitude The radar altitude of the own airplane, or `NaN` if the radar altitude is not known.
    * @returns The sensitivity level for the specified environment.
    */
   public selectLevel(
     altitude: NumberUnitInterface<UnitFamily.Distance>,
     radarAltitude: NumberUnitInterface<UnitFamily.Distance>
   ): number {
-    const altFeet = altitude.asUnit(UnitType.FOOT);
-    const radarAltFeet = radarAltitude.asUnit(UnitType.FOOT);
+    const altFeet = altitude.isNaN() ? undefined : altitude.asUnit(UnitType.FOOT);
+    const radarAltFeet = radarAltitude.isNaN() ? undefined : radarAltitude.asUnit(UnitType.FOOT);
 
     let level: number;
-    if (radarAltFeet > 2350) {
-      if (altFeet > 42000) {
+    if (radarAltFeet === undefined || radarAltFeet > 2350) {
+      if (altFeet === undefined || altFeet > 42000) {
         level = 6;
       } else if (altFeet > 20000) {
         level = 5;

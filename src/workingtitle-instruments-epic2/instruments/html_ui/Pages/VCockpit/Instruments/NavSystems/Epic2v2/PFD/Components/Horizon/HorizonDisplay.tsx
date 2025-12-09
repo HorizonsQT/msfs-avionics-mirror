@@ -1,10 +1,7 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
-
 import {
-  APEvents, ArraySubject, BitFlags, ClockEvents, ComponentProps, ConsumerSubject, DisplayComponent, EventBus, FSComponent, GeoPoint, HorizonComponent,
-  HorizonProjection, HorizonProjectionChangeType, HorizonSharedCanvasLayer, MappedSubject, MathUtils, MutableSubscribable, Subject, Subscribable,
-  SubscribableArray, SubscribableMapFunctions, SubscribableSet, SubscribableUtils, Subscription, UserSettingManager, Vec2Math, Vec2Subject, VecNMath,
-  VecNSubject, VNode
+  APEvents, ArraySubject, ClockEvents, ComponentProps, ConsumerSubject, DisplayComponent, EventBus, FSComponent, GeoPoint, HorizonComponent,
+  HorizonProjection, HorizonSharedCanvasLayer, MappedSubject, MathUtils, MutableSubscribable, Subject, Subscribable, SubscribableArray,
+  SubscribableMapFunctions, SubscribableSet, SubscribableUtils, Subscription, UserSettingManager, Vec2Math, Vec2Subject, VecNMath, VNode
 } from '@microsoft/msfs-sdk';
 
 import {
@@ -173,11 +170,8 @@ export interface HorizonDisplayProps extends ComponentProps {
   /** A manager for PFD settings. */
   pfdSettingsManager: UserSettingManager<PfdAliasedUserSettingTypes>;
 
-  /** Normal field of view, in degrees. Defaults to 55 degrees. */
+  /** Normal field of view, in degrees. Defaults to 46.2 degrees. */
   normalFov?: number;
-
-  /** Extended field of view, in degrees. Defaults to 110 degrees. */
-  extendedFov?: number;
 
   /** A mutable subscribable to which to write whether SVS is enabled. */
   isSvsEnabled?: MutableSubscribable<any, boolean>;
@@ -191,9 +185,7 @@ export interface HorizonDisplayProps extends ComponentProps {
  * aircraft symbol, flight director, and synthetic vision system (SVS) display.
  */
 export class HorizonDisplay extends DisplayComponent<HorizonDisplayProps> {
-  private static readonly BING_FOV = 45; // degrees
-
-  private static readonly DEFAULT_NORMAL_FOV = 45; // degrees
+  private static readonly DEFAULT_NORMAL_FOV = 46.2; // degrees
 
   private readonly horizonRef = FSComponent.createRef<HorizonComponent>();
 
@@ -297,14 +289,6 @@ export class HorizonDisplay extends DisplayComponent<HorizonDisplayProps> {
     ? this.props.flightDirectorMode.map(this.getAircraftSymbolFormat.bind(this))
     : this.getAircraftSymbolFormat(this.props.flightDirectorMode);
 
-  private readonly normalFov = this.props.normalFov ?? HorizonDisplay.DEFAULT_NORMAL_FOV;
-
-  private readonly fov = this.isSvsEnabled.map(isEnabled => isEnabled ? HorizonDisplay.BING_FOV : this.normalFov);
-
-  private readonly nonSvsFovEndpoints = VecNMath.create(4, 0.5, 0, 0.5, 1);
-  private readonly svsFovEndpoints = VecNSubject.create(VecNMath.create(4, 0.5, 0, 0.5, 1));
-  private readonly fovEndpoints = VecNSubject.create(VecNMath.create(4, 0.5, 0, 0.5, 1));
-
   private readonly horizonSize = Vec2Subject.create(Vec2Math.create(676, 768));
   private readonly horizonOffset = Vec2Subject.create(Vec2Math.create(-28, -128));
 
@@ -336,8 +320,6 @@ export class HorizonDisplay extends DisplayComponent<HorizonDisplayProps> {
 
   /** @inheritdoc */
   public onAfterRender(): void {
-
-    this.horizonRef.instance.projection.onChange(this.onProjectionChanged.bind(this));
 
     if (!this.isAwake) {
       this.horizonRef.instance.sleep();
@@ -373,24 +355,11 @@ export class HorizonDisplay extends DisplayComponent<HorizonDisplayProps> {
 
     this.apMaxBankId.setConsumer(sub.on('ap_max_bank_id'));
 
-    const svsEndpointsPipe = this.svsFovEndpoints.pipe(this.fovEndpoints, true);
-
-    this.isSvsEnabled.sub(isEnabled => {
-      if (isEnabled) {
-        svsEndpointsPipe.resume(true);
-      } else {
-        svsEndpointsPipe.pause();
-        this.fovEndpoints.set(this.nonSvsFovEndpoints);
-      }
-    }, true);
-
     this.fdDataProvider.init(!this.isAwake);
 
     if (this.props.isSvsEnabled) {
       this.isSvsEnabledPipe = this.isSvsEnabled.pipe(this.props.isSvsEnabled);
     }
-
-    this.recomputeSvsFovEndpoints(this.horizonRef.instance.projection);
 
     this.updateFreqSub = this.updateFreq?.sub(freq => {
       this.updateCycleSub?.destroy();
@@ -468,47 +437,6 @@ export class HorizonDisplay extends DisplayComponent<HorizonDisplayProps> {
   }
 
   /**
-   * Responds to changes in this horizon display's projection.
-   * @param projection This display's horizon projection.
-   * @param changeFlags The types of changes made to the projection.
-   */
-  public onProjectionChanged(projection: HorizonProjection, changeFlags: number): void {
-    if (BitFlags.isAny(
-      changeFlags,
-      HorizonProjectionChangeType.ProjectedOffset
-      | HorizonProjectionChangeType.ProjectedSize
-    )) {
-      this.recomputeSvsFovEndpoints(projection);
-    }
-  }
-
-  /**
-   * Recomputes the endpoints at which the field of view of this display's projection is measured when synthetic
-   * vision is enabled.
-   * @param projection This display's horizon projection.
-   */
-  private recomputeSvsFovEndpoints(projection: HorizonProjection): void {
-    const projectedSize = projection.getProjectedSize();
-    const projectedOffset = projection.getProjectedOffset();
-    const offsetCenterProjected = projection.getOffsetCenterProjected();
-
-    // If there is a projected offset, then the Bing texture for synthetic vision needs to be overdrawn. This reduces
-    // the effective FOV of the Bing texture if it is overdrawn vertically. In order to match this reduced FOV with the
-    // horizon projection, we need to adjust the FOV endpoints so that they span the height of the entire Bing texture.
-
-    const yOverdraw = Math.abs(projectedOffset[1]);
-    const bingHeight = projectedSize[1] + yOverdraw * 2;
-
-    const top = offsetCenterProjected[1] - bingHeight / 2;
-    const bottom = top + bingHeight;
-
-    this.svsFovEndpoints.set(
-      0.5, top / projectedSize[1],
-      0.5, bottom / projectedSize[1]
-    );
-  }
-
-  /**
    * This method is called every update cycle.
    * @param time The current time, as a UNIX timestamp in milliseconds.
    */
@@ -549,8 +477,8 @@ export class HorizonDisplay extends DisplayComponent<HorizonDisplayProps> {
         ref={this.horizonRef}
         projection={projection}
         projectedSize={this.horizonSize}
-        fov={this.fov}
-        fovEndpoints={this.fovEndpoints}
+        fov={this.props.normalFov ?? HorizonDisplay.DEFAULT_NORMAL_FOV}
+        fovEndpoints={VecNMath.create(4, 0.5, 0, 0.5, 1)}
         projectedOffset={this.horizonOffset}
         class={this.props.class}
       >

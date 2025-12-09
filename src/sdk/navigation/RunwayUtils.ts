@@ -569,10 +569,10 @@ export class RunwayUtils {
    * @returns A runway waypoint facility corresponding to the runway.
    */
   public static createRunwayFacility(airport: AirportFacility, runway: OneWayRunway): RunwayFacility {
-    const icao = RunwayUtils.getRunwayFacilityIcao(airport, runway);
+    const icaoStruct = RunwayUtils.getRunwayFacilityIcaoValue(airport, runway);
     return {
-      icao,
-      icaoStruct: ICAO.stringV1ToValue(icao),
+      icao: ICAO.tryValueToStringV1(icaoStruct),
+      icaoStruct,
       name: `Runway ${runway.designation}`,
       region: airport.region,
       city: airport.city,

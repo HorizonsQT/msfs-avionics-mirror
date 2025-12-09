@@ -1,4 +1,4 @@
-import { ComponentProps, DisplayComponent, FSComponent, MappedSubject, Subject, Subscribable, VNode } from '@microsoft/msfs-sdk';
+import { ComponentProps, DisplayComponent, FSComponent, MappedSubject, MathUtils, Subject, Subscribable, VNode } from '@microsoft/msfs-sdk';
 
 import { AutopilotDataProvider, Epic2ApLateralMode } from '../../Instruments/AutopilotDataProvider';
 import { HeadingDataProvider } from '../../Instruments/HeadingDataProvider';
@@ -43,10 +43,12 @@ export class HeadingBug extends DisplayComponent<HeadingBugProps> {
         magneticHeading !== null
       ) {
         let angle = selectedHeading - magneticHeading;
+
         // Limit angle range: -180 to 180 degrees
         if (angle > 180) { angle -= 360; }
         if (angle < -180) { angle += 360; }
-        return angle;
+
+        return MathUtils.round(angle, 0.5);
       } else {
         return null;
       }
@@ -93,7 +95,7 @@ export class HeadingBug extends DisplayComponent<HeadingBugProps> {
           // Show HDG bug and rotate to correct position if valid and within range
           this._hidden.set(false);
           this.hdgBugRef.instance.classList.remove('hidden');
-          this.hdgBugRef.instance.style.transform = `rotate(${angle}deg)`;
+          this.hdgBugRef.instance.style.transform = `rotate3d(0, 0, 1, ${angle}deg)`;
         } else {
           // Else hide
           this._hidden.set(true);

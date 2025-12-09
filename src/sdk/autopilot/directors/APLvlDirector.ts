@@ -19,26 +19,36 @@ export type APLvlDirectorOptions = {
 };
 
 /**
- * An autopilot wing leveler director.
+ * An autopilot director that generates flight director bank commands to level the wings (zero bank). Optionally sets
+ * the `AUTOPILOT WING LEVELER` SimVar state to true (1) when it is armed or activated, and to false (0) when it is
+ * deactivated.
+ * 
+ * The director requires valid bank data to arm or activate.
  */
 export class APLvlDirector implements PlaneDirector {
+  /** @inheritDoc */
   public state: DirectorState;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
   public onActivate?: () => void;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
   public onArm?: () => void;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
+  public onDeactivate?: () => void;
+
+  /** @inheritDoc */
   public driveBank?: (bank: number, rate?: number) => void;
 
   private readonly driveBankFunc: (bank: number) => void;
 
   private readonly omitWingLeveler: boolean;
 
+  private readonly bank = this.apValues.dataProvider.getItem('bank');
+
   /**
-   * Creates an instance of the wing leveler.
+   * Creates a new instance of APLvlDirector.
    * @param apValues Autopilot values from this director's parent autopilot.
    * @param options Options to configure the new director.
    */
@@ -76,40 +86,64 @@ export class APLvlDirector implements PlaneDirector {
   }
 
   /**
-   * Activates this director.
+   * Checks whether the data required for this director to function are valid.
+   * @returns Whether the data required for this director to function are valid.
    */
+  private isDataValid(): boolean {
+    return this.bank.isValueValid();
+  }
+
+  /** @inheritDoc */
   public activate(): void {
+    if (this.state === DirectorState.Active || !this.isDataValid()) {
+      return;
+    }
+
     this.state = DirectorState.Active;
+
     if (this.onActivate !== undefined) {
       this.onActivate();
     }
-    if (!this.omitWingLeveler) { SimVar.SetSimVarValue('AUTOPILOT WING LEVELER', 'Bool', true); }
+
+    if (!this.omitWingLeveler) {
+      SimVar.SetSimVarValue('AUTOPILOT WING LEVELER', 'Bool', true);
+    }
   }
 
-  /**
-   * Arms this director.
-   * This director has no armed mode, so it activates immediately.
-   */
+  /** @inheritDoc */
   public arm(): void {
     if (this.state == DirectorState.Inactive) {
       this.activate();
     }
   }
 
-  /**
-   * Deactivates this director.
-   */
+  /** @inheritDoc */
   public deactivate(): void {
+    if (this.state === DirectorState.Inactive) {
+      return;
+    }
+
     this.state = DirectorState.Inactive;
-    if (!this.omitWingLeveler) { SimVar.SetSimVarValue('AUTOPILOT WING LEVELER', 'Bool', false); }
+
+    if (this.onDeactivate !== undefined) {
+      this.onDeactivate();
+    }
+
+    if (!this.omitWingLeveler) {
+      SimVar.SetSimVarValue('AUTOPILOT WING LEVELER', 'Bool', false);
+    }
   }
 
-  /**
-   * Updates this director.
-   */
+  /** @inheritDoc */
   public update(): void {
-    if (this.state === DirectorState.Active) {
+    if (this.state !== DirectorState.Active) {
+      return;
+    }
+
+    if (this.isDataValid()) {
       this.driveBankFunc(0);
+    } else {
+      this.deactivate();
     }
   }
 }

@@ -100,7 +100,10 @@ export class TrafficConfig implements ResolvableConfig<(bus: EventBus, tfcInstru
       let system: TrafficSystem | null;
       switch (this.type) {
         case TrafficSystemType.Tis:
-          system = new TrafficInfoService(bus, tfcInstrument, { adsb: this.supportAdsb ? new GarminAdsb(bus) : null });
+          system = new TrafficInfoService(bus, tfcInstrument, {
+            supportTisA: this.source === G3XTrafficSystemSource.Gtx,
+            adsb: this.supportAdsb ? new GarminAdsb(bus) : null,
+          });
           break;
         case TrafficSystemType.Tas:
           system = new TrafficAdvisorySystem(bus, tfcInstrument, this.supportAdsb ? new GarminAdsb(bus) : null, false);

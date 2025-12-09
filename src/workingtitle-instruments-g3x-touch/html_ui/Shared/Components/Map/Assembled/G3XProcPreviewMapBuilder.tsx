@@ -208,6 +208,7 @@ export class G3XProcPreviewMapBuilder {
       .withContext(MapSystemKeys.FacilityLoader, context => {
         return options.facilityLoader ?? new FacilityLoader(FacilityRepository.getRepository(context.bus));
       })
+      .withContext(MapSystemKeys.WaypointRendererAirportDataFlags, () => G3XMapUtils.AIRPORT_DATA_FLAGS)
       .withModule(GarminMapKeys.WaypointSelection, () => new WaypointMapSelectionModule())
       .withModule(GarminMapKeys.Units, () => new MapUnitsModule(options.unitsSettingManager))
       .with(GarminMapBuilder.range,

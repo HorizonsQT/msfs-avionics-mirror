@@ -27,6 +27,7 @@ import { MapWaypointRenderRole } from '../MapWaypointRenderer';
 import { NextGenMapWaypointStyles } from '../MapWaypointStyles';
 import { MapDeclutterMode, MapDeclutterModule, MapGarminTrafficModule, MapOrientation, MapOrientationModule, MapTerrainMode, MapUnitsModule } from '../modules';
 import { NextGenGarminMapBuilder } from '../NextGenGarminMapBuilder';
+import { NextGenGarminMapUtils } from '../NextGenGarminMapUtils';
 
 /**
  * Configurations for traffic intruder icons for next-generation (NXi, G3000, etc) HSI maps.
@@ -63,6 +64,13 @@ export type NextGenHsiMapOptions = {
 
   /** The scaling factor of waypoint icons and labels. Defaults to `1`. */
   waypointStyleScale?: number;
+
+  /**
+   * Bitflags describing the requested data to be loaded in airport facilities retrieved by the map for rendering
+   * purposes. This controls what data are available from airport waypoints registered with the map's waypoint
+   * renderer. Defaults to {@link NextGenGarminMapUtils.AIRPORT_DATA_FLAGS}.
+   */
+  waypointRendererAirportDataFlags?: number;
 
   /**
    * The nominal projected target offset of the map, as `[x, y]`, where each component is expressed relative to the
@@ -258,6 +266,8 @@ export class NextGenHsiMapBuilder {
   ): MapBuilder {
     options = Object.assign({}, options); // so we don't mutate the object that was passed in.
 
+    options.waypointRendererAirportDataFlags ??= NextGenGarminMapUtils.AIRPORT_DATA_FLAGS;
+
     options.targetOffset ??= Vec2Math.create();
     options.rangeEndpoints ??= VecNMath.create(4, 0.5, 0.5, 0.5, 0);
 
@@ -296,6 +306,7 @@ export class NextGenHsiMapBuilder {
       .withContext(MapSystemKeys.FacilityLoader, context => {
         return options.facilityLoader ?? new FacilityLoader(FacilityRepository.getRepository(context.bus));
       })
+      .withContext(MapSystemKeys.WaypointRendererAirportDataFlags, () => options.waypointRendererAirportDataFlags)
       .withModule(GarminMapKeys.Units, () => new MapUnitsModule(options.unitsSettingManager))
       .with(GarminMapBuilder.range,
         options.nauticalRangeArray ?? MapUtils.nextGenMapRanges(UnitsDistanceSettingMode.Nautical),
@@ -412,7 +423,10 @@ export class NextGenHsiMapBuilder {
               GarminFacilityWaypointCache.getCache(context.bus),
               renderer,
               MapWaypointRenderRole.FlightPlanInactive,
-              MapWaypointRenderRole.FlightPlanActive
+              MapWaypointRenderRole.FlightPlanActive,
+              {
+                airportFacilityDataFlags: context[MapSystemKeys.WaypointRendererAirportDataFlags],
+              }
             );
           },
           pathRendererFactory: () => new DefaultFlightPathPlanRenderer(),

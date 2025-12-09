@@ -45,9 +45,10 @@ export class AdsbSensitivityParameters {
 
   /**
    * Selects a sensitivity level for a specified environment.
-   * @param altitude The indicated altitude of the own airplane.
+   * @param altitude The pressure altitude of the own airplane, or `NaN` if the pressure altitude is not known.
    * @param flightArea The current flight area.
-   * @param radarAltitude The radar altitude of the own airplane.
+   * @param radarAltitude The radar altitude of the own airplane, or `NaN` if the radar altitude is not known. Defaults
+   * to `NaN`.
    * @returns The sensitivity level for the specified environment.
    */
   public selectLevel(
@@ -55,15 +56,16 @@ export class AdsbSensitivityParameters {
     flightArea: Epic2FlightArea,
     radarAltitude?: NumberUnitInterface<UnitFamily.Distance>
   ): number {
-    const altFeet = altitude.asUnit(UnitType.FOOT);
-    const radarAltFeet = radarAltitude?.asUnit(UnitType.FOOT);
+    const altFeet = altitude.isNaN() ? undefined : altitude.asUnit(UnitType.FOOT);
+    const radarAltFeet = (!radarAltitude || radarAltitude.isNaN()) ? undefined : radarAltitude.asUnit(UnitType.FOOT);
 
     const isApproach = flightArea === Epic2FlightArea.Approach;
     const isTerminal = isApproach || flightArea !== Epic2FlightArea.Arrival && flightArea !== Epic2FlightArea.Departure && flightArea !== Epic2FlightArea.MissedApproach;
 
     let level: number;
     if (
-      (radarAltFeet === undefined || radarAltFeet > 2350)
+      altFeet !== undefined
+      && (radarAltFeet === undefined || radarAltFeet > 2350)
       && (!isApproach && isTerminal)
     ) {
       if (altFeet > 42000) {
@@ -78,8 +80,11 @@ export class AdsbSensitivityParameters {
         level = 2;
       }
     } else if (
-      isTerminal
-      || (radarAltFeet !== undefined && radarAltFeet > 1000)
+      altFeet !== undefined
+      && (
+        isTerminal
+        || (radarAltFeet !== undefined && radarAltFeet > 1000)
+      )
     ) {
       level = 1;
     } else {
@@ -91,9 +96,10 @@ export class AdsbSensitivityParameters {
 
   /**
    * Selects Traffic Advisory sensitivity settings for a specified environment.
-   * @param altitude The indicated altitude of the own airplane.
+   * @param altitude The pressure altitude of the own airplane, or `NaN` if the pressure altitude is not known.
    * @param cdiScalingLabel The CDI scaling sensitivity of the own airplane.
-   * @param radarAltitude The radar altitude of the own airplane.
+   * @param radarAltitude The radar altitude of the own airplane, or `NaN` if the radar altitude is not known. Defaults
+   * to `NaN`.
    * @returns Traffic Advisory sensitivity settings for the specified environment.
    */
   public selectTA(

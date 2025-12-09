@@ -215,8 +215,8 @@ export class UnsFlightAreaComputer implements Instrument {
 
     const plan = this.fms.getPrimaryFlightPlan();
 
-    const activeLeg = plan.getLeg(plan.activeLateralLeg);
-    const activeSegment = plan.getSegmentFromLeg(activeLeg);
+    const activeLeg = plan.tryGetLeg(plan.activeLateralLeg);
+    const activeSegment = activeLeg ? plan.getSegmentFromLeg(activeLeg) : undefined;
     const activeSegmentType = activeSegment?.segmentType;
 
     this.isOnSid = activeSegmentType === FlightPlanSegmentType.Departure || activeSegmentType === FlightPlanSegmentType.Origin;

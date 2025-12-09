@@ -19,7 +19,7 @@ export class ElapsedTime {
   public readonly elapsedTimeIsVisibile = Subject.create(false);
 
   private readonly currentTimestampMs = ConsumerSubject.create(this.bus.getSubscriber<ClockEvents>().on('simTime').whenChangedBy(1000), 0);
-  private readonly timerSub = this.currentTimestampMs.sub((v) => this.updateTimer(v), false, false);
+  private readonly timerSub = this.currentTimestampMs.sub((v) => this.updateTimer(v), false, true);
 
   private state = ElapsedTimeState.Off;
   private startTimestampMs = 0;

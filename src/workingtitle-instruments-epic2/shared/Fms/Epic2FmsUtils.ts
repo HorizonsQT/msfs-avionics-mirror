@@ -133,7 +133,8 @@ export class Epic2FmsUtils {
       lon: oneWayRunway.longitude,
       type: isOriginRunway ? LegType.IF : LegType.TF,
       fixIcaoStruct: RunwayUtils.getRunwayFacilityIcaoValue(airport, oneWayRunway),
-      altitude1: isOriginRunway ? oneWayRunway.elevation : oneWayRunway.elevation + 15  //Arrival runway leg altitude should be 50 feet above threshold
+      altDesc: AltitudeRestrictionType.At,
+      altitude1: isOriginRunway ? oneWayRunway.elevation : oneWayRunway.elevation + 15,  //Arrival runway leg altitude should be 50 feet above threshold
     });
     return leg;
   }

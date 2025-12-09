@@ -1312,7 +1312,7 @@ export class FmsUtils {
    * @returns true if there is an optional course reversal.
    */
   public static checkForCourseReversal(legs: LegDefinition[], ppos: GeoPoint): boolean {
-    if (legs && legs.length > 0) {
+    if (legs.length >= 2) {
       const leg = legs[1];
       switch (leg.leg.type) {
         case LegType.HA:

@@ -20,20 +20,14 @@
       "*": [
         "/*"
       ]
-    }
+    },
+    "plugins": [
+      { "transform": "@microsoft/msfs-ts-transformer" },
+    ],
   },
   "exclude": [
-    "../Gulpfile.ts",
     "**/node_modules",
     "**/build",
-    "**/dist"
+    "**/dist",
   ],
-  "ts-node": {
-    "transpiler": "@sucrase/ts-node-plugin",
-    "transpileOnly": true,
-    "compilerOptions": {
-      "module": "commonjs"
-    },
-    "files": true
-  }
 }

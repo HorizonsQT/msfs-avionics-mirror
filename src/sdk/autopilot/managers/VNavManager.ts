@@ -35,14 +35,22 @@ export interface VNavManager {
   onPathDirectorDeactivated: () => void;
 
   /**
-   * A callback called by the autopilot to arm the supplied vertical mode.
+   * A function used to arm a given vertical mode.
+   * @param mode The vertical mode to arm.
    */
   armMode?: (mode: number) => void;
 
   /**
-   * A callback called by the autopilot to activate the supplied vertical mode.
+   * A function used to activate a given vertical mode.
+   * @param mode The vertical mode to activate.
    */
   activateMode?: (mode: number) => void;
+
+  /**
+   * A function used to deactivate a given vertical mode.
+   * @param mode The vertical mode to deactivate.
+   */
+  deactivateMode?: (mode: number) => void;
 
   /** A callback called when the manager is activated. */
   onActivate?: () => void;

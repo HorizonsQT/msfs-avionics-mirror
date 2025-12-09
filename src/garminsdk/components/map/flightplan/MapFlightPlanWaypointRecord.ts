@@ -1,5 +1,6 @@
 import {
-  CustomWaypoint, FacilityLoader, FacilityWaypoint, FacilityWaypointCache, FlightPathWaypoint, GeoPoint, GeoPointSubject, ICAO, LegDefinition, Waypoint
+  AirportFacilityDataFlags, CustomWaypoint, FacilityLoader, FacilityWaypoint, FacilityWaypointCache,
+  FlightPathWaypoint, GeoPoint, GeoPointSubject, ICAO, IcaoValue, LegDefinition, Waypoint
 } from '@microsoft/msfs-sdk';
 
 import { MapWaypointRenderer, MapWaypointRenderRole } from '../MapWaypointRenderer';
@@ -37,7 +38,7 @@ export abstract class AbstractFlightPlanLegWaypointsRecord implements FlightPlan
    * Constructor.
    * @param leg The flight plan leg associated with this record.
    * @param waypointRenderer The renderer used to render this record's waypoints.
-   * @param facLoader The facility loader used by this waypoint.
+   * @param facLoader The facility loader used by this record.
    * @param inactiveRenderRole The role(s) under which the waypoint should be registered when it is part of an inactive
    * leg.
    * @param activeRenderRole The role(s) under which the waypoint should be registered when it is part of an active
@@ -83,26 +84,34 @@ export abstract class AbstractFlightPlanLegWaypointsRecord implements FlightPlan
 export class FixIcaoWaypointsRecord extends AbstractFlightPlanLegWaypointsRecord {
   protected _waypoint: FacilityWaypoint | null = null;
 
+  protected readonly airportFacilityDataFlags: number;
+
   /**
-   * Constructor.
+   * Creates a new instance of FixIcaoWaypointsRecord.
    * @param leg The flight plan leg associated with this record.
    * @param waypointRenderer The renderer used to render this record's waypoints.
-   * @param facLoader The facility loader used by this waypoint.
+   * @param facLoader The facility loader used by this record.
    * @param facWaypointCache The facility waypoint cache used by this record.
    * @param inactiveRenderRole The role(s) under which the waypoint should be registered when it is part of an inactive
    * leg.
    * @param activeRenderRole The role(s) under which the waypoint should be registered when it is part of an active
    * leg.
+   * @param airportFacilityDataFlags Bitflags describing the requested data to be loaded in airport facilities
+   * retrieved by the new record. This controls what data are available from the airport waypoints that the record
+   * registers with the waypoint renderer. Defaults to {@link AirportFacilityDataFlags.All}.
    */
-  constructor(
+  public constructor(
     leg: LegDefinition,
     waypointRenderer: MapWaypointRenderer,
     facLoader: FacilityLoader,
     protected readonly facWaypointCache: FacilityWaypointCache,
     inactiveRenderRole: MapWaypointRenderRole,
-    activeRenderRole: MapWaypointRenderRole
+    activeRenderRole: MapWaypointRenderRole,
+    airportFacilityDataFlags?: number
   ) {
     super(leg, waypointRenderer, facLoader, inactiveRenderRole, activeRenderRole);
+
+    this.airportFacilityDataFlags = airportFacilityDataFlags ?? AirportFacilityDataFlags.All;
   }
 
   // eslint-disable-next-line jsdoc/require-returns
@@ -115,8 +124,8 @@ export class FixIcaoWaypointsRecord extends AbstractFlightPlanLegWaypointsRecord
 
   /** @inheritdoc */
   public async refresh(isActive: boolean): Promise<void> {
-    const icao = this.leg.leg.fixIcao;
-    if (!this._waypoint && icao !== '' && icao !== ICAO.emptyIcao) {
+    const icao = this.leg.leg.fixIcaoStruct;
+    if (!this._waypoint && ICAO.isValueFacility(icao)) {
       this._waypoint = await this.getFacilityWaypoint(icao);
 
       if (this._waypoint) {
@@ -138,14 +147,16 @@ export class FixIcaoWaypointsRecord extends AbstractFlightPlanLegWaypointsRecord
   }
 
   /**
-   * Gets a facility waypoint from an ICAO string.
-   * @param icao A facility ICAO string.
-   * @returns a facility waypoint, or null if one could not be created.
+   * Gets a facility waypoint from an ICAO value.
+   * @param icao An ICAO value.
+   * @returns A facility waypoint for the specified ICAO value, or `null` if one could not be retrieved.
    */
-  private async getFacilityWaypoint(icao: string): Promise<FacilityWaypoint<any> | null> {
+  private async getFacilityWaypoint(icao: IcaoValue): Promise<FacilityWaypoint<any> | null> {
     try {
-      const facility = await this.facLoader.getFacility(ICAO.getFacilityType(icao), icao);
-      return this.facWaypointCache.get(facility);
+      const facility = await this.facLoader.tryGetFacility(ICAO.getFacilityTypeFromValue(icao), icao, this.airportFacilityDataFlags);
+      if (facility) {
+        return this.facWaypointCache.get(facility);
+      }
     } catch (e) {
       // noop
     }
@@ -244,27 +255,39 @@ export class ProcedureTurnLegWaypointsRecord extends AbstractFlightPlanLegWaypoi
   private ptWaypoint: ProcedureTurnLegWaypoint | null = null;
 
   /**
-   * Constructor.
+   * Creates a new instance of ProcedureTurnLegWaypointsRecord.
    * @param leg The flight plan leg associated with this record.
    * @param waypointRenderer The renderer used to render this record's waypoints.
-   * @param facLoader The facility loader used by this waypoint.
+   * @param facLoader The facility loader used by this record.
    * @param facWaypointCache The facility waypoint cache used by this record.
    * @param inactiveRenderRole The role(s) under which the waypoint should be registered when it is part of an inactive
    * leg.
    * @param activeRenderRole The role(s) under which the waypoint should be registered when it is part of an active
    * leg.
+   * @param airportFacilityDataFlags Bitflags describing the requested data to be loaded in airport facilities
+   * retrieved by the new record. This controls what data are available from the airport waypoints that the record
+   * registers with the waypoint renderer. Defaults to {@link AirportFacilityDataFlags.All}.
    */
-  constructor(
+  public constructor(
     leg: LegDefinition,
     waypointRenderer: MapWaypointRenderer,
     facLoader: FacilityLoader,
     facWaypointCache: FacilityWaypointCache,
     inactiveRenderRole: MapWaypointRenderRole,
-    activeRenderRole: MapWaypointRenderRole
+    activeRenderRole: MapWaypointRenderRole,
+    airportFacilityDataFlags?: number
   ) {
     super(leg, waypointRenderer, facLoader, inactiveRenderRole, activeRenderRole);
 
-    this.fixIcaoRecord = new FixIcaoWaypointsRecord(leg, waypointRenderer, facLoader, facWaypointCache, inactiveRenderRole, activeRenderRole);
+    this.fixIcaoRecord = new FixIcaoWaypointsRecord(
+      leg,
+      waypointRenderer,
+      facLoader,
+      facWaypointCache,
+      inactiveRenderRole,
+      activeRenderRole,
+      airportFacilityDataFlags
+    );
   }
 
   /** @inheritdoc */

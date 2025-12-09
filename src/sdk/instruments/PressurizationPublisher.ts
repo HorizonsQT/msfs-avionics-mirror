@@ -15,7 +15,6 @@ export interface PressurizationEvents {
 
   /** A pressure differential value. */
   pressure_diff: number;
-
 }
 
 /**
@@ -27,13 +26,6 @@ export class PressurizationPublisher extends SimVarPublisher<PressurizationEvent
     ['cabin_altitude_rate', { name: 'PRESSURIZATION CABIN ALTITUDE RATE', type: SimVarValueType.FPM }],
     ['pressure_diff', { name: 'PRESSURIZATION PRESSURE DIFFERENTIAL', type: SimVarValueType.PSI }]
   ]);
-
-  /**
-   * Updates the ADC publisher.
-   */
-  public onUpdate(): void {
-    super.onUpdate();
-  }
 
   /**
    * Create an PressurizationPublisher

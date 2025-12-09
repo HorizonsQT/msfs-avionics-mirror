@@ -20,11 +20,14 @@
       "*": [
         "/*"
       ]
-    }
+    },
+    "plugins": [
+      { "transform": "@microsoft/msfs-ts-transformer" },
+    ],
   },
   "exclude": [
     "**/node_modules",
     "**/build",
-    "**/dist"
-  ]
+    "**/dist",
+  ],
 }

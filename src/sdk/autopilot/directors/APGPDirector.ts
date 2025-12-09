@@ -76,10 +76,12 @@ export type APGPDirectorOptions = {
 };
 
 /**
- * An RNAV LPV glidepath autopilot director.
+ * An autopilot director that generates flight director pitch commands to track a glidepath.
+ * 
+ * The director requires valid pitch data to arm or activate.
  */
 export class APGPDirector implements PlaneDirector {
-
+  /** @inheritDoc */
   public state: DirectorState;
 
   /** @inheritDoc */
@@ -87,6 +89,9 @@ export class APGPDirector implements PlaneDirector {
 
   /** @inheritDoc */
   public onArm?: () => void;
+
+  /** @inheritDoc */
+  public onDeactivate?: () => void;
 
   /** @inheritDoc */
   public drivePitch?: (pitch: number, adjustForAoa?: boolean, adjustForVerticalWind?: boolean) => void;
@@ -105,6 +110,9 @@ export class APGPDirector implements PlaneDirector {
   private readonly canArmFunc: (isGuidanceValid: boolean, fpa: number, deviation: number) => boolean;
   private readonly canCaptureFunc: (fpa: number, deviation: number) => boolean;
   private readonly canTrackFunc: (fpa: number, deviation: number) => boolean;
+
+  private readonly pitch = this.apValues.dataProvider.getItem('pitch');
+  private readonly groundSpeed = this.apValues.dataProvider.getItem('ground_speed');
 
   /**
    * Creates a new instance of APGPDirector.
@@ -154,13 +162,27 @@ export class APGPDirector implements PlaneDirector {
     });
   }
 
+  /**
+   * Checks whether the data required for this director to function are valid.
+   * @returns Whether the data required for this director to function are valid.
+   */
+  private isDataValid(): boolean {
+    return this.pitch.isValueValid();
+  }
+
   /** @inheritDoc */
   public activate(): void {
+    if (this.state === DirectorState.Active || !this.isDataValid()) {
+      return;
+    }
+
     this.state = DirectorState.Active;
-    SimVar.SetSimVarValue(VNavVars.GPApproachMode, SimVarValueType.Number, ApproachGuidanceMode.GPActive);
+
     if (this.onActivate !== undefined) {
       this.onActivate();
     }
+
+    SimVar.SetSimVarValue(VNavVars.GPApproachMode, SimVarValueType.Number, ApproachGuidanceMode.GPActive);
     SimVar.SetSimVarValue('AUTOPILOT GLIDESLOPE ACTIVE', 'Bool', true);
     SimVar.SetSimVarValue('AUTOPILOT APPROACH ACTIVE', 'Bool', true);
     SimVar.SetSimVarValue('AUTOPILOT GLIDESLOPE ARM', 'Bool', false);
@@ -168,23 +190,36 @@ export class APGPDirector implements PlaneDirector {
 
   /** @inheritDoc */
   public arm(): void {
-    if (this.state === DirectorState.Inactive) {
-      if (this.canArmFunc(this.isGuidanceValidFunc(), this.getFpaFunc(), this.getDeviationFunc())) {
-        this.state = DirectorState.Armed;
-        SimVar.SetSimVarValue(VNavVars.GPApproachMode, SimVarValueType.Number, ApproachGuidanceMode.GPArmed);
-        if (this.onArm !== undefined) {
-          this.onArm();
-        }
-        SimVar.SetSimVarValue('AUTOPILOT GLIDESLOPE ARM', 'Bool', true);
-        SimVar.SetSimVarValue('AUTOPILOT GLIDESLOPE ACTIVE', 'Bool', false);
-        SimVar.SetSimVarValue('AUTOPILOT APPROACH ACTIVE', 'Bool', true);
+    if (this.state !== DirectorState.Inactive || !this.isDataValid()) {
+      return;
+    }
+
+    if (this.canArmFunc(this.isGuidanceValidFunc(), this.getFpaFunc(), this.getDeviationFunc())) {
+      this.state = DirectorState.Armed;
+
+      if (this.onArm !== undefined) {
+        this.onArm();
       }
+
+      SimVar.SetSimVarValue(VNavVars.GPApproachMode, SimVarValueType.Number, ApproachGuidanceMode.GPArmed);
+      SimVar.SetSimVarValue('AUTOPILOT GLIDESLOPE ARM', 'Bool', true);
+      SimVar.SetSimVarValue('AUTOPILOT GLIDESLOPE ACTIVE', 'Bool', false);
+      SimVar.SetSimVarValue('AUTOPILOT APPROACH ACTIVE', 'Bool', true);
     }
   }
 
   /** @inheritDoc */
   public deactivate(): void {
+    if (this.state === DirectorState.Inactive) {
+      return;
+    }
+
     this.state = DirectorState.Inactive;
+
+    if (this.onDeactivate !== undefined) {
+      this.onDeactivate();
+    }
+
     SimVar.SetSimVarValue(VNavVars.GPApproachMode, SimVarValueType.Number, ApproachGuidanceMode.None);
     SimVar.SetSimVarValue('AUTOPILOT GLIDESLOPE ARM', 'Bool', false);
     SimVar.SetSimVarValue('AUTOPILOT GLIDESLOPE ACTIVE', 'Bool', false);
@@ -193,6 +228,15 @@ export class APGPDirector implements PlaneDirector {
 
   /** @inheritDoc */
   public update(): void {
+    if (this.state === DirectorState.Inactive) {
+      return;
+    }
+
+    if (!this.isDataValid()) {
+      this.deactivate();
+      return;
+    }
+
     const isGuidanceValid = this.isGuidanceValidFunc();
     let deviation: number | undefined;
     let fpa: number | undefined;
@@ -217,7 +261,7 @@ export class APGPDirector implements PlaneDirector {
         return;
       }
 
-      const groundSpeed = SimVar.GetSimVarValue('GROUND VELOCITY', SimVarValueType.Knots);
+      const groundSpeed = this.groundSpeed.getActualValue();
       const fpaPercentage = Math.max(deviation / (VNavUtils.getPathErrorDistance(groundSpeed) * -1), -1) + 1;
       this.drivePitch && this.drivePitch(fpa * fpaPercentage, true, true);
     }

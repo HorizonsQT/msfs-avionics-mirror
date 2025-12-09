@@ -202,9 +202,9 @@ export class MapRunwayOutlineIcon implements MapWaypointIcon<MapRunwayOutlineWay
     const minY = Math.min(topLeft[1], topRight[1], bottomRight[1], bottomLeft[1]);
     const maxY = Math.max(topLeft[1], topRight[1], bottomRight[1], bottomLeft[1]);
 
-    const [windowWidth, windowHeight] = mapProjection.getProjectedSize();
+    const window = mapProjection.getProjectedSize();
 
-    if (maxX <= 0 || maxY <= 0 || minX >= windowWidth || minY >= windowHeight) {
+    if (maxX <= 0 || maxY <= 0 || minX >= window[0] || minY >= window[1]) {
       return;
     }
 

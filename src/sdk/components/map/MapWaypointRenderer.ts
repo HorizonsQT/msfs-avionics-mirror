@@ -123,6 +123,11 @@ export class MapWaypointRenderer<W extends MapWaypoint = MapWaypoint> {
   protected readonly roleDefinitions = new Map<number, MapWaypointRenderRoleDef<W>>();
 
   /**
+   * An array of this renderer's role definitions. This array is kept in sync with the `roleDefinitions` map.
+   */
+  protected readonly roleDefinitionsArray: MapWaypointRenderRoleDef<W>[] = [];
+
+  /**
    * An event to subscribe to, fired when waypoints are added to the renderer.
    */
   public readonly onWaypointAdded = new SubEvent<any, W>();
@@ -166,7 +171,9 @@ export class MapWaypointRenderer<W extends MapWaypoint = MapWaypoint> {
       return false;
     }
 
-    this.roleDefinitions.set(role, Object.assign({}, def ?? MapWaypointRenderer.NULL_ROLE_DEF));
+    const definition = Object.assign({}, def ?? MapWaypointRenderer.NULL_ROLE_DEF);
+    this.roleDefinitions.set(role, definition);
+    this.roleDefinitionsArray.push(definition);
 
     return true;
   }
@@ -177,7 +184,14 @@ export class MapWaypointRenderer<W extends MapWaypoint = MapWaypoint> {
    * @returns Whether the render role was successfully removed.
    */
   public removeRenderRole(role: number): boolean {
-    return this.roleDefinitions.delete(role);
+    const definition = this.roleDefinitions.get(role);
+    if (definition) {
+      this.roleDefinitions.delete(role);
+      this.roleDefinitionsArray.splice(this.roleDefinitionsArray.indexOf(definition), 1);
+      return true;
+    } else {
+      return false;
+    }
   }
 
   /**
@@ -204,6 +218,7 @@ export class MapWaypointRenderer<W extends MapWaypoint = MapWaypoint> {
    */
   public clearRenderRoles(): void {
     this.roleDefinitions.clear();
+    this.roleDefinitionsArray.length = 0;
   }
 
   /**
@@ -357,43 +372,66 @@ export class MapWaypointRenderer<W extends MapWaypoint = MapWaypoint> {
     this.toCleanUp.add(entry);
   }
 
+  private readonly entriesToDrawIcon: MapWaypointRendererEntry<W>[] = [];
+
   /**
    * Redraws waypoints registered with this renderer.
    * @param mapProjection The map projection to use.
    */
   public update(mapProjection: MapProjection): void {
-    this.toCleanUp.forEach(entry => {
-      entry.destroy();
-    });
+    this.toCleanUp.forEach(this.cleanUpEntryFunc);
     this.toCleanUp.clear();
 
-    const entriesToDrawIcon: MapWaypointRendererEntry<W>[] = [];
-    this.registered.forEach(entry => {
-      entry.update();
-      if (entry.icon) {
-        entriesToDrawIcon.push(entry);
-      }
-    });
+    this.registered.forEach(this.prepareEntryToDrawFunc);
 
     const projectedSize = mapProjection.getProjectedSize();
-    for (const roleDef of this.roleDefinitions.values()) {
-      const context = roleDef.canvasContext;
+    const roleDefCount = this.roleDefinitionsArray.length;
+    for (let i = 0; i < roleDefCount; i++) {
+      const context = this.roleDefinitionsArray[i].canvasContext;
       if (context) {
         context.clearRect(0, 0, projectedSize[0], projectedSize[1]);
       }
     }
 
-    entriesToDrawIcon.sort(MapWaypointRenderer.ENTRY_SORT_FUNC);
-    const len2 = entriesToDrawIcon.length;
-    for (let i = 0; i < len2; i++) {
-      const entry = entriesToDrawIcon[i];
-      const icon = entry.icon;
-      const context = this.roleDefinitions.get(entry.lastRenderedRole)?.canvasContext;
+    this.entriesToDrawIcon.sort(MapWaypointRenderer.ENTRY_SORT_FUNC);
+    const entriesToDrawCount = this.entriesToDrawIcon.length;
+    for (let i = 0; i < entriesToDrawCount; i++) {
+      const entry = this.entriesToDrawIcon[i];
+
+      // NOTE: All entries in the entriesToDrawIcon array must have defined icons and by extension must also have
+      // defined last rendered role definitions.
+      const icon = entry.icon!;
+      const context = entry.lastRenderedRoleDefinition!.canvasContext;
       if (context) {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        icon!.draw(context, mapProjection);
+        icon.draw(context, mapProjection);
       }
     }
+
+    this.entriesToDrawIcon.length = 0;
+  }
+
+  private prepareEntryToDrawFunc = this.prepareEntryToDraw.bind(this);
+
+  /**
+   * Prepares a waypoint entry to be drawn. The entry is updated and if its icon is to be drawn, then the entry is
+   * added to the `entriesToDrawIcon` array.
+   * @param entry The entry to prepare.
+   */
+  private prepareEntryToDraw(entry: MapWaypointRendererEntry<W>): void {
+    entry.update();
+    if (entry.icon) {
+      this.entriesToDrawIcon.push(entry);
+    }
+  }
+
+  private cleanUpEntryFunc = this.cleanUpEntry.bind(this);
+
+  /**
+   * Cleans up a waypoint entry. This will destroy the entry and render it unusable.
+   * @param entry The entry to clean up.
+   */
+  private cleanUpEntry(entry: MapWaypointRendererEntry<W>): void {
+    entry.destroy();
   }
 
   /**
@@ -441,10 +479,21 @@ export class MapWaypointRenderer<W extends MapWaypoint = MapWaypoint> {
 export class MapWaypointRendererEntry<W extends MapWaypoint> {
   private readonly registrations: Record<number, Set<string> | undefined> = {};
 
-  private _roles = 0;
-  private _icon: MapWaypointIcon<W> | null = null;
-  private _label: MapCullableTextLabel | null = null;
-  private _lastRenderedRole = 0;
+  /** The render role(s) assigned to this entry. */
+  public readonly roles = 0;
+
+  /** The role under which this entry was last rendered, or 0 if this entry has not yet been rendered. */
+  public readonly lastRenderedRole = 0;
+
+  /** The definition for the role under which this entry was last rendered, or `null` if */
+  public readonly lastRenderedRoleDefinition: Readonly<MapWaypointRenderRoleDef<W>> | null = null;
+
+  /** This entry's waypoint icon. */
+  public readonly icon: MapWaypointIcon<W> | null = null;
+
+  /** This entry's waypoint label. */
+  public readonly label: MapCullableTextLabel | null = null;
+
 
   /**
    * Constructor.
@@ -459,30 +508,6 @@ export class MapWaypointRendererEntry<W extends MapWaypoint> {
     private readonly roleDefinitions: ReadonlyMap<number, Readonly<MapWaypointRenderRoleDef<W>>>,
     private readonly selectRoleToRender: MapWaypointRenderRoleSelector<W>
   ) {
-  }
-
-  // eslint-disable-next-line jsdoc/require-returns
-  /** The render role(s) assigned to this entry. */
-  public get roles(): number {
-    return this._roles;
-  }
-
-  // eslint-disable-next-line jsdoc/require-returns
-  /** The role under which this entry was last rendered, or 0 if this entry has not yet been rendered. */
-  public get lastRenderedRole(): number {
-    return this._lastRenderedRole;
-  }
-
-  // eslint-disable-next-line jsdoc/require-returns
-  /** This entry's waypoint icon. */
-  public get icon(): MapWaypointIcon<W> | null {
-    return this._icon;
-  }
-
-  // eslint-disable-next-line jsdoc/require-returns
-  /** This entry's waypoint label. */
-  public get label(): MapCullableTextLabel | null {
-    return this._label;
   }
 
   /**
@@ -549,7 +574,7 @@ export class MapWaypointRendererEntry<W extends MapWaypoint> {
       (this.registrations[1 << index] ??= new Set<string>()).add(sourceId);
     }, true);
 
-    this._roles = this._roles | roles;
+    (this.roles as number) = this.roles | roles;
   }
 
   /**
@@ -564,7 +589,7 @@ export class MapWaypointRendererEntry<W extends MapWaypoint> {
       if (registrations) {
         registrations.delete(sourceId);
         if (registrations.size === 0) {
-          this._roles = this._roles & ~role;
+          (this.roles as number) = this.roles & ~role;
         }
       }
     }, true);
@@ -573,30 +598,35 @@ export class MapWaypointRendererEntry<W extends MapWaypoint> {
   /**
    * Prepares this entry for rendering.
    * @param showRole The role in which this entry should be rendered.
-   * @param iconFactory The factory to use to get a waypoint icon.
-   * @param labelFactory The factory to use to get a waypoint label.
    */
-  private prepareRender(
-    showRole: number,
-    iconFactory: MapWaypointRendererIconFactory<W> | null,
-    labelFactory: MapWaypointRendererLabelFactory<W> | null
-  ): void {
-    if (showRole === this._lastRenderedRole) {
+  private prepareRender(showRole: number): void {
+    if (showRole === this.lastRenderedRole) {
       return;
     }
 
-    this._icon = iconFactory?.getIcon(showRole, this.waypoint) ?? null;
+    const roleDef = this.roleDefinitions.get(showRole) ?? null;
+
+    let iconFactory: MapWaypointRendererIconFactory<W> | null = null;
+    let labelFactory: MapWaypointRendererLabelFactory<W> | null = null;
+
+    if (roleDef) {
+      iconFactory = roleDef.iconFactory ?? null;
+      labelFactory = roleDef.labelFactory ?? null;
+    }
+
+    (this.icon as MapWaypointIcon<W> | null) = iconFactory?.getIcon(showRole, this.waypoint) ?? null;
 
     const label = labelFactory?.getLabel(showRole, this.waypoint) ?? null;
-    if (this._label && this._label !== label) {
-      this.textManager.deregister(this._label);
+    if (this.label && this.label !== label) {
+      this.textManager.deregister(this.label);
     }
-    if (label && label !== this._label) {
+    if (label && label !== this.label) {
       this.textManager.register(label);
     }
-    this._label = label;
+    (this.label as MapCullableTextLabel | null) = label;
 
-    this._lastRenderedRole = showRole;
+    (this.lastRenderedRole as number) = showRole;
+    (this.lastRenderedRoleDefinition as Readonly<MapWaypointRenderRoleDef<W>> | null) = roleDef;
   }
 
   /**
@@ -607,18 +637,15 @@ export class MapWaypointRendererEntry<W extends MapWaypoint> {
    */
   public update(): void {
     const showRole = this.selectRoleToRender(this, this.roleDefinitions);
-    const roleDef = this.roleDefinitions.get(showRole);
-    const iconFactory = roleDef?.iconFactory ?? null;
-    const labelFactory = roleDef?.labelFactory ?? null;
-    this.prepareRender(showRole, iconFactory, labelFactory);
+    this.prepareRender(showRole);
   }
 
   /**
    * Destroys this entry. Any label from this entry currently registered with the text manager will be deregistered.
    */
   public destroy(): void {
-    if (this._label) {
-      this.textManager.deregister(this._label);
+    if (this.label) {
+      this.textManager.deregister(this.label);
     }
   }
 }

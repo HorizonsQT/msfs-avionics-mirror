@@ -4,7 +4,6 @@ import { SimVarValueType } from '../../data/SimVars';
 import { GeoPoint } from '../../geo/GeoPoint';
 import { MagVar } from '../../geo/MagVar';
 import { NavMath } from '../../geo/NavMath';
-import { GNSSPublisher } from '../../instruments/GNSS';
 import { NavComEvents } from '../../instruments/NavCom';
 import { NavSourceId, NavSourceType } from '../../instruments/NavProcessor';
 import { NavRadioIndex } from '../../instruments/RadioCommon';
@@ -305,8 +304,10 @@ type PhaseParameters = {
 };
 
 /**
- * An autopilot director that provides lateral guidance by tracking a back-course signal from a localizer radio
- * navigation aid.
+ * An autopilot director that generates flight director bank commands to track a back-course signal from a localizer
+ * radio navigation aid.
+ * 
+ * The director requires valid bank data to arm or activate.
  *
  * Requires that the navigation radio topics defined in {@link NavComEvents} be published to the event bus in order to
  * function properly.
@@ -314,16 +315,16 @@ type PhaseParameters = {
 export class APBackCourseDirector implements PlaneDirector {
   public state: DirectorState;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
   public onActivate?: () => void;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
   public onArm?: () => void;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
   public onDeactivate?: () => void;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
   public driveBank?: (bank: number, rate?: number) => void;
 
   private navSource: Readonly<NavSourceId> = {
@@ -374,6 +375,12 @@ export class APBackCourseDirector implements PlaneDirector {
   private readonly phaseParameters: Record<APBackCourseDirectorPhase, PhaseParameters>;
 
   private readonly forceNavSource: NavRadioIndex | undefined;
+
+  private readonly bank = this.apValues.dataProvider.getItem('bank');
+  private readonly planeLat = this.apValues.dataProvider.getItem('lat');
+  private readonly planeLon = this.apValues.dataProvider.getItem('lon');
+  private readonly trackTrue = this.apValues.dataProvider.getItem('ground_track_true');
+  private readonly tas = this.apValues.dataProvider.getItem('tas');
 
   /**
    * Creates a new instance of APBackCourseDirector.
@@ -538,6 +545,14 @@ export class APBackCourseDirector implements PlaneDirector {
   }
 
   /**
+   * Checks whether the data required for this director to function are valid.
+   * @returns Whether the data required for this director to function are valid.
+   */
+  private isDataValid(): boolean {
+    return this.bank.isValueValid();
+  }
+
+  /**
    * Updates this director's radio navigation data.
    */
   private updateNavData(): void {
@@ -557,13 +572,19 @@ export class APBackCourseDirector implements PlaneDirector {
    * Activates this director.
    */
   public activate(): void {
+    if (this.state === DirectorState.Active || !this.isDataValid()) {
+      return;
+    }
+
+    this.state = DirectorState.Active;
+
     if (this.onActivate !== undefined) {
       this.onActivate();
     }
+
     SimVar.SetSimVarValue('AUTOPILOT NAV1 LOCK', 'Bool', true);
     SimVar.SetSimVarValue('AUTOPILOT BACKCOURSE HOLD', 'Bool', true);
     SimVar.SetSimVarValue('AUTOPILOT APPROACH ACTIVE', 'Bool', true);
-    this.state = DirectorState.Active;
 
     Object.assign(this.activateNavData.navSource, this.navSource);
     this.activateNavData.frequency = this.navFrequency.get();
@@ -573,17 +594,21 @@ export class APBackCourseDirector implements PlaneDirector {
    * Arms this director.
    */
   public arm(): void {
-    if (this.state === DirectorState.Inactive) {
-      this.updateNavData();
-      if (this.canArm(this.apValues, this.navData)) {
-        this.state = DirectorState.Armed;
-        if (this.onArm !== undefined) {
-          this.onArm();
-        }
-        SimVar.SetSimVarValue('AUTOPILOT NAV1 LOCK', 'Bool', true);
-        SimVar.SetSimVarValue('AUTOPILOT BACKCOURSE HOLD', 'Bool', true);
-        SimVar.SetSimVarValue('AUTOPILOT APPROACH ACTIVE', 'Bool', true);
+    if (this.state !== DirectorState.Inactive || !this.isDataValid()) {
+      return;
+    }
+
+    this.updateNavData();
+    if (this.canArm(this.apValues, this.navData)) {
+      this.state = DirectorState.Armed;
+
+      if (this.onArm !== undefined) {
+        this.onArm();
       }
+
+      SimVar.SetSimVarValue('AUTOPILOT NAV1 LOCK', 'Bool', true);
+      SimVar.SetSimVarValue('AUTOPILOT BACKCOURSE HOLD', 'Bool', true);
+      SimVar.SetSimVarValue('AUTOPILOT APPROACH ACTIVE', 'Bool', true);
     }
   }
 
@@ -591,7 +616,16 @@ export class APBackCourseDirector implements PlaneDirector {
    * Deactivates this director.
    */
   public deactivate(): void {
+    if (this.state === DirectorState.Inactive) {
+      return;
+    }
+
     this.state = DirectorState.Inactive;
+
+    if (this.onDeactivate !== undefined) {
+      this.onDeactivate();
+    }
+
     this.phase = undefined;
     SimVar.SetSimVarValue('AUTOPILOT NAV1 LOCK', 'Bool', false);
     SimVar.SetSimVarValue('AUTOPILOT BACKCOURSE HOLD', 'Bool', false);
@@ -602,6 +636,15 @@ export class APBackCourseDirector implements PlaneDirector {
    * Updates this director.
    */
   public update(): void {
+    if (this.state === DirectorState.Inactive) {
+      return;
+    }
+
+    if (!this.isDataValid()) {
+      this.deactivate();
+      return;
+    }
+
     if (this.state === DirectorState.Armed) {
       this.updateNavData();
       if (!this.canArm(this.apValues, this.navData)) {
@@ -633,7 +676,7 @@ export class APBackCourseDirector implements PlaneDirector {
       const radialError = SimVar.GetSimVarValue(this.radialErrorSimVar, SimVarValueType.Radians);
       const xtk = distanceToSource * Math.sin(radialError);
       const courseTrue = MagVar.magneticToTrue(courseMag, -this.navMagVar.get());
-      const trueTrack = GNSSPublisher.getInstantaneousTrack();
+      const trueTrack = this.trackTrue.getActualValue();
 
       this.phase = this.phaseSelectorFunc(this.phase, deflection, xtk, courseTrue, trueTrack);
 
@@ -643,7 +686,7 @@ export class APBackCourseDirector implements PlaneDirector {
         distanceToSource,
         deflection,
         xtk,
-        SimVar.GetSimVarValue('AIRSPEED TRUE', SimVarValueType.Knots)
+        this.tas.getActualValue()
       );
 
       const interceptAngle = xtk > 0 ? -absInterceptAngle : absInterceptAngle;
@@ -669,8 +712,8 @@ export class APBackCourseDirector implements PlaneDirector {
       return UnitType.GA_RADIAN.convertTo(GeoPoint.distance(
         navLla.lat,
         navLla.long,
-        SimVar.GetSimVarValue('PLANE LATITUDE', SimVarValueType.Degree),
-        SimVar.GetSimVarValue('PLANE LONGITUDE', SimVarValueType.Degree)
+        this.planeLat.getActualValue(),
+        this.planeLon.getActualValue()
       ), UnitType.NMILE);
     } else {
       return 5;
@@ -777,7 +820,7 @@ export class APBackCourseDirector implements PlaneDirector {
       && Math.abs(navData.deviation) < 1
     ) {
       const dtk = NavMath.normalizeHeading(navData.locCourse + 180);
-      const headingDiff = NavMath.diffAngle(SimVar.GetSimVarValue('PLANE HEADING DEGREES MAGNETIC', SimVarValueType.Degree), dtk);
+      const headingDiff = NavMath.diffAngle(apValues.dataProvider.getItem('heading_magnetic').getValue(), dtk);
       if (Math.abs(headingDiff) < 110) {
         return true;
       }

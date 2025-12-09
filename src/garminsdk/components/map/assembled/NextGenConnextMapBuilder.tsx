@@ -30,6 +30,7 @@ import {
   MapFlightPlanFocusModule, MapOrientation, MapOrientationModule, MapPointerModule, MapUnitsModule
 } from '../modules';
 import { NextGenGarminMapBuilder } from '../NextGenGarminMapBuilder';
+import { NextGenGarminMapUtils } from '../NextGenGarminMapUtils';
 
 /**
  * Options for creating a next-generation (NXi, G3000, etc) Garmin Connext weather map.
@@ -60,6 +61,13 @@ export type NextGenConnextMapOptions = {
 
   /** The scaling factor of waypoint icons and labels. Defaults to `1`. */
   waypointStyleScale?: number;
+
+  /**
+   * Bitflags describing the requested data to be loaded in airport facilities retrieved by the map for rendering
+   * purposes. This controls what data are available from airport waypoints registered with the map's waypoint
+   * renderer. Defaults to {@link NextGenGarminMapUtils.AIRPORT_DATA_FLAGS}.
+   */
+  waypointRendererAirportDataFlags?: number;
 
   /**
    * The nominal projected target offset of the map for each orientation mode, as `[x, y]`, where each component is
@@ -276,6 +284,8 @@ export class NextGenConnextMapBuilder {
   ): MapBuilder {
     options = Object.assign({}, options); // so we don't mutate the object that was passed in.
 
+    options.waypointRendererAirportDataFlags ??= NextGenGarminMapUtils.AIRPORT_DATA_FLAGS;
+
     options.targetOffsets ??= {};
     options.targetOffsets[MapOrientation.NorthUp] ??= Vec2Math.create();
     options.targetOffsets[MapOrientation.HeadingUp] ??= Vec2Math.create(0, 0.17);
@@ -320,6 +330,7 @@ export class NextGenConnextMapBuilder {
       .withContext(MapSystemKeys.FacilityLoader, context => {
         return options.facilityLoader ?? new FacilityLoader(FacilityRepository.getRepository(context.bus));
       })
+      .withContext(MapSystemKeys.WaypointRendererAirportDataFlags, () => options.waypointRendererAirportDataFlags)
       .withModule(GarminMapKeys.Units, () => new MapUnitsModule(options.unitsSettingManager))
       .with(GarminMapBuilder.range,
         options.nauticalRangeArray ?? MapUtils.nextGenMapRanges(UnitsDistanceSettingMode.Nautical),
@@ -400,7 +411,10 @@ export class NextGenConnextMapBuilder {
               GarminFacilityWaypointCache.getCache(context.bus),
               renderer,
               MapWaypointRenderRole.FlightPlanInactive,
-              MapWaypointRenderRole.FlightPlanActive
+              MapWaypointRenderRole.FlightPlanActive,
+              {
+                airportFacilityDataFlags: context[MapSystemKeys.WaypointRendererAirportDataFlags],
+              }
             );
           },
           pathRendererFactory: () => new DefaultFlightPathPlanRenderer(),

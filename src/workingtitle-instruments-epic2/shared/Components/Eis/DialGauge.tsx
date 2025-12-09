@@ -1,4 +1,4 @@
-import { CssTransformBuilder, FSComponent, MappedSubject, MathUtils, Subject, Subscribable, SubscribableMapFunctions, SubscribableUtils, SVGUtils, ToggleableClassNameRecord, VNode } from '@microsoft/msfs-sdk';
+import { CssTransformBuilder, CssTransformSubject, FSComponent, MappedSubject, MathUtils, Subscribable, SubscribableMapFunctions, SubscribableUtils, SVGUtils, ToggleableClassNameRecord, VNode } from '@microsoft/msfs-sdk';
 
 import { AbstractEngineGauge, AbstractEngineGaugeProps } from './AbstractEngineGauge';
 
@@ -41,8 +41,6 @@ const MARK_PROPS: (keyof DialGaugeProps)[] = [
 /** A DialGauge */
 export class DialGauge extends AbstractEngineGauge<DialGaugeProps> {
   private readonly gaugeRef = FSComponent.createRef<HTMLDivElement>();
-  private readonly needleRef = FSComponent.createRef<SVGPolygonElement>();
-  protected readonly grayMask = FSComponent.createRef<HTMLDivElement>();
 
   protected isAmberLowActive = SubscribableUtils.toSubscribable(this.props.isAmberCautionLowActive ?? false, true);
   protected isAmberHighActive = SubscribableUtils.toSubscribable(this.props.isAmberCautionHighActive ?? false, true);
@@ -53,8 +51,10 @@ export class DialGauge extends AbstractEngineGauge<DialGaugeProps> {
   protected readonly isRed = MappedSubject.create(SubscribableMapFunctions.or(), this.isRedLowActive, this.isRedHighActive);
 
   protected readonly isPointerVisible = this.pointer.map((v) => v === null);
-  protected readonly pointerTransform = Subject.create('rotate3d(0, 0, 0)');
-  protected readonly pointerTransformBuilder = CssTransformBuilder.rotate3d('deg');
+  protected readonly pointerTransform = CssTransformSubject.create(CssTransformBuilder.rotate3d('deg'));
+
+  private readonly needleTransform = CssTransformSubject.create(CssTransformBuilder.rotate3d('deg'));
+  private readonly maskTransform = CssTransformSubject.create(CssTransformBuilder.rotate('deg'));
 
   /**
    * Calculates an angle from a value for use in the arc path builder.
@@ -106,7 +106,9 @@ export class DialGauge extends AbstractEngineGauge<DialGaugeProps> {
   protected onValueChanged(val: number | null): void {
     if (val !== null) {
       const angle = this.calculateAngleFromValue(val);
-      this.needleRef.instance.style.transform = `rotate(${angle}deg)`;
+
+      this.needleTransform.transform.set(0, 0, 1, angle, 0.5);
+      this.needleTransform.resolve();
       this.updateMask(angle);
     }
   }
@@ -117,7 +119,9 @@ export class DialGauge extends AbstractEngineGauge<DialGaugeProps> {
    */
   public updateMask(angle: number): void {
     const greyCircleRotationDegree = -90 + angle;
-    this.grayMask.instance.style.transform = `rotate(${greyCircleRotationDegree}deg)`;
+
+    this.maskTransform.transform.set(greyCircleRotationDegree, 0.5);
+    this.maskTransform.resolve();
   }
 
   /**
@@ -173,8 +177,8 @@ export class DialGauge extends AbstractEngineGauge<DialGaugeProps> {
     }
 
     this.pointer.sub((v) => {
-      this.pointerTransformBuilder.set(0, 0, 1, this.calculateAngleFromValue(v ?? 0), 0.1);
-      this.pointerTransform.set(this.pointerTransformBuilder.resolve());
+      this.pointerTransform.transform.set(0, 0, 1, this.calculateAngleFromValue(v ?? 0), 0.1);
+      this.pointerTransform.resolve();
     }, true);
   }
 
@@ -186,7 +190,7 @@ export class DialGauge extends AbstractEngineGauge<DialGaugeProps> {
     return (
       <div class={{ 'dial-gauge': true, ...this.props.class }} ref={this.gaugeRef}>
         <div class="dial-gauge-container">
-          <div class="dial-gauge-svg-arc-rotating-mask dial-gauge-rotate-center" ref={this.grayMask}>
+          <div class="dial-gauge-svg-arc-rotating-mask dial-gauge-rotate-center" style={{ transform: this.maskTransform }}>
             <svg width="250px" height="200px">
               <path d="M 170 90 A 80 80 0 0 0 10 90 L 10 90 z" />
             </svg>
@@ -208,11 +212,13 @@ export class DialGauge extends AbstractEngineGauge<DialGaugeProps> {
           {this.renderMarks()}
 
           <polygon
-            ref={this.needleRef}
             class={{
               'needle': true,
               'amber': this.isAmber,
               'red': this.isRed,
+            }}
+            style={{
+              transform: this.needleTransform,
             }}
             points={`${ARC_ORIGIN_X},15 ${ARC_ORIGIN_X + 6},${ARC_ORIGIN_Y} ${ARC_ORIGIN_X - 6},${ARC_ORIGIN_Y}`}
           />

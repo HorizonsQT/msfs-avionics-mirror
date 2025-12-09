@@ -31,6 +31,7 @@ import { SelectedNavSourceInfo } from './HSI/SelectedNavSourceInfo';
 import { MachDigitalReadout } from './MachDigitalReadout/MachDigitalReadout';
 import { MarkerBeacon } from './MarkerBeacon/MarkerBeacon';
 import { MinimumsAlert } from './MinimumsAlert/MinimumsAlert';
+import { NoTakeoffAlert } from './PfdAlerts';
 import { PfdAlerts } from './PfdAlerts/PfdAlerts';
 import { PfdControllerState } from './PfdControllerState/PfdControllerState';
 import { PfdInfo } from './PfdInfo/PfdInfo';
@@ -411,7 +412,8 @@ export class HorizonSectionContainer extends DisplayComponent<HorizonSectionCont
       <NavPreview bus={this.props.bus} navigationSourceDataProvider={this.props.navigationSourceDataProvider} settings={this.props.navComSettingsManager} />
       <BearingPointerSourcesDisplay navigationSourceDataProvider={this.props.navigationSourceDataProvider} />
       <PfdControllerState bus={this.props.bus} />
-      <PfdAlerts bus={this.props.bus} />
+      <PfdAlerts bus={this.props.bus} airspeedDataProvider={this.props.airspeedDataProvider} />
+      <NoTakeoffAlert bus={this.props.bus} />
       <GpwsGroundProxAlert bus={this.props.bus} />
       <GpwsPullUpAlert bus={this.props.bus} />
     </>;

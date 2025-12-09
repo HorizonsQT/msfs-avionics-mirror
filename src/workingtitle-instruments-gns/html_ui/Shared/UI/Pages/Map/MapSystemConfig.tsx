@@ -261,6 +261,7 @@ export class MapSystemConfig {
 
       builder
         .withAnticipationTurns(false)
+        .registerRole(GNSMapWaypointRoles.FlightPlan)
         .registerRole(GNSMapWaypointRoles.ActiveFlightPlan)
         .addDefaultIcon(GNSMapWaypointRoles.FlightPlan, w => new MapWaypointImageIcon(w, 0, ImageCache.get('INTERSECTION'), gnsType === 'wt430' ? Vec2Math.create(16, 16) : Vec2Math.create(12, 12)))
         .addDefaultIcon(GNSMapWaypointRoles.ActiveFlightPlan, w => new MapWaypointImageIcon(w, 0, ImageCache.get('INTERSECTION'), gnsType === 'wt430' ? Vec2Math.create(16, 16) : Vec2Math.create(12, 12)))
@@ -322,6 +323,7 @@ export class MapSystemConfig {
 
       builder
         .withAnticipationTurns(false)
+        .registerRole(GNSMapWaypointRoles.FlightPlan)
         .addDefaultIcon(GNSMapWaypointRoles.FlightPlan, w => new MapWaypointImageIcon(w, 0, ImageCache.get('INTERSECTION'), Vec2Math.create(12, 12)))
         .addDefaultLabel(GNSMapWaypointRoles.FlightPlan, MapSystemConfig.buildFlightPlanLabel('#ccc', '#000', fplWaypointSize))
         .addIcon(GNSMapWaypointRoles.Normal, WaypointTypes.Airport, MapSystemConfig.buildAirportIcon(gnsType))

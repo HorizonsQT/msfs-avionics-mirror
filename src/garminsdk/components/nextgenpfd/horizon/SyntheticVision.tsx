@@ -1,7 +1,6 @@
 import {
-  ArraySubject, BingComponent, BitFlags, ColorUtils, FSComponent, HorizonLayer, HorizonLayerProps, HorizonProjection,
-  HorizonProjectionChangeType, ObjectSubject, Subject, Subscribable, Subscription, SynVisComponent, Vec2Math,
-  Vec2Subject, VNode
+  ArraySubject, BingComponent, ColorUtils, FSComponent, HorizonLayer, HorizonLayerProps, HorizonProjection,
+  HorizonSyntheticVisionLayer, Subject, Subscribable, Subscription, Vec2Subject, VNode
 } from '@microsoft/msfs-sdk';
 
 import { MapUtils } from '../../map/MapUtils';
@@ -43,27 +42,13 @@ type TerrainColors = {
 export class SyntheticVision extends HorizonLayer<SyntheticVisionProps> {
   private static readonly SKY_COLOR = '#0033E6';
 
-  private readonly synVisRef = FSComponent.createRef<SynVisComponent>();
-
-  private readonly rootStyle = ObjectSubject.create({
-    position: 'absolute',
-    display: '',
-    left: '0',
-    top: '0',
-    width: '100%',
-    height: '100%'
-  });
-
-  private readonly resolution = Vec2Subject.create(Vec2Math.create(100, 100));
-
-  private needUpdateVisibility = false;
-  private needUpdate = false;
+  private readonly synVisRef = FSComponent.createRef<HorizonSyntheticVisionLayer>();
 
   private isEnabledSub?: Subscription;
 
   /** @inheritDoc */
-  protected onVisibilityChanged(): void {
-    this.needUpdateVisibility = true;
+  protected onVisibilityChanged(isVisible: boolean): void {
+    this.synVisRef.instance.setVisible(isVisible);
   }
 
   /** @inheritDoc */
@@ -72,63 +57,27 @@ export class SyntheticVision extends HorizonLayer<SyntheticVisionProps> {
 
     this.isEnabledSub = this.props.isEnabled.sub(this.setVisible.bind(this), true);
 
-    this.needUpdateVisibility = true;
-    this.needUpdate = true;
+    this.synVisRef.instance.onAttached();
   }
 
   /** @inheritDoc */
   public onProjectionChanged(projection: HorizonProjection, changeFlags: number): void {
-    if (BitFlags.isAny(
-      changeFlags,
-      HorizonProjectionChangeType.ProjectedSize | HorizonProjectionChangeType.ProjectedOffset
-    )) {
-      this.needUpdate = true;
-    }
+    this.synVisRef.instance.onProjectionChanged(projection, changeFlags);
   }
 
   /** @inheritDoc */
   public onWake(): void {
-    this.synVisRef.instance.wake();
+    this.synVisRef.instance.onWake();
   }
 
   /** @inheritDoc */
   public onSleep(): void {
-    this.synVisRef.instance.sleep();
+    this.synVisRef.instance.onSleep();
   }
 
   /** @inheritDoc */
   public onUpdated(): void {
-    const isVisible = this.isVisible();
-
-    if (this.needUpdateVisibility) {
-      this.rootStyle.set('display', isVisible ? '' : 'none');
-    }
-
-    if (!this.needUpdate || !isVisible) {
-      return;
-    }
-
-    const projectedSize = this.props.projection.getProjectedSize();
-    const projectedOffset = this.props.projection.getProjectedOffset();
-    const offsetCenterProjected = this.props.projection.getOffsetCenterProjected();
-
-    // We need to move the Bing texture such that its center lies at the center of the projection, including offset.
-    // If there is an offset, we need to overdraw the Bing texture in order to fill the entire projection window.
-
-    const xOverdraw = Math.abs(projectedOffset[0]);
-    const yOverdraw = Math.abs(projectedOffset[1]);
-
-    const bingWidth = projectedSize[0] + xOverdraw * 2;
-    const bingHeight = projectedSize[1] + yOverdraw * 2;
-
-    this.resolution.set(bingWidth, bingHeight);
-
-    this.rootStyle.set('left', `${offsetCenterProjected[0] - bingWidth / 2}px`);
-    this.rootStyle.set('top', `${offsetCenterProjected[1] - bingHeight / 2}px`);
-    this.rootStyle.set('width', `${bingWidth}px`);
-    this.rootStyle.set('height', `${bingHeight}px`);
-
-    this.needUpdate = false;
+    this.synVisRef.instance.onUpdated();
   }
 
   /** @inheritDoc */
@@ -143,18 +92,16 @@ export class SyntheticVision extends HorizonLayer<SyntheticVisionProps> {
     const colorsDef = SyntheticVision.createEarthColors();
 
     return (
-      <div style={this.rootStyle}>
-        <SynVisComponent
-          ref={this.synVisRef}
-          bingId={this.props.bingId}
-          bingDelay={this.props.bingDelay}
-          bingSkipUnbindOnDestroy={this.props.bingSkipUnbindOnDestroy}
-          resolution={this.resolution}
-          skyColor={Subject.create(BingComponent.hexaToRGBColor(SyntheticVision.SKY_COLOR))}
-          earthColors={ArraySubject.create(colorsDef.colors)}
-          earthColorsElevationRange={Vec2Subject.create(colorsDef.elevationRange)}
-        />
-      </div>
+      <HorizonSyntheticVisionLayer
+        ref={this.synVisRef}
+        projection={this.props.projection}
+        bingId={this.props.bingId}
+        bingDelay={this.props.bingDelay}
+        bingSkipUnbindOnDestroy={this.props.bingSkipUnbindOnDestroy}
+        earthColors={ArraySubject.create(colorsDef.colors)}
+        earthColorsElevationRange={Vec2Subject.create(colorsDef.elevationRange)}
+        skyColor={Subject.create(BingComponent.hexaToRGBColor(SyntheticVision.SKY_COLOR))}
+      />
     );
   }
 

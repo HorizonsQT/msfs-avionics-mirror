@@ -757,6 +757,29 @@ export class FlightPlan {
   }
 
   /**
+   * Iterates over the legs in this flight plan and executes a callback for each leg.
+   * @param callback A function that is called once for each leg that is iterated by this method. If the function
+   * returns `true`, then the iteration will stop immediately.
+   * @param reverse Whether to iterate over the legs in reverse order. Defaults to `false`.
+   * @param startIndex The global leg index of the first leg to iterate, inclusive. Defaults to `0` if `reverse` is
+   * `false` or `this.length - 1` if `reverse` is `true`.
+   * @param endIndex The global leg index of the last leg to iterate, exclusive. Defaults to `this.length` if `reverse`
+   * is `false` or `-1` if `reverse` is `true`.
+   */
+  public forEachLeg(
+    callback: (leg: LegDefinition, segment: FlightPlanSegment, segmentIndex: number, segmentLegIndex: number, plan: FlightPlan) => boolean | void,
+    reverse = false,
+    startIndex?: number,
+    endIndex?: number
+  ): void {
+    if (reverse) {
+      this.findLegReverse(callback, startIndex, endIndex);
+    } else {
+      this.findLegForward(callback, startIndex, endIndex);
+    }
+  }
+
+  /**
    * Finds a leg in this flight plan that satisfies a given condition.
    * @param predicate A function that evaluates whether each leg satisfies the condition to be returned by this method.
    * The function is called once for each evaluated leg and should return `true` if the leg satisfies the condition and
@@ -792,7 +815,7 @@ export class FlightPlan {
    * predicate function, or `null` if no leg satisfies the condition.
    */
   private findLegForward(
-    predicate: (leg: LegDefinition, segment: FlightPlanSegment, segmentIndex: number, segmentLegIndex: number, plan: FlightPlan) => boolean,
+    predicate: (leg: LegDefinition, segment: FlightPlanSegment, segmentIndex: number, segmentLegIndex: number, plan: FlightPlan) => boolean | void,
     startIndex = 0,
     endIndex = this.length
   ): LegDefinition | null {
@@ -831,7 +854,7 @@ export class FlightPlan {
    * predicate function, or `null` if no leg satisfies the condition.
    */
   private findLegReverse(
-    predicate: (leg: LegDefinition, segment: FlightPlanSegment, segmentIndex: number, segmentLegIndex: number, plan: FlightPlan) => boolean,
+    predicate: (leg: LegDefinition, segment: FlightPlanSegment, segmentIndex: number, segmentLegIndex: number, plan: FlightPlan) => boolean | void,
     startIndex = this.length - 1,
     endIndex = -1
   ): LegDefinition | null {

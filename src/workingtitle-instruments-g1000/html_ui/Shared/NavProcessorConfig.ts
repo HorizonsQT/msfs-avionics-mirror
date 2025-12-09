@@ -16,12 +16,9 @@ export class NPConfig extends NavProcessorConfig {
     super();
     this.numGps = 0;
     this.numAdf = 1;
-    this.courseIncEvents.add('AS1000_PFD_CRS_INC');
-    this.courseIncEvents.add('AS1000_MFD_CRS_INC');
-    this.courseDecEvents.add('AS1000_PFD_CRS_DEC');
-    this.courseDecEvents.add('AS1000_MFD_CRS_DEC');
-    this.courseSyncEvents.add('AS1000_PFD_CRS_PUSH');
-    this.courseSyncEvents.add('AS1000_MFD_CRS_PUSH');
+
+    // Do not register the Course Knob H events with the nav processor, because we handle those events elsewhere.
+
     this.additionalSources.push(new LNavNavSource(bus, planner));
   }
 }

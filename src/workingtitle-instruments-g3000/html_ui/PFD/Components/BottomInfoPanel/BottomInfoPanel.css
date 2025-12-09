@@ -1,10 +1,14 @@
 .bottom-info {
   position: relative;
+  height: var(--bottom-info-height);
+  font-size: 18px;
+
+  --bottom-info-height: 53px;
 
   --bottom-info-ui-center-x: 50%;
 
-  --bottom-info-padding-top: 2px;
-  --bottom-info-padding-bottom: 2px;
+  --bottom-info-padding-top: 4px;
+  --bottom-info-padding-bottom: 0px;
 
   --bottom-info-cell-a-margin-left: 1px;
   --bottom-info-cell-a-width: 176px;
@@ -31,8 +35,13 @@
   --bottom-info-nav-status-leg-font-size: 1.2em;
 
   /* Computed vars */
-  --bottom-info-padding-height: calc(100% - var(--bottom-info-padding-top) - var(--bottom-info-padding-bottom));
-  --bottom-info-separator-height: calc(100% - var(--bottom-info-separator-padding-top) - var(--bottom-info-separator-padding-bottom));
+
+  /*
+   * NOTE: we avoid using relative (e.g. x%) values in these calculations so that elements using these vars for height
+   * are still eligible to be layout boundaries.
+   */
+  --bottom-info-padding-height: calc(var(--bottom-info-height) - var(--bottom-info-padding-top) - var(--bottom-info-padding-bottom));
+  --bottom-info-separator-height: calc(var(--bottom-info-height) - var(--bottom-info-separator-padding-top) - var(--bottom-info-separator-padding-bottom));
 }
 
 .bottom-info-softkey {
@@ -127,7 +136,7 @@
   left: var(--bottom-info-cell-a-margin-left);
   top: 0px;
   width: var(--bottom-info-cell-a-width);
-  height: 100%;
+  height: var(--bottom-info-height);
   display: flex;
   flex-flow: row nowrap;
   justify-content: space-around;
@@ -149,7 +158,10 @@
 .bottom-info-cell-a-slot {
   position: relative;
   top: var(--bottom-info-padding-top);
+  /* Avoid using relative (e.g. x%) heights to allow this element to be a layout boundary. */
   height: var(--bottom-info-padding-height);
+  /* Force overflow clipping to allow this element to be a layout boundary. */
+  overflow: hidden;
 }
 
 /* ---- Empty Cell A ---- */
@@ -233,7 +245,10 @@
   left: calc(var(--bottom-info-ui-center-x) + var(--bottom-info-time-info-left-offset) + var(--bottom-info-time-info-margin-left));
   top: var(--bottom-info-padding-top);
   width: var(--bottom-info-time-info-width);
+  /* Avoid using relative (e.g. x%) heights to allow this element to be a layout boundary. */
   height: var(--bottom-info-padding-height);
+  /* Force overflow clipping to allow this element to be a layout boundary. */
+  overflow: hidden;
 }
 
 /* ---- Navigation status box ---- */
@@ -251,7 +266,10 @@
   left: 0px;
   top: 0px;
   width: 100%;
-  height: 100%;
+  /* Avoid using relative (e.g. x%) heights to allow this element to be a layout boundary. */
+  height: var(--bottom-info-padding-height);
+  /* Force overflow clipping to allow this element to be a layout boundary. */
+  overflow: hidden;
 }
 
 .bottom-info-nav-status-container .nav-status-fields {
@@ -289,7 +307,10 @@
   right: var(--bottom-info-nav-dme-info-padding-right);
   top: 0px;
   width: calc(100% - var(--bottom-info-nav-dme-info-padding-right));
-  height: 100%;
+  /* Avoid using relative (e.g. x%) heights to allow this element to be a layout boundary. */
+  height: var(--bottom-info-padding-height);
+  /* Force overflow clipping to allow this element to be a layout boundary. */
+  overflow: hidden;
 }
 
 /* ---- Bearing information display ---- */
@@ -313,8 +334,11 @@
 .bottom-info-no-nav-status .bearing-info {
   position: absolute;
   top: 0px;
-  height: 100%;
   width: var(--bottom-info-bearing-info-width);
+  /* Avoid using relative (e.g. x%) heights to allow this element to be a layout boundary. */
+  height: var(--bottom-info-padding-height);
+  /* Force overflow clipping to allow this element to be a layout boundary. */
+  overflow: hidden;
 
   --bearing-info-top-center-margin: 4px;
 }
@@ -350,5 +374,8 @@
 
 .bottom-info-use-nav-status .bearing-info {
   width: 100%;
-  height: 100%;
+  /* Avoid using relative (e.g. x%) heights to allow this element to be a layout boundary. */
+  height: var(--bottom-info-padding-height);
+  /* Force overflow clipping to allow this element to be a layout boundary. */
+  overflow: hidden;
 }

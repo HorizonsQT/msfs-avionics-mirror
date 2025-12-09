@@ -1,10 +1,9 @@
 import {
   Accessible, AccessibleUtils, AdcEvents, AhrsEvents, APEvents, ArraySubject, AvionicsSystemState,
-  AvionicsSystemStateEvent, BitFlags, ClockEvents, ComponentProps, ConsumerSubject, ConsumerValue, DisplayComponent,
-  EventBus, ExpSmoother, FSComponent, GeoPoint, GNSSEvents, HorizonComponent, HorizonProjection,
-  HorizonProjectionChangeType, HorizonSharedCanvasLayer, MappedSubject, MathUtils, MutableSubscribable,
-  ReadonlyFloat64Array, Subject, Subscribable, SubscribableArray, SubscribableMapFunctions, SubscribableSet,
-  SubscribableUtils, Subscription, UserSettingManager, VecNMath, VecNSubject, VNode
+  AvionicsSystemStateEvent, ClockEvents, ComponentProps, ConsumerSubject, ConsumerValue, DisplayComponent, EventBus,
+  ExpSmoother, FSComponent, GeoPoint, GNSSEvents, HorizonComponent, HorizonProjection, HorizonSharedCanvasLayer,
+  MappedSubject, MathUtils, MutableSubscribable, ReadonlyFloat64Array, Subject, Subscribable, SubscribableArray,
+  SubscribableMapFunctions, SubscribableSet, SubscribableUtils, Subscription, UserSettingManager, VecNMath, VNode
 } from '@microsoft/msfs-sdk';
 
 import { SynVisUserSettingTypes } from '../../../settings/SynVisUserSettings';
@@ -343,8 +342,6 @@ type PitchLimitIndicatorResolvedOptions
  * aircraft symbol, flight director, and synthetic vision technology (SVT) display.
  */
 export class HorizonDisplay extends DisplayComponent<HorizonDisplayProps> {
-  private static readonly BING_FOV = 50; // degrees
-
   private static readonly DEFAULT_NORMAL_FOV = 55; // degrees
   private static readonly DEFAULT_EXTENDED_FOV = 110; // degrees
 
@@ -506,12 +503,8 @@ export class HorizonDisplay extends DisplayComponent<HorizonDisplayProps> {
   private readonly extendedFov = this.props.extendedFov ?? HorizonDisplay.DEFAULT_EXTENDED_FOV;
 
   private readonly fov = this.props.supportAdvancedSvt
-    ? this.isSvtEnabled.map(isEnabled => isEnabled ? HorizonDisplay.BING_FOV : this.normalFov)
-    : this.isSvtEnabled.map(isEnabled => isEnabled ? HorizonDisplay.BING_FOV : this.extendedFov);
-
-  private readonly nonSvtFovEndpoints = VecNMath.create(4, 0.5, 0, 0.5, 1);
-  private readonly svtFovEndpoints = VecNSubject.create(VecNMath.create(4, 0.5, 0, 0.5, 1));
-  private readonly fovEndpoints = VecNSubject.create(VecNMath.create(4, 0.5, 0, 0.5, 1));
+    ? this.normalFov
+    : this.isSvtEnabled.map(isEnabled => isEnabled ? this.normalFov : this.extendedFov);
 
   private readonly occlusions = this.props.occlusions ?? ArraySubject.create();
 
@@ -602,8 +595,6 @@ export class HorizonDisplay extends DisplayComponent<HorizonDisplayProps> {
 
   /** @inheritDoc */
   public onAfterRender(): void {
-    this.horizonRef.instance.projection.onChange(this.onProjectionChanged.bind(this));
-
     if (!this.isAwake) {
       this.horizonRef.instance.sleep();
     }
@@ -654,24 +645,11 @@ export class HorizonDisplay extends DisplayComponent<HorizonDisplayProps> {
 
     this.apMaxBankId.setConsumer(sub.on('ap_max_bank_id'));
 
-    const svtEndpointsPipe = this.svtFovEndpoints.pipe(this.fovEndpoints, true);
-
-    this.isSvtEnabled.sub(isEnabled => {
-      if (isEnabled) {
-        svtEndpointsPipe.resume(true);
-      } else {
-        svtEndpointsPipe.pause();
-        this.fovEndpoints.set(this.nonSvtFovEndpoints);
-      }
-    }, true);
-
     this.fdDataProvider.init(!this.isAwake);
 
     if (this.props.isSvtEnabled) {
       this.isSvtEnabledPipe = this.isSvtEnabled.pipe(this.props.isSvtEnabled);
     }
-
-    this.recomputeSvtFovEndpoints(this.horizonRef.instance.projection);
 
     this.updateFreqSub = this.updateFreq?.sub(freq => {
       this.updateCycleSub?.destroy();
@@ -820,47 +798,6 @@ export class HorizonDisplay extends DisplayComponent<HorizonDisplayProps> {
   }
 
   /**
-   * Responds to changes in this horizon display's projection.
-   * @param projection This display's horizon projection.
-   * @param changeFlags The types of changes made to the projection.
-   */
-  private onProjectionChanged(projection: HorizonProjection, changeFlags: number): void {
-    if (BitFlags.isAny(
-      changeFlags,
-      HorizonProjectionChangeType.ProjectedOffset
-      | HorizonProjectionChangeType.ProjectedSize
-    )) {
-      this.recomputeSvtFovEndpoints(projection);
-    }
-  }
-
-  /**
-   * Recomputes the endpoints at which the field of view of this display's projection is measured when synthetic
-   * vision is enabled.
-   * @param projection This display's horizon projection.
-   */
-  private recomputeSvtFovEndpoints(projection: HorizonProjection): void {
-    const projectedSize = projection.getProjectedSize();
-    const projectedOffset = projection.getProjectedOffset();
-    const offsetCenterProjected = projection.getOffsetCenterProjected();
-
-    // If there is a projected offset, then the Bing texture for synthetic vision needs to be overdrawn. This reduces
-    // the effective FOV of the Bing texture if it is overdrawn vertically. In order to match this reduced FOV with the
-    // horizon projection, we need to adjust the FOV endpoints so that they span the height of the entire Bing texture.
-
-    const yOverdraw = Math.abs(projectedOffset[1]);
-    const bingHeight = projectedSize[1] + yOverdraw * 2;
-
-    const top = offsetCenterProjected[1] - bingHeight / 2;
-    const bottom = top + bingHeight;
-
-    this.svtFovEndpoints.set(
-      0.5, top / projectedSize[1],
-      0.5, bottom / projectedSize[1]
-    );
-  }
-
-  /**
    * This method is called every update cycle.
    * @param time The current time, as a UNIX timestamp in milliseconds.
    */
@@ -944,7 +881,7 @@ export class HorizonDisplay extends DisplayComponent<HorizonDisplayProps> {
         projection={projection}
         projectedSize={this.props.projectedSize}
         fov={this.fov}
-        fovEndpoints={this.fovEndpoints}
+        fovEndpoints={VecNMath.create(4, 0.5, 0, 0.5, 1)}
         projectedOffset={this.props.projectedOffset}
         class={this.props.class}
       >
@@ -975,7 +912,7 @@ export class HorizonDisplay extends DisplayComponent<HorizonDisplayProps> {
         <PitchLadder
           projection={projection}
           show={this.isAttitudeDataValid}
-          isSVTEnabled={this.isSvtEnabled}
+          isSVTEnabled={this.props.svtSettingManager.getSetting('svtEnabled')}
           clipBounds={this.props.pitchLadderOptions.clipBounds}
           options={this.props.pitchLadderOptions.options}
         />

@@ -1,8 +1,10 @@
 import { GeoPointInterface } from '../../geo/GeoPoint';
+import { MathUtils } from '../../math/MathUtils';
 import { ReadonlySubEvent, SubEvent, SubEventInterface } from '../../sub/SubEvent';
 import { Subscribable } from '../../sub/Subscribable';
 import { SubscribableUtils } from '../../sub/SubscribableUtils';
 import { Subscription } from '../../sub/Subscription';
+import { ArrayUtils } from '../../utils/datastructures/ArrayUtils';
 import { MapProjection } from './MapProjection';
 import { MapLocationTextLabel, MapLocationTextLabelOptions, MapTextLabel } from './MapTextLabel';
 
@@ -60,15 +62,24 @@ export class MapCullableLocationTextLabel extends MapLocationTextLabel implement
 
     this.alwaysShow = SubscribableUtils.toSubscribable(alwaysShow, true);
 
-    this.subs.push(this.priority.sub(() => { this.invalidation.notify(this); }));
-    this.subs.push(this.alwaysShow.sub(() => { this.invalidation.notify(this); }));
-    this.subs.push(this.location.sub(() => { this.invalidation.notify(this); }));
-    this.subs.push(this.text.sub(() => { this.invalidation.notify(this); }));
-    this.subs.push(this.fontSize.sub(() => { this.invalidation.notify(this); }));
-    this.subs.push(this.anchor.sub(() => { this.invalidation.notify(this); }));
-    this.subs.push(this.offset.sub(() => { this.invalidation.notify(this); }));
-    this.subs.push(this.bgPadding.sub(() => { this.invalidation.notify(this); }));
-    this.subs.push(this.bgOutlineWidth.sub(() => { this.invalidation.notify(this); }));
+    const triggerInvalidation = this.triggerInvalidation.bind(this);
+
+    this.subs.push(this.priority.sub(triggerInvalidation));
+    this.subs.push(this.alwaysShow.sub(triggerInvalidation));
+    this.subs.push(this.location.sub(triggerInvalidation));
+    this.subs.push(this.text.sub(triggerInvalidation));
+    this.subs.push(this.fontSize.sub(triggerInvalidation));
+    this.subs.push(this.anchor.sub(triggerInvalidation));
+    this.subs.push(this.offset.sub(triggerInvalidation));
+    this.subs.push(this.bgPadding.sub(triggerInvalidation));
+    this.subs.push(this.bgOutlineWidth.sub(triggerInvalidation));
+  }
+
+  /**
+   * Triggers this label's invalidation event.
+   */
+  private triggerInvalidation(): void {
+    this.invalidation.notify(this);
   }
 
   /** @inheritdoc */
@@ -112,8 +123,9 @@ export class MapCullableLocationTextLabel extends MapLocationTextLabel implement
 }
 
 /**
- * Manages a set of MapCullableTextLabels. Colliding labels will be culled based on their render priority. Labels with
- * lower priorities will be culled before labels with higher priorities.
+ * Manages the visibility of a set of {@link MapCullableTextLabel | MapCullableTextLabels}. If culling is enabled, then
+ * colliding labels will be culled based on their render priority. Labels with lower priorities will be culled before
+ * labels with higher priorities.
  */
 export class MapCullableTextLabelManager {
   private static readonly SCALE_UPDATE_THRESHOLD = 1.2;
@@ -132,45 +144,61 @@ export class MapCullableTextLabelManager {
     }
   };
 
+  private readonly invalidationHandler = (): void => { this.didLabelsInvalidate = true; };
+
   private readonly registered = new Map<MapCullableTextLabel, Subscription>();
 
-  private _visibleLabels: MapCullableTextLabel[] = [];
-  // eslint-disable-next-line jsdoc/require-returns
-  /** An array of labels registered with this manager that are visible. */
-  public get visibleLabels(): readonly MapCullableTextLabel[] {
-    return this._visibleLabels;
-  }
+  private readonly registeredLabels: MapCullableTextLabel[] = [];
 
-  private needUpdate = false;
+  /** An array of labels registered with this manager that are visible. */
+  public readonly visibleLabels: readonly MapCullableTextLabel[] = [];
+
+  private cullingEnabled: boolean;
+
+  private didCullingEnabledChange = false;
+  private didRegisteredLabelsChange = false;
+  private didLabelsInvalidate = false;
   private lastScaleFactor = 1;
   private lastRotation = 0;
 
-  private readonly invalidationHandler = (): void => { this.needUpdate = true; };
+  private isAlive = true;
 
   /**
-   * Creates an instance of the MapCullableTextLabelManager.
-   * @param cullingEnabled Whether or not culling of labels is enabled.
+   * Creates a new instance of MapCullableTextLabelManager.
+   * @param cullingEnabled Whether culling of labels is enabled. Defaults to `true`.
    */
-  constructor(private cullingEnabled = true) { }
+  public constructor(cullingEnabled = true) {
+    this.cullingEnabled = cullingEnabled;
+  }
 
   /**
    * Registers a label with this manager. Newly registered labels will be processed with the next manager update.
    * @param label The label to register.
+   * @throws Error if this manager has been destroyed.
    */
   public register(label: MapCullableTextLabel): void {
+    if (!this.isAlive) {
+      throw new Error('MapCullableTextLabelManager::register(): cannot manipulate a dead manager');
+    }
+
     if (this.registered.has(label)) {
       return;
     }
 
     this.registered.set(label, label.invalidation.on(this.invalidationHandler));
-    this.needUpdate = true;
+    this.didRegisteredLabelsChange = true;
   }
 
   /**
    * Deregisters a label with this manager. Newly deregistered labels will be processed with the next manager update.
    * @param label The label to deregister.
+   * @throws Error if this manager has been destroyed.
    */
   public deregister(label: MapCullableTextLabel): void {
+    if (!this.isAlive) {
+      throw new Error('MapCullableTextLabelManager::deregister(): cannot manipulate a dead manager');
+    }
+
     const sub = this.registered.get(label);
 
     if (sub === undefined) {
@@ -180,53 +208,91 @@ export class MapCullableTextLabelManager {
     sub.destroy();
     this.registered.delete(label);
 
-    this.needUpdate = true;
+    this.didRegisteredLabelsChange = true;
   }
 
   /**
    * Sets whether or not text label culling is enabled.
    * @param enabled Whether or not culling is enabled.
+   * @throws Error if this manager has been destroyed.
    */
   public setCullingEnabled(enabled: boolean): void {
+    if (!this.isAlive) {
+      throw new Error('MapCullableTextLabelManager::setCullingEnabled(): cannot manipulate a dead manager');
+    }
+
+    if (enabled === this.cullingEnabled) {
+      return;
+    }
+
     this.cullingEnabled = enabled;
-    this.needUpdate = true;
+    this.didCullingEnabledChange = true;
   }
 
   /**
    * Updates this manager.
    * @param mapProjection The projection of the map to which this manager's labels are to be drawn.
+   * @throws Error if this manager has been destroyed.
    */
   public update(mapProjection: MapProjection): void {
-    if (!this.needUpdate) {
+    if (!this.isAlive) {
+      throw new Error('MapCullableTextLabelManager::update(): cannot manipulate a dead manager');
+    }
+
+    // Check whether we need to update the list of visible labels.
+
+    // If the culling enabled flag changed, if labels were registered/unregistered, or if labels were invalidated, then
+    // we must always update the list.
+    if (!this.didCullingEnabledChange && !this.didRegisteredLabelsChange && !this.didLabelsInvalidate) {
+      // If culling is enabled, then we need to also update the list if the map projection has changed sufficiently
+      // since the last update to invalidate the last set of culling calculations.
+
+      if (!this.cullingEnabled) {
+        return;
+      }
+
       const scaleFactorRatio = mapProjection.getScaleFactor() / this.lastScaleFactor;
-      if (scaleFactorRatio < MapCullableTextLabelManager.SCALE_UPDATE_THRESHOLD && scaleFactorRatio > 1 / MapCullableTextLabelManager.SCALE_UPDATE_THRESHOLD) {
-        const rotationDelta = Math.abs(mapProjection.getRotation() - this.lastRotation);
-        if (Math.min(rotationDelta, 2 * Math.PI - rotationDelta) < MapCullableTextLabelManager.ROTATION_UPDATE_THRESHOLD) {
+      if (
+        scaleFactorRatio < MapCullableTextLabelManager.SCALE_UPDATE_THRESHOLD
+        && scaleFactorRatio > 1 / MapCullableTextLabelManager.SCALE_UPDATE_THRESHOLD
+      ) {
+        const rotationDelta = MathUtils.angularDistanceDeg(mapProjection.getRotation(), this.lastRotation, 0);
+        if (rotationDelta < MapCullableTextLabelManager.ROTATION_UPDATE_THRESHOLD) {
           return;
         }
       }
     }
 
-    const labelArray = Array.from(this.registered.keys())
-      .sort(MapCullableTextLabelManager.SORT_FUNC);
+    // If labels were registered or unregistered, then we need to rebuild the registered labels array.
+    if (this.didRegisteredLabelsChange) {
+      this.registeredLabels.length = this.registered.size;
+      let index = 0;
+      for (const label of this.registered.keys()) {
+        this.registeredLabels[index++] = label;
+      }
+    }
+
+    // If labels were registered or unregistered, or if labels were invalidated, then we need to re-sort the registered
+    // labels array.
+    if (this.didRegisteredLabelsChange || this.didLabelsInvalidate) {
+      this.registeredLabels.sort(MapCullableTextLabelManager.SORT_FUNC);
+    }
 
     if (this.cullingEnabled) {
-      this._visibleLabels = [];
+      (this.visibleLabels as MapCullableTextLabel[]).length = 0;
 
-      const len = labelArray.length;
-      for (let i = 0; i < len; i++) {
-        labelArray[i].updateBounds(mapProjection);
-      }
+      const registeredLabelsCount = this.registeredLabels.length;
+      for (let i = 0; i < registeredLabelsCount; i++) {
+        const label = this.registeredLabels[i];
 
-      const collisionArray: Float64Array[] = [];
-      for (let i = 0; i < len; i++) {
-        const label = labelArray[i];
+        label.updateBounds(mapProjection);
+
         let show = true;
         if (!label.alwaysShow.get()) {
-          const len2 = collisionArray.length;
-          for (let j = 0; j < len2; j++) {
-            const other = collisionArray[j];
-            if (MapCullableTextLabelManager.doesCollide(label.bounds, other)) {
+          const collisionArrayLength = this.visibleLabels.length;
+          for (let j = 0; j < collisionArrayLength; j++) {
+            const other = this.visibleLabels[j];
+            if (MapCullableTextLabelManager.doesCollide(label.bounds, other.bounds)) {
               show = false;
               break;
             }
@@ -234,17 +300,29 @@ export class MapCullableTextLabelManager {
         }
 
         if (show) {
-          collisionArray.push(label.bounds);
-          this._visibleLabels.push(label);
+          (this.visibleLabels as MapCullableTextLabel[]).push(label);
         }
       }
     } else {
-      this._visibleLabels = labelArray;
+      ArrayUtils.shallowCopy(this.registeredLabels, this.visibleLabels as MapCullableTextLabel[]);
     }
 
     this.lastScaleFactor = mapProjection.getScaleFactor();
     this.lastRotation = mapProjection.getRotation();
-    this.needUpdate = false;
+    this.didCullingEnabledChange = false;
+    this.didRegisteredLabelsChange = false;
+    this.didLabelsInvalidate = false;
+  }
+
+  /**
+   * Destroys this manager.
+   */
+  public destroy(): void {
+    this.isAlive = false;
+
+    this.registered.clear();
+    this.registeredLabels.length = 0;
+    (this.visibleLabels as MapCullableTextLabel[]).length = 0;
   }
 
   /**

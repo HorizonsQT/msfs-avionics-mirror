@@ -1,6 +1,6 @@
 import {
   BitFlags, FlightPlan, FlightPlanSegment, FlightPlanUtils, LegDefinition, LegDefinitionFlags, LegType, MathUtils,
-  TocBocDetails, UnitType, VerticalFlightPlan, VNavConstraint, VNavLeg, VNavUtils
+  TocBocDetails, UncomputedVNavConstraint, UnitType, VerticalFlightPlan, VNavConstraint, VNavLeg, VNavUtils
 } from '@microsoft/msfs-sdk';
 
 import { FmsUtils } from '../../flightplan/FmsUtils';
@@ -97,9 +97,9 @@ export class GarminVNavUtils {
    * @returns Whether the specified climb constraint should be invalidated.
    */
   public static invalidateClimbConstraint(
-    constraint: VNavConstraint,
+    constraint: UncomputedVNavConstraint,
     index: number,
-    constraints: readonly VNavConstraint[],
+    constraints: readonly UncomputedVNavConstraint[],
     firstDescentConstraintIndex: number,
     priorMinAltitude: number,
     priorMaxAltitude: number
@@ -146,9 +146,9 @@ export class GarminVNavUtils {
    * @returns Whether the specified descent constraint should be invalidated.
    */
   public static invalidateDescentConstraint(
-    constraint: VNavConstraint,
+    constraint: UncomputedVNavConstraint,
     index: number,
-    constraints: readonly VNavConstraint[],
+    constraints: readonly UncomputedVNavConstraint[],
     priorMinAltitude: number,
     priorMaxAltitude: number,
     requiredFpa: number,

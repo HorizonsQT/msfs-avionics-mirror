@@ -23,6 +23,9 @@ export class FlightPlanUtils {
   /** Array of "hold" leg types. */
   private static readonly HOLD_LEG_TYPES = [LegType.HA, LegType.HF, LegType.HM] as const;
 
+  /** Array of "intercept" leg types. */
+  private static readonly INTERCEPT_LEG_TYPES = [LegType.CI, LegType.PI, LegType.VI] as const;
+
   /** Array of manual termination leg types that end in a discontinuity. */
   private static readonly MANUAL_DISCO_LEG_TYPES = [LegType.FM, LegType.VM] as const;
 
@@ -76,6 +79,15 @@ export class FlightPlanUtils {
   }
 
   /**
+   * Checks if a leg type is a "intercept" leg type.
+   * @param legType The leg type to check.
+   * @returns Whether the leg type is a "intercept" leg type.
+   */
+  public static isInterceptLeg(legType: LegType): legType is ArrayType<typeof FlightPlanUtils.INTERCEPT_LEG_TYPES> {
+    return ArrayUtils.includes(FlightPlanUtils.INTERCEPT_LEG_TYPES, legType);
+  }
+
+  /**
    * Checks if a leg type is a manual termination leg type that ends in a discontinuity.
    * @param legType The leg type to check.
    * @returns Whether the leg type is a manual termination leg type that ends in a discontinuity.
@@ -98,6 +110,7 @@ export class FlightPlanUtils {
    * @param leg A flight plan leg.
    * @returns The ICAO of the facility defining the terminator of the specified flight plan leg, or `undefined` if
    * the leg's terminator is not defined by a facility.
+   * @deprecated Use {@link FlightPathUtils.getTerminatorIcaoValue} instead.
    */
   public static getTerminatorIcao(leg: FlightPlanLeg): string | undefined {
     switch (leg.type) {
@@ -111,6 +124,29 @@ export class FlightPlanUtils {
       case LegType.HF:
       case LegType.HM:
         return leg.fixIcao;
+      default:
+        return undefined;
+    }
+  }
+
+  /**
+   * Gets the ICAO of the facility defining the terminator of a flight plan leg.
+   * @param leg A flight plan leg.
+   * @returns The ICAO of the facility defining the terminator of the specified flight plan leg, or `undefined` if
+   * the leg's terminator is not defined by a facility.
+   */
+  public static getTerminatorIcaoValue(leg: FlightPlanLeg): IcaoValue | undefined {
+    switch (leg.type) {
+      case LegType.IF:
+      case LegType.TF:
+      case LegType.DF:
+      case LegType.CF:
+      case LegType.AF:
+      case LegType.RF:
+      case LegType.HA:
+      case LegType.HF:
+      case LegType.HM:
+        return leg.fixIcaoStruct;
       default:
         return undefined;
     }

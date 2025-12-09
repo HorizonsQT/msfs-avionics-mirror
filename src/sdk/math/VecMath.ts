@@ -526,7 +526,7 @@ export class Vec3Math {
    * @returns the Euclidean distance between the two vectors.
    */
   public static distance(vec1: ReadonlyFloat64Array, vec2: ReadonlyFloat64Array): number {
-    return Math.hypot(vec2[0] - vec1[0], vec2[1] - vec1[0], vec2[2] - vec1[2]);
+    return Math.hypot(vec2[0] - vec1[0], vec2[1] - vec1[1], vec2[2] - vec1[2]);
   }
 
   /**

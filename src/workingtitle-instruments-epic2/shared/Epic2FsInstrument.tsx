@@ -129,7 +129,7 @@ export abstract class Epic2FsInstrument implements FsInstrument {
   protected readonly apPanelPublisher = new Epic2ApPanelPublisher(this.bus);
 
   protected readonly apInstrument = new AutopilotInstrument(this.bus);
-  protected readonly trafficInstrument = new TrafficInstrument(this.bus, { realTimeUpdateFreq: 2, simTimeUpdateFreq: 1, contactDeprecateTime: 10 });
+  protected readonly trafficInstrument = this.createTrafficInstrument();
   protected readonly xpdrInstrument = new XPDRInstrument(this.bus);
 
   protected readonly systems: AvionicsSystem[] = [];
@@ -206,6 +206,17 @@ export abstract class Epic2FsInstrument implements FsInstrument {
         }
       });
     }
+  }
+
+  /**
+   * Creates an instance of TrafficInstrument for this instrument.
+   * @returns An instance of TrafficInstrument.
+   */
+  protected createTrafficInstrument(): TrafficInstrument {
+    return new TrafficInstrument(this.bus, {
+      syncRole: 'replica',
+      syncId: 'epic2',
+    });
   }
 
   /**

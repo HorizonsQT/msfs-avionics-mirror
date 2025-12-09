@@ -45,7 +45,7 @@ type GNSStandardMapControllers = GNSMapControllers & {
  */
 export class ProcApproachPage extends WaypointPage<ProcApproachPageProps> {
   private readonly previewMap = GNSMapBuilder
-    .withProcedurePreviewMap(this.props.bus, this.props.settingsProvider, this.props.gnsType, this.props.instrumentIndex)
+    .withProcedurePreviewMap(this.props.bus, this.props.fms.facLoader, this.props.settingsProvider, this.props.gnsType, this.props.instrumentIndex)
     .withController(GNSMapKeys.Controller, c => new GNSMapController(c, this.props.settingsProvider, this.props.fms))
     .build<GNSMapModules, GNSMapLayers, GNSStandardMapControllers, GNSMapContextProps>('waypoint-page-map');
 

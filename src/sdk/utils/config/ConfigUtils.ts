@@ -53,6 +53,26 @@ export abstract class ConfigParser {
   }
 
   /**
+   * Gets the electricity logic from a given element
+   * @param element Element to get the electric circuit from
+   * @param baseInstrument the {@link BaseInstrument} the electrical logic is created in the context of
+   * @returns The electricity logic element, or undefined if none is present
+   */
+  public static getChildElectricityConfig(element: Element | undefined, baseInstrument: BaseInstrument): CompositeLogicXMLElement | undefined {
+    if (element) {
+      const electricLogicElement = element.querySelector(':scope>Electric');
+
+      if (electricLogicElement === null) {
+        return undefined;
+      } else {
+        return new CompositeLogicXMLElement(baseInstrument, electricLogicElement);
+      }
+    } else {
+      return undefined;
+    }
+  }
+
+  /**
    * Gets a LookupTable child of an element
    * @param parentElement The element to search on.
    * @param tagName The tag name to find.
@@ -148,11 +168,38 @@ export abstract class ConfigParser {
    * Gets a string attribute value of an element.
    * @param element The element to search on.
    * @param attributeName The attribute to find on the element.
+   * @param allowEmptyString Whether to allow the empty string as a value.
    * @returns The attribute's value.
    * @throws If the attribute is not present.
    */
-  public static getStringAttrValue<T extends string>(element: Element, attributeName: string): T {
-    return ConfigParser.getAttribute(element, attributeName) as T;
+  public static getStringAttrValue<T extends string>(element: Element, attributeName: string, allowEmptyString = true): T {
+    const string = ConfigParser.getAttribute(element, attributeName) as T;
+
+    if (!allowEmptyString && string.length === 0) {
+      throw new Error(`${ConfigParser.configName}: Attribute '${attributeName}' on <${element.tagName}> must not be an empty string`);
+    }
+
+    return string;
+  }
+
+  /**
+   * Gets an enum attribute value of an element.
+   * @param element The element to search on.
+   * @param attributeName The attribute to find on the element.
+   * @param allowedValues The list of allowed values.
+   * @returns The attribute's value.
+   * @throws If the attribute is not present or invalid.
+   */
+  public static getEnumAttrValue<T extends string>(element: Element, attributeName: string, allowedValues: T[]): T {
+    const stringValue = ConfigParser.getStringAttrValue(element, attributeName).toLowerCase();
+
+    for (const allowedValue of allowedValues) {
+      if (allowedValue.toLowerCase() === stringValue) {
+        return allowedValue;
+      }
+    }
+
+    throw new Error(`${ConfigParser.configName}: Attribute '${attributeName}' on <${element.tagName}> must be one of the following values: ${allowedValues.join(', ')}`);
   }
 
   /**
@@ -162,7 +209,7 @@ export abstract class ConfigParser {
    * @param allowZero Whether zero should be allowed as a value.
    * @param allowNegative Whether negative numbers should be allowed as a value.
    * @returns The attribute's value.
-   * @throws If the attribute is not present.
+   * @throws If the attribute is not present or invalid.
    */
   public static getIntegerAttrValue<T extends number>(element: Element, attributeName: string, allowZero = false, allowNegative = false): T {
     const attribute: string = ConfigParser.getAttribute(element, attributeName);
@@ -182,6 +229,27 @@ export abstract class ConfigParser {
     }
 
     return num as T;
+  }
+
+  /**
+   * Gets a boolean attribute value of an element.
+   * @param element The element to search on.
+   * @param attributeName The attribute to find on the element.
+   * @returns The attribute's value.
+   * @throws If the attribute is not present or invalid.
+   */
+  public static getBooleanAttrValue(element: Element, attributeName: string): boolean {
+    const attribute = ConfigParser.getAttribute(element, attributeName).toLowerCase();
+
+    if (attribute === 'true' || attribute === 'yes' || parseInt(attribute) === 1) {
+      return true;
+    }
+
+    if (attribute === 'false' || attribute === 'no' || parseInt(attribute) === 0) {
+      return false;
+    }
+
+    throw new Error(`${ConfigParser.configName}: Attribute '${attributeName}' on <${element.tagName}> must be one of: true, yes, 1, false, no, 0`);
   }
 }
 

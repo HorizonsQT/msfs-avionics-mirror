@@ -1,6 +1,8 @@
-import { ConsumerSubject, EventSubscriber } from '../data';
 import { Consumer } from '../data/Consumer';
+import { ConsumerSubject } from '../data/ConsumerSubject';
 import { EventBus, Publisher } from '../data/EventBus';
+import { EventSubscriber } from '../data/EventSubscriber';
+import { RegisteredSimVarUtils, SimVarValueType } from '../data/SimVars';
 import { GeoPoint, GeoPointInterface, GeoPointReadOnly } from '../geo/GeoPoint';
 import { GeoPointSubject } from '../geo/GeoPointSubject';
 import { AdcEvents } from '../instruments/Adc';
@@ -12,6 +14,7 @@ import { MathUtils } from '../math/MathUtils';
 import { NumberUnit, NumberUnitInterface, NumberUnitReadOnly, UnitFamily, UnitType } from '../math/NumberUnit';
 import { NumberUnitSubject } from '../math/NumberUnitSubject';
 import { ReadonlyFloat64Array, Vec2Math, Vec3Math } from '../math/VecMath';
+import { Accessible } from '../sub/Accessible';
 import { Subject } from '../sub/Subject';
 import { Subscribable } from '../sub/Subscribable';
 import { SubscribableUtils } from '../sub/SubscribableUtils';
@@ -410,6 +413,35 @@ export interface TcasEvents {
 }
 
 /**
+ * A provider of data related to the own airplane for {@link Tcas}.
+ */
+export interface TcasOwnAirplaneDataProvider {
+  /** The position of the own airplane. If the position is not known, then both latitude and longitude will be `NaN`. */
+  readonly position: Subscribable<GeoPointInterface>;
+
+  /** The geometric altitude of the own airplane above MSL, or `NaN` if the geometric altitude is not known. */
+  readonly geometricAltitude: Subscribable<NumberUnitInterface<UnitFamily.Distance>>;
+
+  /** The pressure altitude of the own airplane, or `NaN` if the pressure altitude is not known. */
+  readonly pressureAltitude: Subscribable<NumberUnitInterface<UnitFamily.Distance>>;
+
+  /** The true ground track of the own airplane, in degrees, or `NaN` if the ground track is not known. */
+  readonly groundTrack: Subscribable<number>;
+
+  /** The ground speed of the own airplane, or `NaN` if the ground speed is not known. */
+  readonly groundSpeed: Subscribable<NumberUnitInterface<UnitFamily.Speed>>;
+
+  /** The barometric vertical speed of the own airplane, or `NaN` if the vertical speed is not known. */
+  readonly verticalSpeed: Subscribable<NumberUnitInterface<UnitFamily.Speed>>;
+
+  /** The radar altitude of the own airplane, or `NaN` if the radar altitude is not known. */
+  readonly radarAltitude: Subscribable<NumberUnitInterface<UnitFamily.Distance>>;
+
+  /** Whether the own airplane is on the ground, or `undefined` if the on-ground status is not known. */
+  readonly isOnGround: Subscribable<boolean | undefined>;
+}
+
+/**
  * Options to adjust how resolution advisories are calculated by TCAS.
  */
 export type TcasResolutionAdvisoryOptions = {
@@ -439,6 +471,37 @@ export type TcasResolutionAdvisoryOptions = {
 };
 
 /**
+ * Configuration options for {@link Tcas}.
+ */
+export type TcasOptions = {
+  /** The maximum number of intruders tracked at any one time by TCAS. */
+  maxIntruderCount: number | Subscribable<number>;
+
+  /** The maximum frequency (hertz) in real time that TCAS will update. */
+  realTimeUpdateFreq: number | Subscribable<number>;
+
+  /** The maximum frequency (hertz) in sim time that TCAS will update. */
+  simTimeUpdateFreq: number | Subscribable<number>;
+
+  /**
+   * Whether TCAS can use active surveillance to track intruders. If TCAS can use active surveillance, then it will
+   * be able to obtain _lateral_ separation and direction data for intruders without valid lateral position and
+   * velocity data for the own airplane. Obtaining vertical separation data for intruders always requires valid
+   * vertical position and velocity data for the own airplane, regardless of whether active surveillance is available.
+   */
+  hasActiveSurveillance: boolean | Subscribable<boolean>;
+
+  /**
+   * A provider of own airplane data for TCAS. If not defined, then own airplane data will be sourced from event bus
+   * topics defined in {@link AdcEvents} and {@link GNSSEvents}.
+   */
+  ownAirplaneDataProvider?: TcasOwnAirplaneDataProvider;
+
+  /** Options to adjust how resolution advisories are calculated. */
+  raOptions?: Partial<TcasResolutionAdvisoryOptions>;
+};
+
+/**
  * A TCAS-II-like system.
  */
 export abstract class Tcas<I extends AbstractTcasIntruder = AbstractTcasIntruder, S extends TcasSensitivity = TcasSensitivity> {
@@ -453,11 +516,17 @@ export abstract class Tcas<I extends AbstractTcasIntruder = AbstractTcasIntruder
   protected readonly realTimeUpdateFreq: Subscribable<number>;
   protected readonly simTimeUpdateFreq: Subscribable<number>;
 
+  /** Whether active surveillance is available for this TCAS. */
+  protected readonly hasActiveSurveillance: Subscribable<boolean>;
+
+  /** A provider of data for this TCAS's own airplane. */
+  protected readonly ownAirplaneDataProvider: TcasOwnAirplaneDataProvider;
+
   protected readonly operatingModeSub = Subject.create(TcasOperatingMode.Standby);
 
   protected readonly sensitivity: S;
 
-  protected readonly ownAirplane: OwnAirplane;
+  protected readonly ownAirplane: TcasOwnAirplane;
 
   protected readonly intrudersSorted: I[] = [];
   protected intrudersFiltered: I[] = [];
@@ -471,9 +540,13 @@ export abstract class Tcas<I extends AbstractTcasIntruder = AbstractTcasIntruder
   private readonly contactCreatedHandler = this.onContactAdded.bind(this);
   private readonly contactRemovedHandler = this.onContactRemoved.bind(this);
 
+  /**
+   * @deprecated Please use `ownAirplaneDataProvider` instead.
+   */
   protected readonly ownAirplaneSubs = {
     position: GeoPointSubject.create(new GeoPoint(0, 0)),
     altitude: NumberUnitSubject.create(UnitType.FOOT.createNumber(0)),
+    pressureAltitude: NumberUnitSubject.create(UnitType.FOOT.createNumber(0)),
     groundTrack: ConsumerSubject.create(null, 0),
     groundSpeed: NumberUnitSubject.create(UnitType.KNOT.createNumber(0)),
     verticalSpeed: NumberUnitSubject.create(UnitType.FPM.createNumber(0)),
@@ -492,28 +565,65 @@ export abstract class Tcas<I extends AbstractTcasIntruder = AbstractTcasIntruder
   private readonly eventSubscriber = this.bus.getSubscriber<TcasEvents>();
 
   /**
-   * Constructor.
+   * Creates a new instance of Tcas.
    * @param bus The event bus.
-   * @param tfcInstrument The traffic instrument which provides traffic contacts for this TCAS.
-   * @param maxIntruderCount The maximum number of intruders tracked at any one time by this TCAS.
+   * @param tfcInstrument The traffic instrument which provides traffic contacts for the TCAS.
+   * @param options Options with which to configure the TCAS.
+   */
+  public constructor(
+    bus: EventBus,
+    tfcInstrument: TrafficInstrument,
+    options: Readonly<TcasOptions>
+  );
+  /**
+   * Creates a new instance of Tcas.
+   * @param bus The event bus.
+   * @param tfcInstrument The traffic instrument which provides traffic contacts for the TCAS.
+   * @param maxIntruderCount The maximum number of intruders tracked at any one time by the TCAS.
    * @param realTimeUpdateFreq The maximum update frequency (Hz) in real time.
    * @param simTimeUpdateFreq The maximum update frequency (Hz) in sim time.
    * @param raOptions Options to adjust how resolution advisories are calculated.
+   * @deprecated Please use the overload that takes a `TcasOptions` object instead.
    */
-  constructor(
-    protected readonly bus: EventBus,
-    protected readonly tfcInstrument: TrafficInstrument,
+  public constructor(
+    bus: EventBus,
+    tfcInstrument: TrafficInstrument,
     maxIntruderCount: number | Subscribable<number>,
     realTimeUpdateFreq: number | Subscribable<number>,
     simTimeUpdateFreq: number | Subscribable<number>,
     raOptions?: Partial<TcasResolutionAdvisoryOptions>
+  );
+  // eslint-disable-next-line jsdoc/require-jsdoc
+  public constructor(
+    protected readonly bus: EventBus,
+    protected readonly tfcInstrument: TrafficInstrument,
+    arg3: number | Subscribable<number> | Readonly<TcasOptions>,
+    arg4?: number | Subscribable<number>,
+    arg5?: number | Subscribable<number>,
+    arg6?: Partial<TcasResolutionAdvisoryOptions>
   ) {
-    this.maxIntruderCount = SubscribableUtils.toSubscribable(maxIntruderCount, true);
-    this.realTimeUpdateFreq = SubscribableUtils.toSubscribable(realTimeUpdateFreq, true);
-    this.simTimeUpdateFreq = SubscribableUtils.toSubscribable(simTimeUpdateFreq, true);
+    let raOptions: Partial<TcasResolutionAdvisoryOptions> | undefined;
+    let ownAirplaneDataProvider: TcasOwnAirplaneDataProvider | undefined;
+
+    if (typeof arg3 === 'object' && !SubscribableUtils.isSubscribable(arg3)) {
+      this.maxIntruderCount = SubscribableUtils.toSubscribable(arg3.maxIntruderCount, true);
+      this.realTimeUpdateFreq = SubscribableUtils.toSubscribable(arg3.realTimeUpdateFreq, true);
+      this.simTimeUpdateFreq = SubscribableUtils.toSubscribable(arg3.simTimeUpdateFreq, true);
+      this.hasActiveSurveillance = SubscribableUtils.toSubscribable(arg3.hasActiveSurveillance, true);
+      ownAirplaneDataProvider = arg3.ownAirplaneDataProvider;
+      raOptions = arg3.raOptions;
+    } else {
+      this.maxIntruderCount = SubscribableUtils.toSubscribable(arg3, true);
+      this.realTimeUpdateFreq = SubscribableUtils.toSubscribable(arg4!, true);
+      this.simTimeUpdateFreq = SubscribableUtils.toSubscribable(arg5!, true);
+      this.hasActiveSurveillance = Subject.create(true);
+      raOptions = arg6;
+    }
+
+    this.ownAirplaneDataProvider = ownAirplaneDataProvider ?? new DefaultTcasOwnAirplaneDataProvider(this.ownAirplaneSubs);
 
     this.sensitivity = this.createSensitivity();
-    this.ownAirplane = new OwnAirplane(this.ownAirplaneSubs);
+    this.ownAirplane = new OwnAirplane(this.ownAirplaneDataProvider, this.hasActiveSurveillance);
 
     const fullRAOptions: TcasResolutionAdvisoryOptions = {
       initialResponseTime: (raOptions?.initialResponseTime ?? Tcas.DEFAULT_RA_OPTIONS.initialResponseTime).copy(),
@@ -612,6 +722,7 @@ export abstract class Tcas<I extends AbstractTcasIntruder = AbstractTcasIntruder
           this.ownAirplaneSubs.altitude.set(lla.alt, UnitType.METER);
         }),
         sub.on('ground_speed').atFrequency(freq).handle(gs => { this.ownAirplaneSubs.groundSpeed.set(gs); }),
+        sub.on('pressure_alt').atFrequency(freq).handle(alt => { this.ownAirplaneSubs.pressureAltitude.set(alt); }),
         sub.on('vertical_speed').atFrequency(freq).handle(vs => { this.ownAirplaneSubs.verticalSpeed.set(vs); }),
         sub.on('radio_alt').atFrequency(freq).handle(alt => { this.ownAirplaneSubs.radarAltitude.set(alt); })
       );
@@ -822,22 +933,27 @@ export abstract class Tcas<I extends AbstractTcasIntruder = AbstractTcasIntruder
    */
   protected updateIntruderArrays(): void {
     this.intrudersSorted.sort(this.intruderComparator.bind(this));
-    const oldCulled = this.intrudersFiltered;
+    const intrudersToCleanUp = new Set(this.intrudersFiltered);
 
-    this.intrudersFiltered = [];
+    this.intrudersFiltered.length = 0;
     const len = this.intrudersSorted.length;
-    for (let i = 0; i < len && this.intrudersFiltered.length < this.maxIntruderCount.get(); i++) {
+    const maxIntruderCount = this.maxIntruderCount.get();
+    for (let i = 0; i < len; i++) {
       const intruder = this.intrudersSorted[i];
       if (intruder.isPredictionValid && this.filterIntruder(intruder)) {
-        this.intrudersFiltered.push(intruder);
-        if (!oldCulled.includes(intruder)) {
+        const filteredCount = this.intrudersFiltered.push(intruder);
+        if (!intrudersToCleanUp.delete(intruder)) {
           this.initIntruder(intruder);
         }
-      } else {
-        if (oldCulled.includes(intruder)) {
-          this.cleanUpIntruder(intruder);
+
+        if (filteredCount >= maxIntruderCount) {
+          break;
         }
       }
+    }
+
+    for (const toCleanUp of intrudersToCleanUp) {
+      this.cleanUpIntruder(toCleanUp);
     }
   }
 
@@ -1044,9 +1160,8 @@ export abstract class Tcas<I extends AbstractTcasIntruder = AbstractTcasIntruder
    * @param intruder The intruder that was removed.
    */
   private cleanUpIntruder(intruder: I): void {
-    if (intruder.alertLevel.get() === TcasAlertLevel.ResolutionAdvisory) {
-      this.intrudersRA.delete(intruder);
-    }
+    // NOTE: setting the alert level back to None will ensure the intruder is removed from the resolution advisory set.
+    intruder.alertLevel.set(TcasAlertLevel.None);
 
     this.alertLevelSubs.get(intruder)?.destroy();
     this.eventPublisher.pub('tcas_intruder_removed', intruder, false, false);
@@ -1074,8 +1189,11 @@ type TcasOwnAirplaneSubs = {
   /** A subscribable which provides the own airplane's position. */
   position: Subscribable<GeoPointInterface>;
 
-  /** A subscribable which provides the own airplane's altitude. */
+  /** A subscribable which provides the own airplane's geometric altitude. */
   altitude: Subscribable<NumberUnitInterface<UnitFamily.Distance>>;
+
+  /** A subscribable which provides the own airplane's pressure altitude. */
+  pressureAltitude: Subscribable<NumberUnitInterface<UnitFamily.Distance>>;
 
   /** A subscribable which provides the own airplane's ground track. */
   groundTrack: Subscribable<number>;
@@ -1094,6 +1212,142 @@ type TcasOwnAirplaneSubs = {
 };
 
 /**
+ * A default implementation of {@link TcasOwnAirplaneDataProvider} that sources data from a
+ * {@link TcasOwnAirplaneSubs} object.
+ */
+class DefaultTcasOwnAirplaneDataProvider implements TcasOwnAirplaneDataProvider {
+  /** @inheritDoc */
+  public readonly position: Subscribable<GeoPointInterface>;
+
+  /** @inheritDoc */
+  public readonly geometricAltitude: Subscribable<NumberUnitInterface<UnitFamily.Distance>>;
+
+  /** @inheritDoc */
+  public readonly pressureAltitude: Subscribable<NumberUnitInterface<UnitFamily.Distance>>;
+
+  /** @inheritDoc */
+  public readonly groundTrack: Subscribable<number>;
+
+  /** @inheritDoc */
+  public readonly groundSpeed: Subscribable<NumberUnitInterface<UnitFamily.Speed>>;
+
+  /** @inheritDoc */
+  public readonly verticalSpeed: Subscribable<NumberUnitInterface<UnitFamily.Speed>>;
+
+  /** @inheritDoc */
+  public readonly radarAltitude: Subscribable<NumberUnitInterface<UnitFamily.Distance>>;
+
+  /** @inheritDoc */
+  public readonly isOnGround: Subscribable<boolean | undefined>;
+
+  /**
+   * Creates a new instance of DefaultTcasOwnAirplaneDataProvider.
+   * @param ownAirplaneSubs The subscribables from which to source data.
+   */
+  public constructor(ownAirplaneSubs: TcasOwnAirplaneSubs) {
+    this.position = ownAirplaneSubs.position;
+    this.geometricAltitude = ownAirplaneSubs.altitude;
+    this.pressureAltitude = ownAirplaneSubs.pressureAltitude;
+    this.groundTrack = ownAirplaneSubs.groundTrack;
+    this.groundSpeed = ownAirplaneSubs.groundSpeed;
+    this.verticalSpeed = ownAirplaneSubs.verticalSpeed;
+    this.radarAltitude = ownAirplaneSubs.radarAltitude;
+    this.isOnGround = ownAirplaneSubs.isOnGround;
+  }
+}
+
+/**
+ * An own airplane used by {@link Tcas}.
+ */
+export interface TcasOwnAirplane {
+  /**
+   * The position of this airplane at the time of the most recent update. If the position is not known, then both
+   * latitude and longitude will be `NaN`.
+   */
+  readonly position: GeoPointReadOnly;
+
+  /** The actual (omniscient) position of this airplane at the time of the most recent update. */
+  readonly actualPosition: GeoPointReadOnly;
+
+  /**
+   * The geometric altitude above MSL of this airplane at the time of the most recent update, or `NaN` if the geometric
+   * altitude is not known.
+   */
+  readonly altitude: NumberUnitReadOnly<UnitFamily.Distance>;
+
+  /**
+   * The true ground track of this airplane, in degrees, at the time of the most recent update, or `NaN` if the track
+   * is not known.
+   */
+  readonly groundTrack: number;
+
+  /** The actual (omniscient) true ground track of this airplane at the time of the most recent update. */
+  readonly actualGroundTrack: number;
+
+  /** The ground speed of this airplane at the time of the most recent update, or `NaN` if the track is not known. */
+  readonly groundSpeed: NumberUnitReadOnly<UnitFamily.Speed>;
+
+  /** The actual (omniscient) ground speed of this airplane at the time of the most recent update. */
+  readonly actualGroundSpeed: NumberUnitReadOnly<UnitFamily.Speed>;
+
+  /**
+   * The barometric vertical speed of this airplane at the time of the most recent update, or `NaN` if the vertical
+   * speed is not known.
+   */
+  readonly verticalSpeed: NumberUnitReadOnly<UnitFamily.Speed>;
+
+  /**
+   * The radar altitude of this airplane at the time of the most recent update, or `NaN` if the radar altitude is not
+   * known.
+   */
+  readonly radarAltitude: NumberUnitReadOnly<UnitFamily.Distance>;
+
+  /** Whether this airplane is on the ground at the time of the most recent update. */
+  readonly isOnGround: boolean;
+
+  /** The 3D position vector of this airplane at the time of the last update. Always equal to `[0, 0, 0]`. */
+  readonly positionVec: ReadonlyFloat64Array;
+
+  /**
+   * The 3D velocity vector of this airplane at the time of the last update, as `[x, y, z]`. Each component is
+   * expressed in units of meters per second. The coordinate system is an Euclidean approximation of the geodetic space
+   * around the airplane such that the positive x axis points horizontally toward true east, the positive y axis points
+   * horizontally toward true north, and the positive z axis points vertically upward. If one of the velocity
+   * components is not known, then it will be `NaN`.
+   */
+  readonly velocityVec: ReadonlyFloat64Array;
+
+  /**
+   * The actual (omniscient) 3D velocity vector of this airplane at the time of the last update, as `[x, y, z]`. Each
+   * component is expressed in units of meters per second. The coordinate system is the same as the one used for
+   * `velocityVec`. Only the x and y components contain omnisicent values. The z (vertical) component has the same
+   * value as the z component of `velocityVec`.
+   */
+  readonly actualVelocityVec: ReadonlyFloat64Array;
+
+  /** Whether the own airplane can use active surveillance to track TCAS intruders at the time of the last update. */
+  readonly canUseActiveSurveillance: boolean;
+
+  /**
+   * Calculates the predicted 3D position vector of this airplane at a specified time based on the most recent
+   * available position and velocity data. Each component of the vector is expressed in units of meters. The coordinate
+   * system is an Euclidean approximation of the geodetic space around the airplane such that the positive x axis points
+   * horizontally toward true east, the positive y axis points horizontally toward true north, and the positive z axis
+   * points vertically upward. The origin is at the most recent known position of this airplane.
+   * @param simTime The sim time at which to calculate the position, as a Javascript timestamp.
+   * @param out The vector to which to write the result.
+   * @returns The predicted position vector of this airplane at the specified time.
+   */
+  predictPosition(simTime: number, out: Float64Array): Float64Array;
+
+  /**
+   * Updates this airplane's data.
+   * @param simTime The current sim time, as a Javascript timestamp.
+   */
+  update(simTime: number): void;
+}
+
+/**
  * An airplane managed by TCAS.
  */
 abstract class TcasAirplane {
@@ -1105,12 +1359,8 @@ abstract class TcasAirplane {
   protected readonly _altitude = UnitType.FOOT.createNumber(0);
   public readonly altitude = this._altitude.readonly;
 
-  protected _groundTrack = 0;
-  // eslint-disable-next-line jsdoc/require-returns
   /** The true ground track of this airplane at the time of the most recent update. */
-  public get groundTrack(): number {
-    return this._groundTrack;
-  }
+  public groundTrack = 0;
 
   /** The ground speed of this airplane at the time of the most recent update. */
   protected readonly _groundSpeed = UnitType.KNOT.createNumber(0);
@@ -1127,13 +1377,13 @@ abstract class TcasAirplane {
    * counterclockwise equirectangular projection of latitude and longitude, with the origin at the location of the own
    * airplane.
    */
-  public readonly positionVec = new Float64Array(3);
+  public readonly positionVec = Vec3Math.create();
 
   /**
    * The 3D velocity vector of this airplane at the time of the last update. Each component is expressed in units of
    * meters per second. The coordinate system is defined the same as for position vectors.
    */
-  public readonly velocityVec = new Float64Array(3);
+  public readonly velocityVec = Vec3Math.create();
 
   protected lastUpdateTime = 0;
 }
@@ -1141,34 +1391,50 @@ abstract class TcasAirplane {
 /**
  * The own airplane managed by TCAS.
  */
-class OwnAirplane extends TcasAirplane {
-  /** The radar altitude of this airplane at the time of the most recent update. */
-  protected readonly _radarAltitude = UnitType.FOOT.createNumber(0);
+class OwnAirplane extends TcasAirplane implements TcasOwnAirplane {
+  private readonly latSimVar = RegisteredSimVarUtils.create('PLANE LATITUDE', SimVarValueType.Degree);
+  private readonly lonSimVar = RegisteredSimVarUtils.create('PLANE LONGITUDE', SimVarValueType.Degree);
+  private readonly velocityWorldXSimVar = RegisteredSimVarUtils.create('VELOCITY WORLD X', SimVarValueType.Knots);
+  private readonly velocityWorldZSimVar = RegisteredSimVarUtils.create('VELOCITY WORLD Z', SimVarValueType.Knots);
+  private readonly verticalSpeedSimVar = RegisteredSimVarUtils.create('VERTICAL SPEED', SimVarValueType.FPM);
+
+  private readonly _actualPosition = new GeoPoint(0, 0);
+  /** @inheritDoc */
+  public readonly actualPosition = this._actualPosition.readonly;
+
+  /** @inheritDoc */
+  public actualGroundTrack = 0;
+
+  private readonly _actualGroundSpeed = UnitType.KNOT.createNumber(0);
+  /** @inheritDoc */
+  public readonly actualGroundSpeed = this._actualGroundSpeed.readonly;
+
+  private readonly _radarAltitude = UnitType.FOOT.createNumber(0);
+  /** @inheritDoc */
   public readonly radarAltitude = this._radarAltitude.readonly;
 
-  private _isOnGround = false;
-  // eslint-disable-next-line jsdoc/require-returns
-  /** Whether this airplane is on the ground. */
-  public get isOnGround(): boolean {
-    return this._isOnGround;
-  }
+  /** @inheritDoc */
+  public isOnGround = false;
+
+  /** @inheritDoc */
+  public readonly actualVelocityVec = Vec3Math.create();
+
+  /** @inheritDoc */
+  public canUseActiveSurveillance = false;
 
   /**
-   * Constructor.
-   * @param subs Subscribables which provide data related to this airplane.
+   * Creates a new instance of OwnAirplane.
+   * @param dataProvider A provider of own airplane data.
+   * @param hasActiveSurveillance Whether this airplane's parent TCAS can use active surveillance to track intruders.
    */
-  constructor(private readonly subs: TcasOwnAirplaneSubs) {
+  public constructor(
+    private readonly dataProvider: TcasOwnAirplaneDataProvider,
+    private readonly hasActiveSurveillance: Accessible<boolean>
+  ) {
     super();
   }
 
-  /**
-   * Calculates the predicted 3D position vector of this airplane at a specified time based on the most recent
-   * available data. Each component of the vector is expressed in units of meters, and the origin lies at the most
-   * recent updated position of this airplane.
-   * @param simTime The sim time at which to calculate the position, as a UNIX timestamp in milliseconds.
-   * @param out A Float64Array object to which to write the result.
-   * @returns The predicted position vector of this airplane at the specified time.
-   */
+  /** @inheritDoc */
   public predictPosition(simTime: number, out: Float64Array): Float64Array {
     const dt = (simTime - this.lastUpdateTime) / 1000;
     return Vec3Math.add(this.positionVec, Vec3Math.multScalar(this.velocityVec, dt, out), out);
@@ -1181,6 +1447,7 @@ class OwnAirplane extends TcasAirplane {
   public update(simTime: number): void {
     this.updateParameters();
     this.updateVectors();
+    this.canUseActiveSurveillance = this.hasActiveSurveillance.get();
     this.lastUpdateTime = simTime;
   }
 
@@ -1188,22 +1455,33 @@ class OwnAirplane extends TcasAirplane {
    * Updates this airplane's position, altitude, ground track, ground speed, vertical speed, and whether it is on the ground.
    */
   private updateParameters(): void {
-    this._position.set(this.subs.position.get());
-    this._altitude.set(this.subs.altitude.get());
-    this._groundTrack = this.subs.groundTrack.get();
-    this._groundSpeed.set(this.subs.groundSpeed.get());
-    this._verticalSpeed.set(this.subs.verticalSpeed.get());
-    this._radarAltitude.set(this.subs.radarAltitude.get());
-    this._isOnGround = this.subs.isOnGround.get();
+    this._position.set(this.dataProvider.position.get());
+    this.groundTrack = this.dataProvider.groundTrack.get();
+    this._groundSpeed.set(this.dataProvider.groundSpeed.get());
+    this._altitude.set(this.dataProvider.geometricAltitude.get());
+    this._verticalSpeed.set(this.dataProvider.verticalSpeed.get());
+    this._radarAltitude.set(this.dataProvider.radarAltitude.get());
+    this.isOnGround = this.dataProvider.isOnGround.get() ?? false;
+
+    this._actualPosition.set(this.latSimVar.get(), this.lonSimVar.get());
+
+    const velocityX = this.velocityWorldXSimVar.get();
+    const velocityY = this.velocityWorldZSimVar.get();
+    this.actualGroundTrack = Math.atan2(velocityX, velocityY) * Avionics.Utils.RAD2DEG;
+
+    this._actualGroundSpeed.set(Math.hypot(velocityX, velocityY));
   }
 
   /**
    * Updates this airplane's position and velocity vectors.
    */
   private updateVectors(): void {
-    Vec2Math.setFromPolar(this._groundSpeed.asUnit(UnitType.MPS), (90 - this._groundTrack) * Avionics.Utils.DEG2RAD, this.velocityVec);
+    Vec2Math.setFromPolar(this._groundSpeed.asUnit(UnitType.MPS), (90 - this.groundTrack) * Avionics.Utils.DEG2RAD, this.velocityVec);
     const verticalVelocity = this._verticalSpeed.asUnit(UnitType.MPS);
     this.velocityVec[2] = verticalVelocity;
+
+    Vec2Math.setFromPolar(this._actualGroundSpeed.asUnit(UnitType.MPS), (90 - this.groundTrack) * Avionics.Utils.DEG2RAD, this.actualVelocityVec);
+    this.actualVelocityVec[2] = this.verticalSpeedSimVar.get();
   }
 }
 
@@ -1231,10 +1509,10 @@ export abstract class AbstractTcasIntruder extends TcasAirplane implements TcasI
   }
 
   /** @inheritdoc */
-  public readonly tcaTA: TcasTcaPredictionClass = new TcasTcaPredictionClass(this);
+  public readonly tcaTA: TcasTcaPredictionClass = new TcasTcaPredictionClass(this, false);
 
   /** @inheritdoc */
-  public readonly tcaRA: TcasTcaPredictionClass = new TcasTcaPredictionClass(this);
+  public readonly tcaRA: TcasTcaPredictionClass = new TcasTcaPredictionClass(this, true);
 
   /**
    * Constructor.
@@ -1275,7 +1553,7 @@ export abstract class AbstractTcasIntruder extends TcasAirplane implements TcasI
    */
   public updatePrediction(
     simTime: number,
-    ownAirplane: OwnAirplane,
+    ownAirplane: TcasOwnAirplane,
     sensitivity: TcasSensitivityParameters
   ): void {
     this.updateParameters(simTime, ownAirplane);
@@ -1297,24 +1575,25 @@ export abstract class AbstractTcasIntruder extends TcasAirplane implements TcasI
    * @param simTime The current sim time, as a UNIX timestamp in milliseconds.
    * @param ownAirplane The own airplane.
    */
-  private updateParameters(simTime: number, ownAirplane: OwnAirplane): void {
-    if (isNaN(this.contact.groundTrack) || this.contact.groundSpeed.compare(AbstractTcasIntruder.MIN_GROUND_SPEED) < 0) {
+  private updateParameters(simTime: number, ownAirplane: TcasOwnAirplane): void {
+    if (
+      !isNaN(this.contact.groundTrack)
+      && !this.contact.groundSpeed.isNaN()
+      && this.contact.groundSpeed.compare(AbstractTcasIntruder.MIN_GROUND_SPEED) >= 0
+      && this.updatePosition(simTime, ownAirplane) && this.updateVelocity(ownAirplane)
+    ) {
+      this._isPredictionValid = true;
+    } else {
       this._isPredictionValid = false;
       this._position.set(NaN, NaN);
       this._altitude.set(NaN);
-      this._groundTrack = NaN;
+      this.groundTrack = NaN;
       this._groundSpeed.set(NaN);
       this._verticalSpeed.set(NaN);
       Vec3Math.set(NaN, NaN, NaN, this.positionVec);
       Vec3Math.set(NaN, NaN, NaN, this.velocityVec);
       Vec3Math.set(NaN, NaN, NaN, this.relativePositionVec);
       Vec3Math.set(NaN, NaN, NaN, this.relativeVelocityVec);
-    } else {
-      this.updatePosition(simTime, ownAirplane);
-      this.updateVelocity(ownAirplane);
-      this._groundSpeed.set(this.contact.groundSpeed);
-      this._verticalSpeed.set(this.contact.verticalSpeed);
-      this._isPredictionValid = true;
     }
   }
 
@@ -1322,30 +1601,62 @@ export abstract class AbstractTcasIntruder extends TcasAirplane implements TcasI
    * Updates this intruder's position.
    * @param simTime The current sim time, as a UNIX timestamp in milliseconds.
    * @param ownAirplane The own airplane.
+   * @returns Whether this intruder's lateral position was successfully updated.
    */
-  private updatePosition(simTime: number, ownAirplane: OwnAirplane): void {
+  private updatePosition(simTime: number, ownAirplane: TcasOwnAirplane): boolean {
     this.contact.predict(simTime, this._position, this._altitude);
-    this._groundTrack = this._position.equals(this.contact.lastPosition) ? this.contact.groundTrack : this._position.bearingFrom(this.contact.lastPosition);
 
-    const distance = UnitType.GA_RADIAN.convertTo(this._position.distance(ownAirplane.position), UnitType.METER);
-    const bearing = ownAirplane.position.bearingTo(this._position);
+    // NOTE: traffic systems with active surveillance can only obtain (lateral) distance and direction information from
+    // direct ranging. Information about vertical separation is still reliant on comparing altitude broadcast by the
+    // intruder's transponder to the own airplane's altitude.
+
+    const ownAirplanePosition = ownAirplane.canUseActiveSurveillance ? ownAirplane.actualPosition : ownAirplane.position;
+
+    if (!ownAirplanePosition.isValid()) {
+      return false;
+    }
+
+    const distance = UnitType.GA_RADIAN.convertTo(this._position.distance(ownAirplanePosition), UnitType.METER);
+    const bearing = ownAirplanePosition.bearingTo(this._position);
     Vec2Math.setFromPolar(distance, (90 - bearing) * Avionics.Utils.DEG2RAD, this.positionVec);
+
+    // NOTE: We have to use geometric altitude instead of pressure altitude to calculate vertical separation because
+    // we only get geometric altitude data from traffic contacts. This will still result in a vertical separation value
+    // different from if we were to use pressure altitude (because pressure altitude is not, strictly speaking, a
+    // measure of height), but the error approaches zero as separation approaches zero.
     const verticalPosition = this._altitude.asUnit(UnitType.METER) - ownAirplane.altitude.asUnit(UnitType.METER);
     this.positionVec[2] = verticalPosition;
 
     Vec3Math.sub(this.positionVec, ownAirplane.positionVec, this.relativePositionVec);
+
+    return Vec2Math.isFinite(this.positionVec);
   }
 
   /**
    * Updates this intruder's velocity.
    * @param ownAirplane The own airplane.
+   * @returns Whether this intruder's lateral velocity was successfully updated.
    */
-  private updateVelocity(ownAirplane: OwnAirplane): void {
+  private updateVelocity(ownAirplane: TcasOwnAirplane): boolean {
+    this.groundTrack = this.contact.groundTrack;
+    this._groundSpeed.set(this.contact.groundSpeed);
+    this._verticalSpeed.set(this.contact.verticalSpeed);
+
     Vec2Math.setFromPolar(this.contact.groundSpeed.asUnit(UnitType.MPS), (90 - this.contact.groundTrack) * Avionics.Utils.DEG2RAD, this.velocityVec);
     const verticalVelocity = this.contact.verticalSpeed.asUnit(UnitType.MPS);
     this.velocityVec[2] = verticalVelocity;
 
-    Vec3Math.sub(this.velocityVec, ownAirplane.velocityVec, this.relativeVelocityVec);
+    const ownAirplaneLateralVelocity = ownAirplane.canUseActiveSurveillance ? ownAirplane.actualVelocityVec : ownAirplane.velocityVec;
+    const ownAirplaneVerticalVelocity = ownAirplane.velocityVec[2];
+
+    // NOTE: traffic systems with active surveillance can only obtain (lateral) distance and direction information from
+    // direct ranging. Information about vertical separation is still reliant on comparing altitude broadcast by the
+    // intruder's transponder to the own airplane's altitude.
+
+    Vec2Math.sub(this.velocityVec, ownAirplaneLateralVelocity, this.relativeVelocityVec);
+    this.relativeVelocityVec[2] = this.velocityVec[2] - ownAirplaneVerticalVelocity;
+
+    return Vec2Math.isFinite(this.relativeVelocityVec);
   }
 
   /**
@@ -1389,56 +1700,47 @@ export class DefaultTcasIntruder extends AbstractTcasIntruder {
 class TcasTcaPredictionClass implements TcasTcaPrediction {
   private static readonly vec2Cache = [new Float64Array(2), new Float64Array(2), new Float64Array(2)];
 
-  private _isValid = false;
-  /** @inheritdoc */
-  public get isValid(): boolean {
-    return this._isValid;
-  }
+  /** @inheritDoc */
+  public isValid = false;
 
-  private _time = NaN;
-  /** @inheritdoc */
-  public get time(): number {
-    return this._time;
-  }
+  /** @inheritDoc */
+  public time = NaN;
 
   private readonly _tcpa = UnitType.SECOND.createNumber(NaN);
-  /** @inheritdoc */
+  /** @inheritDoc */
   public readonly tcpa = this._tcpa.readonly;
 
   private readonly _tcoa = UnitType.SECOND.createNumber(NaN);
-  /** @inheritdoc */
+  /** @inheritDoc */
   public readonly tcoa = this._tcoa.readonly;
 
-  private _isThreat = false;
-  // eslint-disable-next-line jsdoc/require-returns
-  /** @inheritdoc */
-  public get isThreat(): boolean {
-    return this._isThreat;
-  }
+  /** @inheritDoc */
+  public isThreat = false;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
   public readonly cpaDisplacement = new Float64Array(3);
 
   private readonly _cpaHorizontalSep = UnitType.NMILE.createNumber(0);
-  /** @inheritdoc */
+  /** @inheritDoc */
   public readonly cpaHorizontalSep = this._cpaHorizontalSep.readonly;
 
   private readonly _cpaVerticalSep = UnitType.FOOT.createNumber(0);
-  /** @inheritdoc */
+  /** @inheritDoc */
   public readonly cpaVerticalSep = this._cpaVerticalSep.readonly;
 
-  private _cpaNorm = NaN;
-  // eslint-disable-next-line jsdoc/require-returns
-  /** @inheritdoc */
-  public get cpaNorm(): number {
-    return this._cpaNorm;
-  }
+  /** @inheritDoc */
+  public cpaNorm = NaN;
 
   /**
-   * Constructor.
+   * Creates a new instance of TcasTcaPredictionClass.
    * @param intruder The intruder associated with this prediction.
+   * @param threatRequiresVerticalData Whether valid vertical separation data is required for this prediction to issue
+   * a threat.
    */
-  constructor(private readonly intruder: TcasIntruder) {
+  public constructor(
+    private readonly intruder: TcasIntruder,
+    private readonly threatRequiresVerticalData: boolean
+  ) {
   }
 
   /**
@@ -1457,7 +1759,7 @@ class TcasTcaPredictionClass implements TcasTcaPrediction {
     zthr: NumberUnitInterface<UnitFamily.Distance>,
     hmd?: NumberUnitInterface<UnitFamily.Distance>
   ): void {
-    this._time = simTime;
+    this.time = simTime;
 
     if (tau.isNaN() || dmod.isNaN() || zthr.isNaN() || (hmd?.isNaN() ?? false)) {
       this.invalidate();
@@ -1488,10 +1790,12 @@ class TcasTcaPredictionClass implements TcasTcaPrediction {
     const tauMod = dotSHorizVHoriz >= 0 ? Infinity : (rSquared - sHorizSquared) / dotSHorizVHoriz;
 
     // Time to co-altitude
-    const tcoa = -s[2] / v[2];
+    const tcoa = s[2] === 0 ? 0 : -s[2] / v[2];
 
     const isHorizontalThreat = sHorizSquared <= rSquared || tauMod <= tauSeconds;
-    const isVerticalThreat = Math.abs(s[2]) <= h || (tcoa >= 0 && tcoa <= tauSeconds);
+    const isVerticalThreat = isNaN(tcoa)
+      ? !this.threatRequiresVerticalData
+      : (Math.abs(s[2]) <= h || (tcoa >= 0 && tcoa <= tauSeconds));
 
     let passHmdFilter = true;
     if (hmd !== undefined && isHorizontalThreat && isVerticalThreat) {
@@ -1519,7 +1823,7 @@ class TcasTcaPredictionClass implements TcasTcaPrediction {
       }
     }
 
-    this._isThreat = isHorizontalThreat && isVerticalThreat && passHmdFilter;
+    this.isThreat = isHorizontalThreat && isVerticalThreat && passHmdFilter;
     this._tcpa.set(tcpa);
     this._tcoa.set(tcoa);
 
@@ -1527,23 +1831,23 @@ class TcasTcaPredictionClass implements TcasTcaPrediction {
     AbstractTcasIntruder.displacementToHorizontalSeparation(this.cpaDisplacement, this._cpaHorizontalSep);
     AbstractTcasIntruder.displacementToVerticalSeparation(this.cpaDisplacement, this._cpaVerticalSep);
 
-    this._cpaNorm = TcasTcaPredictionClass.calculateCylindricalNorm(this.cpaDisplacement, r, h);
+    this.cpaNorm = TcasTcaPredictionClass.calculateCylindricalNorm(this.cpaDisplacement, r, h);
 
-    this._isValid = true;
+    this.isValid = true;
   }
 
   /**
    * Invalidates this intruder's predicted TCA and related data.
    */
   public invalidate(): void {
-    this._isValid = false;
-    this._isThreat = false;
+    this.isValid = false;
+    this.isThreat = false;
     this._tcpa.set(NaN);
     this._tcoa.set(NaN);
     Vec3Math.set(NaN, NaN, NaN, this.cpaDisplacement);
     this._cpaHorizontalSep.set(NaN);
     this._cpaVerticalSep.set(NaN);
-    this._cpaNorm = NaN;
+    this.cpaNorm = NaN;
   }
 
   /**
@@ -1567,7 +1871,7 @@ class TcasTcaPredictionClass implements TcasTcaPrediction {
    */
   private static calculateCylindricalNorm(vector: ReadonlyFloat64Array, radius: number, halfHeight: number): number {
     const horizLength = Math.hypot(vector[0], vector[1]);
-    return Math.max(Math.abs(vector[2]) / halfHeight, horizLength / radius);
+    return Math.max(isNaN(vector[2]) ? 0 : Math.abs(vector[2]) / halfHeight, horizLength / radius);
   }
 }
 
@@ -1827,7 +2131,7 @@ class TcasResolutionAdvisoryHostClass implements TcasResolutionAdvisoryHost {
    * @param options Options to adjust how the host should calculate resolution advisories.
    * @param ownAirplane The own airplane.
    */
-  constructor(bus: EventBus, private readonly options: TcasResolutionAdvisoryOptions, private readonly ownAirplane: OwnAirplane) {
+  constructor(bus: EventBus, private readonly options: TcasResolutionAdvisoryOptions, private readonly ownAirplane: TcasOwnAirplane) {
     this.publisher = bus.getPublisher<TcasEvents>();
   }
 
@@ -1886,11 +2190,11 @@ class TcasResolutionAdvisoryHostClass implements TcasResolutionAdvisoryHost {
       return;
     }
 
-    if (intruders.size === 0) {
+    if (intruders.size === 0 || !Vec3Math.isFinite(this.ownAirplane.velocityVec)) {
       this.cancel(simTime);
     } else {
       const isInitial = this._primaryType === TcasResolutionAdvisoryType.Clear;
-      const ownAirplaneVsMps = this.ownAirplane.verticalSpeed.asUnit(UnitType.MPS);
+      const ownAirplaneVsMps = this.ownAirplane.velocityVec[2];
       const alimMeters = alim.asUnit(UnitType.METER);
       const responseTimeSeconds = this.isInitial ? this.initialResponseTimeSeconds : this.subsequentResponseTimeSeconds;
       const responseTimeSecondsRemaining = isInitial
@@ -1899,7 +2203,7 @@ class TcasResolutionAdvisoryHostClass implements TcasResolutionAdvisoryHost {
       const accelMps = this.isInitial ? this.initialAccelMps : this.subsequentAccelMps;
 
       this.updateIntruders(intruders);
-      this.updateVsConstraints(alimMeters, responseTimeSecondsRemaining, accelMps);
+      this.updateVsConstraints(ownAirplaneVsMps, alimMeters, responseTimeSecondsRemaining, accelMps);
 
       if (isInitial) {
         this.selectInitialState(simTime, ownAirplaneVsMps);
@@ -1941,6 +2245,7 @@ class TcasResolutionAdvisoryHostClass implements TcasResolutionAdvisoryHost {
   /**
    * Updates the vertical speed constraints associated with the intruders participating in this host's current
    * resolution advisory.
+   * @param ownAirplaneVsMps The current vertical speed of the own airplane, in meters per second.
    * @param alimMeters The value of ALIM (the minimum desired vertical separation between the own airplane and an
    * intruder at time of closest approach), in meters.
    * @param responseTimeSeconds The predicted amount of time, in seconds, for the own airplane to respond to the most
@@ -1949,12 +2254,11 @@ class TcasResolutionAdvisoryHostClass implements TcasResolutionAdvisoryHost {
    * responding to the most recently issued resolution advisory.
    */
   private updateVsConstraints(
+    ownAirplaneVsMps: number,
     alimMeters: number,
     responseTimeSeconds: number,
     accelMps: number
   ): void {
-    const ownAirplaneVsMps = this.ownAirplane.verticalSpeed.asUnit(UnitType.MPS);
-
     for (let i = 0; i < this.intruderArray.length; i++) {
       const intruder = this.intruderArray[i];
 

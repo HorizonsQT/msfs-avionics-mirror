@@ -25,7 +25,6 @@
   position: absolute;
   left: 50%;
   top: 0px;
-  height: 48px;
   transform: translate3d(-50%, 0px, 0px);
 }
 
@@ -108,6 +107,7 @@
   background: var(--g3000-color-pfd-box-background);
   border-radius: 5px;
   transform: rotateX(0deg);
+  overflow: hidden;
 }
 
 /* ---- Radar altimeter ---- */
@@ -121,6 +121,7 @@
   height: 26px;
   font-size: 21px;
   transform: rotateX(0deg);
+  overflow: hidden;
 
   --radar-altimeter-padding: 2px 3px 0px 3px;
 }
@@ -140,6 +141,7 @@
   padding: 2px 2px 0px 2px;
   font-size: 18px;
   transform: rotateX(0deg);
+  overflow: hidden;
 
   --minimums-mode-line-height: 0.8em;
   --minimums-min-line-height: 0.9em;
@@ -177,6 +179,7 @@
   left: calc(var(--pfd-instrument-container-ui-center-x) - 354px);
   font-size: 18px;
   transform: rotateX(0deg);
+  overflow: hidden;
 
   --nav-dme-info-banner-padding-top: 3px;
   --nav-dme-info-banner-padding-bottom: 1px;
@@ -205,6 +208,7 @@
   right: calc(100% - var(--pfd-instrument-container-ui-center-x) - 412px);
   font-size: 18px;
   transform: rotateX(0deg);
+  overflow: hidden;
 
   --bearing-info-banner-padding-top: 3px;
   --bearing-info-banner-padding-bottom: 0px;
@@ -291,13 +295,8 @@
   position: absolute;
   left: 0px;
   width: 100%;
-  height: 53px;
-  font-size: 18px;
   transform: rotateX(0deg);
   overflow: hidden;
-
-  --bottom-info-padding-top: 4px;
-  --bottom-info-padding-bottom: 0px;
 
   --bottom-info-ui-center-x: var(--pfd-instrument-container-ui-center-x);
 }
@@ -338,12 +337,12 @@
   height: 53px;
   display: flex;
   justify-content: center;
-  align-items: stretch;
   flex-flow: row nowrap;
   font-size: 18px;
   line-height: 19px;
   letter-spacing: -0.5px;
   background: #0a0d10;
+  overflow: hidden;
 }
 
 .display-pane-container-pfd-left .display-pane-half .softkey-container {
@@ -366,4 +365,6 @@
 
 .pfd-instrument-container .softkey {
   width: 106px;
+  /* Set fixed height to allow this element to be a layout boundary. */
+  height: 53px;
 }

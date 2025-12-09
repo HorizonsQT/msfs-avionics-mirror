@@ -1,5 +1,6 @@
-import { TakeoffConfigPublisherEvents } from '@microsoft/msfs-epic2-shared';
-import { ComponentProps, ConsumerSubject, DisplayComponent, FSComponent, EventBus, VNode } from '@microsoft/msfs-sdk';
+import { ComponentProps, DisplayComponent, EventBus, FSComponent, MappedSubject, SetSubject, Subject, VNode } from '@microsoft/msfs-sdk';
+
+import { AirspeedDataProvider, PfdAlertCategories, PfdAlertControlEvents } from '@microsoft/msfs-epic2-shared';
 
 import './PfdAlerts.css';
 
@@ -7,6 +8,8 @@ import './PfdAlerts.css';
 export interface PfdAlertsProps extends ComponentProps {
   /** The instrument event bus. */
   bus: EventBus;
+  /** Airspeed data provider */
+  airspeedDataProvider: AirspeedDataProvider;
 }
 
 /**
@@ -15,18 +18,34 @@ export interface PfdAlertsProps extends ComponentProps {
  * - GEAR
  * - OVER SPEED
  * - CAB PRESS
- * - NO TAKEOFF
  */
 export class PfdAlerts extends DisplayComponent<PfdAlertsProps> {
-  private readonly sub = this.props.bus.getSubscriber<TakeoffConfigPublisherEvents>();
+  private readonly sub = this.props.bus.getSubscriber<PfdAlertControlEvents>();
 
-  private readonly noTakeoff = ConsumerSubject.create(this.sub.on('takeoff_config_no_takeoff'), false).pause();
-  private readonly alertText = this.noTakeoff.map((v) => v ? 'NO TAKEOFF' : '');
+  private readonly activeAlerts = SetSubject.create<PfdAlertCategories>([]);
+  private readonly alertText = Subject.create('');
 
   /** @inheritdoc */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  public onAfterRender(node: VNode): void {
-    this.noTakeoff.resume();
+  public onAfterRender(): void {
+    this.sub.on('add_pfd_alert').handle((alert) => this.activeAlerts.toggle(alert, true));
+    this.sub.on('remove_pfd_alert').handle((alert) => this.activeAlerts.toggle(alert, false));
+
+    this.activeAlerts.sub((set) => {
+      if (set.has(PfdAlertCategories.CabinAltitude)) {
+        this.alertText.set('CAB ALT');
+      } else if (set.has(PfdAlertCategories.LandingGear)) {
+        this.alertText.set('GEAR');
+      } else if (set.has(PfdAlertCategories.Overspeed)) {
+        this.alertText.set('OVERSPEED');
+      } else if (set.has(PfdAlertCategories.CabinPressure)) {
+        this.alertText.set('CAB PRESS');
+      } else {
+        this.alertText.set('');
+      }
+    });
+
+    MappedSubject.create(([cas, maxCas]) => cas !== null && cas > maxCas + 5, this.props.airspeedDataProvider.cas, this.props.airspeedDataProvider.maxSpeed)
+      .sub((v) => this.activeAlerts.toggle(PfdAlertCategories.Overspeed, v));
   }
 
   /** @inheritdoc */

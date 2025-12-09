@@ -1,4 +1,3 @@
-import { SimVarValueType } from '../../data/SimVars';
 import { MathUtils } from '../../math/MathUtils';
 import { APValues } from '../APValues';
 import { DirectorState, PlaneDirector } from './PlaneDirector';
@@ -27,33 +26,41 @@ export type APRollDirectorOptions = {
 };
 
 /**
- * An autopilot roll director.
+ * An autopilot director that generates flight director bank commands to hold a roll attitude.
+ * 
+ * The director requires valid bank data to arm or activate.
  */
 export class APRollDirector implements PlaneDirector {
+  /** @inheritDoc */
   public state: DirectorState;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
   public onActivate?: () => void;
-  /** @inheritdoc */
+
+  /** @inheritDoc */
   public onArm?: () => void;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
+  public onDeactivate?: () => void;
+
+  /** @inheritDoc */
   public driveBank?: (bank: number, rate?: number) => void;
 
   private currentBankRef = 0;
   private desiredBank = 0;
-  private actualBank = 0;
 
   private readonly minBankAngleFunc: () => number;
   private readonly maxBankAngleFunc: () => number;
   private readonly driveBankFunc: (bank: number) => void;
 
+  private readonly bank = this.apValues.dataProvider.getItem('bank');
+
   /**
-   * Creates an instance of the LateralDirector.
+   * Creates a new instance of APRollDirector.
    * @param apValues The AP Values.
    * @param options Options to configure the new director.
    */
-  constructor(private readonly apValues: APValues, options?: Readonly<APRollDirectorOptions>) {
+  public constructor(private readonly apValues: APValues, options?: Readonly<APRollDirectorOptions>) {
     const minBankAngleOpt = options?.minBankAngle ?? 0;
     if (typeof minBankAngleOpt === 'number') {
       this.minBankAngleFunc = () => minBankAngleOpt;
@@ -101,13 +108,26 @@ export class APRollDirector implements PlaneDirector {
   }
 
   /**
-   * Activates this director.
+   * Checks whether the data required for this director to function are valid.
+   * @returns Whether the data required for this director to function are valid.
    */
+  private isDataValid(): boolean {
+    return this.bank.isValueValid();
+  }
+
+  /** @inheritDoc */
   public activate(): void {
+    if (this.state === DirectorState.Active || !this.isDataValid()) {
+      return;
+    }
+
     this.state = DirectorState.Active;
 
-    this.actualBank = SimVar.GetSimVarValue('PLANE BANK DEGREES', SimVarValueType.Degree);
-    this.currentBankRef = this.actualBank;
+    if (this.onActivate !== undefined) {
+      this.onActivate();
+    }
+
+    this.currentBankRef = this.bank.getValue();
 
     const maxBank = this.maxBankAngleFunc();
     const minBank = this.minBankAngleFunc();
@@ -118,38 +138,43 @@ export class APRollDirector implements PlaneDirector {
       this.desiredBank = MathUtils.clamp(this.currentBankRef, -maxBank, maxBank);
     }
 
-    if (this.onActivate !== undefined) {
-      this.onActivate();
-    }
-
     SimVar.SetSimVarValue('AUTOPILOT BANK HOLD', 'Bool', true);
   }
 
-  /**
-   * Arms this director.
-   * This director has no armed mode, so it activates immediately.
-   */
+  /** @inheritDoc */
   public arm(): void {
     if (this.state == DirectorState.Inactive) {
       this.activate();
     }
   }
 
-  /**
-   * Deactivates this director.
-   */
+  /** @inheritDoc */
   public deactivate(): void {
+    if (this.state === DirectorState.Inactive) {
+      return;
+    }
+
     this.state = DirectorState.Inactive;
+
+    if (this.onDeactivate !== undefined) {
+      this.onDeactivate();
+    }
+
     this.desiredBank = 0;
+
     SimVar.SetSimVarValue('AUTOPILOT BANK HOLD', 'Bool', false);
   }
 
-  /**
-   * Updates this director.
-   */
+  /** @inheritDoc */
   public update(): void {
-    if (this.state === DirectorState.Active) {
+    if (this.state !== DirectorState.Active) {
+      return;
+    }
+
+    if (this.isDataValid()) {
       this.driveBankFunc(this.desiredBank);
+    } else {
+      this.deactivate();
     }
   }
 }

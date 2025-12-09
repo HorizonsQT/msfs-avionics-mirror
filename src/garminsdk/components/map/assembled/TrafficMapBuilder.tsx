@@ -13,7 +13,9 @@ import { TrafficUserSettingTypes } from '../../../settings/TrafficUserSettings';
 import { UnitsUserSettingManager } from '../../../settings/UnitsUserSettings';
 import { TrafficSystem } from '../../../traffic/TrafficSystem';
 import { TrafficSystemType } from '../../../traffic/TrafficSystemType';
-import { TrafficMapRangeControllerSettings } from '../controllers';
+import {
+  TrafficMapFlightPlanVisController, TrafficMapFlightPlanVisControllerModules, TrafficMapRangeControllerSettings
+} from '../controllers';
 import {
   DefaultFlightPathPlanRenderer, MapDefaultFlightPlanWaypointRecordManager, MapFlightPathPlanRenderer,
   MapFlightPlanWaypointRecordManager
@@ -35,6 +37,7 @@ import {
   MapGarminDataIntegrityModule, MapGarminTrafficModule, MapOrientation, MapOrientationModule, MapTrafficAlertLevelMode,
   MapTrafficAltitudeRestrictionMode, MapUnitsModule
 } from '../modules';
+import { NextGenGarminMapUtils } from '../NextGenGarminMapUtils';
 
 /**
  * Options for creating a Garmin traffic map.
@@ -247,6 +250,13 @@ export type NextGenTrafficMapOptions
     /** The scaling factor of waypoint icons and labels. Defaults to `1`. */
     waypointStyleScale?: number;
 
+    /**
+     * Bitflags describing the requested data to be loaded in airport facilities retrieved by the map for rendering
+     * purposes. This controls what data are available from airport waypoints registered with the map's waypoint
+     * renderer. Defaults to {@link NextGenGarminMapUtils.AIRPORT_DATA_FLAGS}.
+     */
+    waypointRendererAirportDataFlags?: number;
+
     /** The map range array to use for nautical units mode. Defaults to a standard range array. */
     nauticalRangeArray?: readonly NumberUnitInterface<UnitFamily.Distance>[];
 
@@ -293,6 +303,11 @@ export class TrafficMapBuilder {
     options.includeAdsbOffBanner ??= true;
     options.includeFailedBanner ??= true;
 
+    const includesFlightPlan = options.flightPlanner !== undefined
+      && options.flightPlanWaypointRecordManagerFactory !== undefined
+      && options.flightPathRendererFactory !== undefined
+      && options.configureFlightPlan !== undefined;
+
     mapBuilder
       .withContext(MapSystemKeys.FacilityLoader, context => {
         return options.facilityLoader ?? new FacilityLoader(FacilityRepository.getRepository(context.bus));
@@ -338,22 +353,17 @@ export class TrafficMapBuilder {
         });
       });
 
-    if (
-      options.flightPlanner !== undefined
-      && options.flightPlanWaypointRecordManagerFactory !== undefined
-      && options.flightPathRendererFactory !== undefined
-      && options.configureFlightPlan !== undefined
-    ) {
+    if (includesFlightPlan) {
       mapBuilder.with(
         GarminMapBuilder.activeFlightPlan,
-        options.flightPlanner,
-        options.configureFlightPlan,
+        options.flightPlanner!,
+        options.configureFlightPlan!,
         {
           lnavIndex: options.lnavIndex,
           vnavIndex: options.vnavIndex,
           drawEntirePlan: false,
-          waypointRecordManagerFactory: options.flightPlanWaypointRecordManagerFactory,
-          pathRendererFactory: options.flightPathRendererFactory,
+          waypointRecordManagerFactory: options.flightPlanWaypointRecordManagerFactory!,
+          pathRendererFactory: options.flightPathRendererFactory!,
           supportFocus: false
         }
       );
@@ -590,7 +600,6 @@ export class TrafficMapBuilder {
           let controller: MapSystemGenericController;
           let headingSignalSub: Subscription | undefined;
 
-          // TODO: Hide flight plan
           const miniCompassLayer = context.getLayer(GarminMapKeys.MiniCompass);
 
           return controller = new MapSystemGenericController(context, {
@@ -613,6 +622,13 @@ export class TrafficMapBuilder {
             }
           });
         });
+
+      if (includesFlightPlan) {
+        mapBuilder.withController<
+          TrafficMapFlightPlanVisController,
+          TrafficMapFlightPlanVisControllerModules
+        >('TrafficMapFlightPlanVis', context => new TrafficMapFlightPlanVisController(context));
+      }
     }
 
     return mapBuilder.withInit<{
@@ -718,7 +734,10 @@ export class TrafficMapBuilder {
           GarminFacilityWaypointCache.getCache(context.bus),
           renderer,
           MapWaypointRenderRole.FlightPlanInactive,
-          MapWaypointRenderRole.FlightPlanActive
+          MapWaypointRenderRole.FlightPlanActive,
+          {
+            airportFacilityDataFlags: context[MapSystemKeys.WaypointRendererAirportDataFlags],
+          }
         );
       };
 
@@ -744,6 +763,8 @@ export class TrafficMapBuilder {
       };
     }
 
-    return mapBuilder.with(TrafficMapBuilder.build, optionsToUse);
+    return mapBuilder
+      .with(TrafficMapBuilder.build, optionsToUse)
+      .withContext(MapSystemKeys.WaypointRendererAirportDataFlags, () => options.waypointRendererAirportDataFlags ?? NextGenGarminMapUtils.AIRPORT_DATA_FLAGS);
   }
 }

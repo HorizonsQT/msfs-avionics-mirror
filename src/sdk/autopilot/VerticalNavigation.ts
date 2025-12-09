@@ -182,40 +182,51 @@ export interface TocBocDetails {
 }
 
 /**
- * A leg in the calculated Vertical Flight Plan.
+ * A leg in a {@link VerticalFlightPlan}.
  */
 export interface VNavLeg {
-  /** The index of the flight plan segment. */
+  /** The index of the flight plan segment that contains this leg. */
   segmentIndex: number;
 
-  /** The index of the leg within the plan segment. */
+  /** The index of this leg within its containing flight plan segment. */
   legIndex: number;
 
-  /** The name of the leg. */
+  /** The name of this leg. */
   name: string;
 
-  /** The fpa of the leg in degrees. Always a positive number. */
+  /**
+   * The flight path angle of the vertical path terminating at the constraint to which this leg is assigned, in
+   * degrees. Positive angles represent a descending path. This leg is assigned to the earliest (in flight plan order)
+   * constraint whose host leg is equal to or past (in flight plan order) this leg.
+   */
   fpa: number;
 
-  /** The distance of the leg in meters. */
+  /** The distance of this leg, in meters. */
   distance: number;
 
-  /** Whether the leg is eligible for VNAV to compute a vertical path through it. */
+  /** Whether this leg is eligible for VNAV to compute a vertical path through it. */
   isEligible: boolean;
 
-  /** If the leg is a bottom of descent. */
+  // TODO: Move isBod out of VNavLeg and into VNavConstraint when it's acceptable to break backward compatibility. It
+  // no longer makes sense to assign a BOD flag to legs now that constraints are not always located at the end of a
+  // leg.
+
+  /** Whether this leg hosts a descent constraint that is considered to be a bottom-of-descent (BOD) point. */
   isBod: boolean;
 
-  /** Whether or not the altitude provided is advisory. */
+  // TODO: Change isAdvisory to something more generally useful and with a name that better reflects the semantics
+  // being represented (e.g. "isConstraintHost") when it's acceptable to break backward compatibility..
+
+  /** Whether this leg does _not_ host a descent constraint. */
   isAdvisory: boolean;
 
-  /** The altitude that the leg ends at in meters. */
+  /** The altitude of the vertical path at the end of this leg, in meters. */
   altitude: number;
 
   /** Whether or not the constraint at this leg is user defined. */
   isUserDefined: boolean;
 
-  /** Whether or not the leg is a direct to target. */
+  /** Whether or not this leg is a direct to target. */
   isDirectToTarget: boolean;
 
   /** The constrant altitude assigned to this leg that is invalid, in meters, if one exists. */
@@ -223,22 +234,44 @@ export interface VNavLeg {
 }
 
 /**
- * A Vertical Flight Plan Constraint.
+ * An altitude constraint in a {@link VerticalFlightPlan}.
  */
 export interface VNavConstraint {
-  /**
-   * The global index of the flight plan leg that hosts the constraint. The constraint is always considered to be
-   * located at the end of its host leg.
-   */
+  /** The type of this constraint. */
+  type: 'climb' | 'descent' | 'direct' | 'manual' | 'missed' | 'dest';
+
+  /** The global index of the flight plan leg that hosts this constraint. */
   index: number;
 
-  /** The minimum altitude of the constraint in meters, or negative infinity if the constraint has no minimum altitude. */
+  // TODO: Make alongTrackOffset, containingLegIndex, and containingLegDistanceToEnd required properties when it's
+  // acceptable to break backward compatibility.
+
+  /**
+   * The along-track offset of this constraint from the end of the flight plan leg that hosts this constraint, in
+   * meters. Positive values indicate this constraint is located past the end of the leg, and negative values indicate
+   * this constraint is located prior to the end of the leg. If not defined, then the offset is zero.
+   */
+  alongTrackOffset?: number;
+
+  /**
+   * The global index of the flight plan leg that contains this constraint. Only defined if this constraint's
+   * along-track offset is non-zero.
+   */
+  containingLegIndex?: number;
+
+  /**
+   * The distance from this constraint to the end of its containing leg. Only defined if this constraint's along-track
+   * offset is non-zero.
+   */
+  containingLegDistanceToEnd?: number;
+
+  /** The minimum altitude of this constraint in meters, or negative infinity if this constraint has no minimum altitude. */
   minAltitude: number;
 
-  /** The max altitude of the constraint in meters, or positive infinity if the constraint has no maximum altitude. */
+  /** The maximum altitude of this constraint in meters, or positive infinity if this constraint has no maximum altitude. */
   maxAltitude: number;
 
-  /** The target altitude of the constraint in meters. */
+  /** The target altitude of this constraint in meters. */
   targetAltitude: number;
 
   /**
@@ -259,23 +292,29 @@ export interface VNavConstraint {
    */
   nextVnavEligibleLegIndex?: number;
 
-  /** The name of the leg at this constraint. */
+  /** The name of the flight plan leg that hosts this constraint. */
   name: string;
 
-  /** The total distance of the legs that make up this constriant segment in meters. */
+  /**
+   * The distance from this constraint to the constraint immediately prior to it (in flight plan order), in meters. If
+   * there is no prior constraint, then the distance is measured to the beginning of the flight plan.
+   */
   distance: number;
 
-  /** The flight path angle to take through the legs in this constraint in degrees. Always a positive number. */
+  /**
+   * The flight path angle of the vertical path terminating at this constraint, in degrees. Positive angles represent a
+   * descending path.
+   */
   fpa: number;
 
   /**
-   * The legs contained in this constraint segment. Legs are positioned in the array in the *reverse* order in which
-   * they appear in the flight plan.
+   * The vertical flight plan legs assigned to this constraint. The legs appear in the array in the reverse order in
+   * which they appear in the flight plan. The first leg in the array is always the leg that hosts this constraint.
+   * All subsequent legs in the array represent a consecutive sequence of legs in the flight plan that ends with the
+   * leg immediately following (in flight plan order) the leg hosting the prior constraint, or the first leg in the
+   * flight plan if there is no prior constraint.
    */
   legs: VNavLeg[];
-
-  /** The type of constraint segment. */
-  type: 'climb' | 'descent' | 'direct' | 'manual' | 'missed' | 'dest';
 
   /** Whether or not this constraint is beyond the FAF. */
   isBeyondFaf: boolean;

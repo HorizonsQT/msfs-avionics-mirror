@@ -1,8 +1,11 @@
 import {
+  APAltitudeModes,
   APBackCourseDirectorActivateNavData, APBackCourseDirectorNavData, APGpsSteerDirectorState,
   APGSDirectorActivateNavData, APGSDirectorNavData, APLateralModes, APNavDirectorActivateNavData, APNavDirectorNavData,
-  APValues, APVerticalModes, MathUtils, NavMath, NavSourceType, RadioUtils, SimVarValueType, UnitType
+  APValues, APVerticalModes, MathUtils, NavMath, NavSourceType, RadioUtils, UnitType
 } from '@microsoft/msfs-sdk';
+
+import { FmaData, FmaVNavState } from './FmaData';
 
 /**
  * A utility class for working with Garmin autopilots.
@@ -56,7 +59,7 @@ export class GarminAPUtils {
       if (dtk === null) {
         return false;
       }
-      const headingDiff = NavMath.diffAngle(SimVar.GetSimVarValue('PLANE HEADING DEGREES MAGNETIC', SimVarValueType.Degree), dtk);
+      const headingDiff = NavMath.diffAngle(apValues.dataProvider.getItem('heading_magnetic').getValue(), dtk);
       const sensitivity = navData.hasLoc ? 1 : .6;
       if (Math.abs(navData.deviation * sensitivity) < 1 && Math.abs(headingDiff) < 110) {
         return true;
@@ -130,7 +133,7 @@ export class GarminAPUtils {
       && Math.abs(navData.deviation) < 1
     ) {
       const dtk = NavMath.normalizeHeading(navData.locCourse + 180);
-      const headingDiff = NavMath.diffAngle(SimVar.GetSimVarValue('PLANE HEADING DEGREES MAGNETIC', SimVarValueType.Degree), dtk);
+      const headingDiff = NavMath.diffAngle(apValues.dataProvider.getItem('heading_magnetic').getValue(), dtk);
       if (Math.abs(headingDiff) < 110) {
         return true;
       }
@@ -356,5 +359,27 @@ export class GarminAPUtils {
     // The Euclidean solution is chosen over the spherical one: asin(sin(xtk) / sqrt(1 - (1 - sin(xtk) * tan(radius))^2))
     // for performance reasons.
     return Math.asin(Math.min(Math.sqrt(Math.abs(xtk) / (2 * turnRadius)), 1)) * Avionics.Utils.RAD2DEG;
+  }
+
+  /**
+   * Creates an empty `FmaData` object.
+   * @returns A new empty `FmaData` object.
+   */
+  public static createEmptyFmaData(): FmaData {
+    return {
+      verticalActive: APVerticalModes.NONE,
+      verticalArmed: APVerticalModes.NONE,
+      verticalApproachArmed: APVerticalModes.NONE,
+      verticalAltitudeArmed: APAltitudeModes.NONE,
+      altitudeCaptureArmed: false,
+      altitudeCaptureValue: -1,
+      lateralActive: APLateralModes.NONE,
+      lateralArmed: APLateralModes.NONE,
+      lateralModeFailed: false,
+      lateralReversionFromMode: null,
+      verticalReversionFromMode: null,
+      verticalAltitudeReversionFromMode: null,
+      vnavState: FmaVNavState.OFF
+    };
   }
 }

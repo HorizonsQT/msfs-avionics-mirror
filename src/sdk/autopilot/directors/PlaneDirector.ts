@@ -18,40 +18,37 @@ export enum DirectorState {
 export interface PlaneDirector {
 
   /**
-   * Activates the guidance mode.
+   * Activates this director.
    */
   activate(): void;
 
   /**
-   * Arms the guidance mode.
+   * Arms this director.
    */
   arm(): void;
 
   /**
-   * Deactivates the guidance mode.
+   * Deactivates this director.
    */
   deactivate(): void;
 
   /**
-   * Updates the guidance mode control loops.
+   * Updates this director.
    */
   update(): void;
 
   /**
-   * A callback called when a mode signals it should
-   * be activated.
+   * A callback called when this director is activated.
    */
   onActivate?: () => void;
 
   /**
-   * A callback called when a mode signals it should
-   * be armed.
+   * A callback called when this director is armed.
    */
   onArm?: () => void;
 
   /**
-   * A callback called when a mode signals it should
-   * be deactivated.
+   * A callback that is called when this director is deactivated.
    */
   onDeactivate?: () => void;
 

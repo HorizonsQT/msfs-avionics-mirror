@@ -10,11 +10,11 @@ export default [
       name: 'msfssdk',
       sourcemap: true,
     },
-    plugins: [resolve()]
+    plugins: [resolve()],
   },
   {
     input: 'build/index.d.ts',
     output: [{ file: 'dist/msfssdk.d.ts', format: 'es' }],
     plugins: [dts()],
   }
-]
+];

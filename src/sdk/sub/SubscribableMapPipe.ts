@@ -33,8 +33,8 @@ export class SubscribableMapPipe<K, V, HandlerType extends (map: ReadonlyMap<K, 
         }
       }
 
-      for (const [key, value] of fromMap) {
-        to.setValue(key, value);
+      for (const entry of fromMap) {
+        to.setValue(entry[0], entry[1]);
       }
     };
 

@@ -69,6 +69,7 @@ export class MapSharedFlightPlanLayer extends MapLayer<MapSharedFlightPlanLayerP
             return (
               <MapSharedFlightPlanSubLayer
                 model={this.props.model}
+                show={entry.show}
                 dataProvider={entry.dataProvider}
                 drawEntirePlan={entry.drawEntirePlan}
                 waypointRenderer={entry.waypointRenderer}
@@ -96,6 +97,9 @@ export class MapSharedFlightPlanLayer extends MapLayer<MapSharedFlightPlanLayerP
  * Component props for {@link MapSharedFlightPlanSubLayer}.
  */
 interface MapSharedFlightPlanSubLayerProps extends MapSharedCachedCanvasSubLayerProps<MapSharedFlightPlanLayerModules> {
+  /** Whether to show the sublayer's flight plan. */
+  show: Subscribable<boolean>;
+
   /** The data provider for the sublayer's flight plan. */
   dataProvider: MapFlightPlanDataProvider;
 
@@ -166,7 +170,12 @@ class MapSharedFlightPlanSubLayer extends MapSharedCachedCanvasSubLayer<MapShare
 
     this.updateClipBounds();
     this.initFlightPlanHandlers();
-    this.updateVNavWaypoint();
+
+    this.subs.push(this.props.show.sub(() => { this.scheduleUpdates(true, true, true); }));
+
+    if (this.props.show.get()) {
+      this.scheduleUpdates(true, true, true);
+    }
   }
 
   /**
@@ -235,7 +244,9 @@ class MapSharedFlightPlanSubLayer extends MapSharedCachedCanvasSubLayer<MapShare
   /** @inheritDoc */
   public onUpdated(): void {
     if (this.display.isInvalidated) {
-      this.drawRoute();
+      if (this.props.show.get()) {
+        this.drawRoute();
+      }
       this.needDrawRoute = false;
     }
 
@@ -286,11 +297,16 @@ class MapSharedFlightPlanSubLayer extends MapSharedCachedCanvasSubLayer<MapShare
    */
   private updateRefreshWaypoints(): void {
     if (this.needRefreshWaypoints && !this.props.waypointRecordManager.isBusy()) {
-      const plan = this.props.dataProvider.plan.get();
-      const activeLegIndex = this.props.dataProvider.activeLateralLegIndex.get();
-      const startIndex = plan ? this.getPickWaypointsStartIndex(plan, activeLegIndex, this.props.drawEntirePlan.get(), this.isObsActive) : undefined;
+      if (this.props.show.get()) {
+        const plan = this.props.dataProvider.plan.get();
+        const activeLegIndex = this.props.dataProvider.activeLateralLegIndex.get();
+        const startIndex = plan ? this.getPickWaypointsStartIndex(plan, activeLegIndex, this.props.drawEntirePlan.get(), this.isObsActive) : undefined;
 
-      this.props.waypointRecordManager.refreshWaypoints(plan, activeLegIndex, this.needRepickWaypoints, startIndex);
+        this.props.waypointRecordManager.refreshWaypoints(plan, activeLegIndex, this.needRepickWaypoints, startIndex);
+      } else {
+        this.props.waypointRecordManager.refreshWaypoints(null, 0, true);
+      }
+
       this.needRefreshWaypoints = false;
       this.needRepickWaypoints = false;
     }
@@ -365,7 +381,7 @@ class MapSharedFlightPlanSubLayer extends MapSharedCachedCanvasSubLayer<MapShare
 
     this.needUpdateVNavWaypoint = false;
 
-    const plan = this.props.dataProvider.plan.get();
+    const plan = this.props.show.get() ? this.props.dataProvider.plan.get() : null;
 
     // TODO: Support Off-route DTOs
     if (!plan || plan.segmentCount < 1 || plan.getSegment(0).segmentType === FlightPlanSegmentType.RandomDirectTo) {
@@ -467,7 +483,9 @@ class MapSharedFlightPlanSubLayer extends MapSharedCachedCanvasSubLayer<MapShare
 
   /** @inheritDoc */
   public destroy(): void {
-    this.subs.forEach(sub => { sub.destroy(); });
+    for (const sub of this.subs) {
+      sub.destroy();
+    }
 
     super.destroy();
   }

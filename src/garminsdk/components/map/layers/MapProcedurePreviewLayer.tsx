@@ -1,7 +1,8 @@
 import {
-  ClippedPathStream, EventBus, FacilityLoader, FacilityRepository, FSComponent, GeoCircleResampler,
-  GeoCylindricalClippedPathStream, GeoProjection, GeoProjectionPathStreamStack, MapCachedCanvasLayer, MapLayer,
-  MapLayerProps, MapProjection, MapSyncedCanvasLayer, NullPathStream, VecNSubject, VNode
+  AirportFacilityDataFlags, ClippedPathStream, EventBus, FacilityLoader, FacilityRepository, FSComponent,
+  GeoCircleResampler, GeoCylindricalClippedPathStream, GeoProjection, GeoProjectionPathStreamStack,
+  MapCachedCanvasLayer, MapLayer, MapLayerProps, MapProjection, MapSyncedCanvasLayer, NullPathStream, VecNSubject,
+  VNode
 } from '@microsoft/msfs-sdk';
 
 import { ProcedureType } from '../../../flightplan/FmsTypes';
@@ -36,6 +37,13 @@ export interface MapProcedurePreviewLayerProps extends MapLayerProps<MapProcedur
 
   /** The flight path renderer to use. */
   pathRenderer: MapFlightPathProcRenderer;
+
+  /**
+   * Bitflags describing the requested data to be loaded in airport facilities retrieved by the layer. This controls
+   * what data are available from the airport waypoints that the layer registers with the waypoint renderer. Defaults
+   * to {@link AirportFacilityDataFlags.All}.
+   */
+  airportFacilityDataFlags?: number;
 }
 
 /**
@@ -69,11 +77,17 @@ export class MapProcedurePreviewLayer extends MapLayer<MapProcedurePreviewLayerP
 
   private readonly procedureWaypointRecordManager = new MapDefaultFlightPlanWaypointRecordManager(
     this.facLoader, this.waypointCache, this.props.waypointRenderer,
-    MapWaypointRenderRole.ProcedurePreview, MapWaypointRenderRole.ProcedurePreview
+    MapWaypointRenderRole.ProcedurePreview, MapWaypointRenderRole.ProcedurePreview,
+    {
+      airportFacilityDataFlags: this.props.airportFacilityDataFlags ?? AirportFacilityDataFlags.All
+    }
   );
   private readonly transitionWaypointRecordManager = new ProcMapTransitionWaypointRecordManager(
     this.facLoader, this.waypointCache, this.props.waypointRenderer,
-    MapWaypointRenderRole.ProcedureTransitionPreview
+    MapWaypointRenderRole.ProcedureTransitionPreview,
+    {
+      airportFacilityDataFlags: this.props.airportFacilityDataFlags ?? AirportFacilityDataFlags.All
+    }
   );
 
   private needDrawRoute = false;

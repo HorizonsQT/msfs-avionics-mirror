@@ -32,5 +32,5 @@ export default [
     },
     external: ['@microsoft/msfs-sdk', '@microsoft/msfs-garminsdk'],
     plugins: [css({ output: 'WT530.css' }), resolve()]
-  }
-]
+  },
+];

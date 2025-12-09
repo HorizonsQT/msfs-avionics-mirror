@@ -188,7 +188,7 @@ export class RollIndicator extends HorizonLayer<RollIndicatorProps> {
   private updateSlipSkid(): void {
     const accel = this.props.sideSlip.get();
 
-    this.slipSkidTransform.transform.getChild(0).set(MathUtils.clamp((accel ?? 0) / 0.074, -1, 1) * this.props.options.slipSkidIndicatorTranslateScale, 0, 0, 0.1);
+    this.slipSkidTransform.transform.getChild(0).set(MathUtils.clamp((accel ?? 0) / 0.074, -1, 1) * this.props.options.slipSkidIndicatorTranslateScale, 0, 0, 0.5);
     // we mirror the indicator because at high slip it becomes an arrow and we need it to point in the correct direction
     this.slipSkidTransform.transform.getChild(1).set(MathUtils.hardSign(accel ?? 0));
     this.slipSkidTransform.resolve();

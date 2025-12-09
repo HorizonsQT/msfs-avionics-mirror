@@ -836,6 +836,11 @@ export class GarminMapBuilder {
    * If a facility loader has been added to the map context under the `MapSystemKeys.FacilityLoader` key, then it will
    * be used to retrieve facilities for the display of waypoints. Otherwise, a new default facility loader instance
    * will be used instead.
+   * 
+   * Airport waypoints registered to the waypoint renderer by the waypoints layer will have at least as much data
+   * available from them as described by the `AirportFacilityDataFlags` bitflags saved to the map context's
+   * `MapSystemKeys.WaypointRendererAirportDataFlags` property. If the context property does not exist, then all
+   * possible data will be made available from the airport waypoints.
    *
    * If a text layer has already been added to the builder, its order will be changed so that it is rendered above the
    * waypoint layer. Otherwise, a text layer will be added to the builder after the waypoint layer.
@@ -899,6 +904,7 @@ export class GarminMapBuilder {
         {
           [MapSystemKeys.FacilityLoader]?: FacilityLoader;
           [MapSystemKeys.WaypointRenderer]: MapWaypointRenderer;
+          [MapSystemKeys.WaypointRendererAirportDataFlags]?: number;
         }
       >(
         MapSystemKeys.NearestWaypoints,
@@ -911,6 +917,7 @@ export class GarminMapBuilder {
               facilityLoader={context[MapSystemKeys.FacilityLoader]}
               waypointRenderer={context[MapSystemKeys.WaypointRenderer]}
               supportRunwayOutlines={options?.supportRunwayOutlines === true}
+              airportFacilityDataFlags={context[MapSystemKeys.WaypointRendererAirportDataFlags]}
               userFacilityScopeFilter={options?.userFacilityScopeFilter}
             />
           );
@@ -969,8 +976,8 @@ export class GarminMapBuilder {
    * after the flight plan layer and the flight plan waypoint layer.
    *
    * The flight plans to display are taken from the map context property under the `GarminMapKeys.FlightPlan` key. The
-   * property should be an array of {@link MapGarminFlightPlanEntryFactory} functions. Each function is evaluated to generate an
-   * entry describing the display of a single flight plan. Each entry is then added to the
+   * property should be an array of {@link MapGarminFlightPlanEntryFactory} functions. Each function is evaluated to
+   * generate an entry describing the display of a single flight plan. Each entry is then added to the
    * {@link MapGarminFlightPlanModule} stored under the `GarminMapKeys.FlightPlan` key.
    *
    * Adds the following...
@@ -2217,6 +2224,11 @@ export class GarminMapBuilder {
    * If a facility loader has been added to the map context under the `MapSystemKeys.FacilityLoader` key, then it will
    * be used to retrieve facilities for the display of waypoints. Otherwise, a new default facility loader instance
    * will be used instead.
+   * 
+   * Airport waypoints registered to the waypoint renderer by the procedure preview layer will have at least as much
+   * data available from them as described by the `AirportFacilityDataFlags` bitflags saved to the map context's
+   * `MapSystemKeys.WaypointRendererAirportDataFlags` property. If the context property does not exist, then all
+   * possible data will be made available from the airport waypoints.
    *
    * If a text layer has already been added to the builder, its order will be changed so that it is rendered above the
    * highlighted waypoint layers. Otherwise, a text layer will be added to the builder after the highlighted waypoint
@@ -2270,7 +2282,8 @@ export class GarminMapBuilder {
         MapProcedurePreviewLayerModules,
         {
           [MapSystemKeys.FacilityLoader]?: FacilityLoader;
-          [MapSystemKeys.WaypointRenderer]: MapWaypointRenderer
+          [MapSystemKeys.WaypointRenderer]: MapWaypointRenderer;
+          [MapSystemKeys.WaypointRendererAirportDataFlags]?: number;
         }
       >(
         GarminMapKeys.ProcedurePreview,
@@ -2283,6 +2296,7 @@ export class GarminMapBuilder {
               facilityLoader={context[MapSystemKeys.FacilityLoader]}
               waypointRenderer={context[MapSystemKeys.WaypointRenderer]}
               pathRenderer={pathRenderer}
+              airportFacilityDataFlags={context[MapSystemKeys.WaypointRendererAirportDataFlags]}
             />
           );
         },

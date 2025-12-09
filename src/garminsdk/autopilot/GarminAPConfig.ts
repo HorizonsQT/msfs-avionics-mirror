@@ -513,9 +513,8 @@ export class GarminAPConfig implements GarminAPConfigInterface {
    * @param apValues The autopilot's state values.
    * @returns The autopilot's VNAV path mode director, or `undefined` to omit the director.
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   protected createVNavPathDirector(apValues: APValues): PlaneDirector | undefined {
-    return new APVNavPathDirector(this.bus, { guidance: this.verticalPathGuidance });
+    return new APVNavPathDirector(apValues, { guidance: this.verticalPathGuidance });
   }
 
   /**

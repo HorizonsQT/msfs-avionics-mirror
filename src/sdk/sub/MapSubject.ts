@@ -83,9 +83,9 @@ export class MapSubject<K, V> extends AbstractSubscribableMap<K, V> implements M
 
   /** @inheritdoc */
   public clear(): void {
-    for (const [key, value] of this.backingMap) {
-      this.backingMap.delete(key);
-      this.notify(SubscribableMapEventType.Deleted, key, value);
+    for (const entry of this.backingMap) {
+      this.backingMap.delete(entry[0]);
+      this.notify(SubscribableMapEventType.Deleted, entry[0], entry[1]);
     }
   }
 }

@@ -1,3 +1,4 @@
+import { ControllableAPDataProvider } from './APDataProvider';
 import { APValues } from './APValues';
 import { AutopilotDriverOptions } from './AutopilotDriver';
 import { PlaneDirector } from './directors/PlaneDirector';
@@ -19,6 +20,11 @@ export type APConfigDirectorEntry = {
  * An autopilot configuration.
  */
 export interface APConfig {
+  /**
+   * Gets a provider of data for the autopilot.
+   * @returns A provider of data for the autopilot.
+   */
+  getDataProvider?(): ControllableAPDataProvider | undefined;
 
   /**
    * Creates the autopilot's VNAV Manager.

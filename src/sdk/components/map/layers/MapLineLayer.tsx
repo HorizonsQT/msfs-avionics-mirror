@@ -1,6 +1,7 @@
 import { LatLonInterface } from '../../../geo/GeoInterfaces';
-import { ReadonlyFloat64Array } from '../../../math/VecMath';
+import { ReadonlyFloat64Array, Vec2Math } from '../../../math/VecMath';
 import { Subscribable } from '../../../sub/Subscribable';
+import { ArrayUtils } from '../../../utils/datastructures/ArrayUtils';
 import { MapLayerProps } from '../MapLayer';
 import { MapProjection } from '../MapProjection';
 import { MapSyncedCanvasLayer } from './MapSyncedCanvasLayer';
@@ -59,7 +60,7 @@ export class MapLineLayer extends MapSyncedCanvasLayer<MapLineLayerProps> {
   private readonly outlineStyle = this.props.outlineStyle ?? MapLineLayer.DEFAULT_OUTLINE_STYLE;
   private readonly outlineDash = this.props.outlineDash ?? MapLineLayer.DEFAULT_OUTLINE_DASH;
 
-  private vec = new Float64Array([0, 0]);
+  private readonly vecCache = ArrayUtils.create(2, () => Vec2Math.create());
 
   private isUpdateScheduled = false;
 
@@ -97,10 +98,10 @@ export class MapLineLayer extends MapSyncedCanvasLayer<MapLineLayerProps> {
       const end = this.props.end.get();
 
       if (start !== null && end !== null) {
-        const [x1, y1] = start instanceof Float64Array ? start : this.props.mapProjection.project(start as Readonly<LatLonInterface>, this.vec);
-        const [x2, y2] = end instanceof Float64Array ? end : this.props.mapProjection.project(end as Readonly<LatLonInterface>, this.vec);
+        const startProjected = start instanceof Float64Array ? start : this.props.mapProjection.project(start as Readonly<LatLonInterface>, this.vecCache[0]);
+        const endProjected = end instanceof Float64Array ? end : this.props.mapProjection.project(end as Readonly<LatLonInterface>, this.vecCache[1]);
 
-        this.drawLine(x1, y1, x2, y2);
+        this.drawLine(startProjected[0], startProjected[1], endProjected[0], endProjected[1]);
       }
 
       this.isUpdateScheduled = false;

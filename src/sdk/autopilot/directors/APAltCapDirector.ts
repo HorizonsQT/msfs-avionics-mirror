@@ -1,6 +1,3 @@
-/// <reference types="@microsoft/msfs-types/js/simvar" preserve="true" />
-
-import { SimVarValueType } from '../../data/SimVars';
 import { MathUtils } from '../../math/MathUtils';
 import { UnitType } from '../../math/NumberUnit';
 import { DebounceTimer } from '../../utils/time/DebounceTimer';
@@ -63,7 +60,9 @@ export type APAltCapDirectorActivationFunc = (
   currentAltitude: number) => boolean;
 
 /**
- * An altitude capture autopilot director.
+ * An autopilot director that generates flight director pitch commands to capture a target indicated altitude.
+ * 
+ * The director requires valid pitch, indicated altitude and indicated vertical speed data to arm or activate.
  */
 export class APAltCapDirector implements PlaneDirector {
   private static readonly DEFAULT_TARGET_CHANGE_INHIBIT_MS = 500;
@@ -72,15 +71,19 @@ export class APAltCapDirector implements PlaneDirector {
   private readonly targetChangeInhibitTimer?: DebounceTimer;
   private readonly targetChangeInhibitTime: number | null = APAltCapDirector.DEFAULT_TARGET_CHANGE_INHIBIT_MS;
 
+  /** @inheritDoc */
   public state: DirectorState;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
   public onActivate?: () => void;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
   public onArm?: () => void;
 
-  /** @inheritdoc */
+  /** @inheritDoc */
+  public onDeactivate?: () => void;
+
+  /** @inheritDoc */
   public drivePitch?: (pitch: number, adjustForAoa?: boolean, adjustForVerticalWind?: boolean) => void;
 
   private initialFpa = 0;
@@ -91,6 +94,11 @@ export class APAltCapDirector implements PlaneDirector {
    * Inhibits altitude capture actrivation for {@link APAltCapDirector.targetChangeInhibitTime}.
    */
   private inhibitAltCapture?: () => void;
+
+  private readonly pitch = this.apValues.dataProvider.getItem('pitch');
+  private readonly indicatedAltitude = this.apValues.dataProvider.getItem('indicated_altitude');
+  private readonly indicatedVerticalSpeed = this.apValues.dataProvider.getItem('indicated_vertical_speed');
+  private readonly tas = this.apValues.dataProvider.getItem('tas');
 
   /**
    * Creates an instance of the APAltCapDirector.
@@ -105,7 +113,7 @@ export class APAltCapDirector implements PlaneDirector {
    * Defaults to 500 ms.
    * Note that if alt capture is already active when the target is changed, this will have no effect.
    */
-  constructor(
+  public constructor(
     private readonly apValues: APValues,
     options?: Partial<Readonly<APAltCapDirectorOptions>>
   ) {
@@ -130,58 +138,81 @@ export class APAltCapDirector implements PlaneDirector {
   }
 
   /**
-   * Activates this director.
-   * @param vs Optionally, the current vertical speed, in FPM.
-   * @param alt Optionally, the current indicated altitude, in Feet.
+   * Checks whether the data required for this director to function are valid.
+   * @returns Whether the data required for this director to function are valid.
    */
-  public activate(vs?: number, alt?: number): void {
+  private isDataValid(): boolean {
+    return this.pitch.isValueValid() && this.indicatedAltitude.isValueValid() && this.indicatedVerticalSpeed.isValueValid();
+  }
+
+  /** @inheritDoc */
+  public activate(): void {
+    if (this.state === DirectorState.Active || !this.isDataValid()) {
+      return;
+    }
+
     this.state = DirectorState.Active;
+
     if (this.onActivate !== undefined) {
       this.onActivate();
     }
-    this.setCaptureFpa(
-      vs !== undefined ? vs : SimVar.GetSimVarValue('VERTICAL SPEED', SimVarValueType.FPM),
-      alt !== undefined ? alt : SimVar.GetSimVarValue('INDICATED ALTITUDE', SimVarValueType.Feet)
-    );
+
+    this.setCaptureFpa(this.indicatedVerticalSpeed.getValue(), this.indicatedAltitude.getValue());
+
     SimVar.SetSimVarValue('AUTOPILOT ALTITUDE LOCK', 'Bool', true);
   }
 
-  /**
-   * Arms this director.
-   * This director has no armed mode, so it activates immediately.
-   */
+  /** @inheritDoc */
   public arm(): void {
+    if (this.state !== DirectorState.Inactive || !this.isDataValid()) {
+      return;
+    }
+
     this.state = DirectorState.Armed;
+
     if (this.onArm !== undefined) {
       this.onArm();
     }
   }
 
-  /**
-   * Deactivates this director.
-   * @param captured is whether the altitude was captured.
-   */
-  public deactivate(captured = false): void {
-    this.state = DirectorState.Inactive;
-    if (!captured) {
-      SimVar.SetSimVarValue('AUTOPILOT ALTITUDE LOCK', 'Bool', false);
+  /** @inheritDoc */
+  public deactivate(): void {
+    if (this.state === DirectorState.Inactive) {
+      return;
     }
+
+    this.state = DirectorState.Inactive;
+
+    if (this.onDeactivate !== undefined) {
+      this.onDeactivate();
+    }
+
+    SimVar.SetSimVarValue('AUTOPILOT ALTITUDE LOCK', 'Bool', false);
   }
 
-  /**
-   * Updates this director.
-   */
+  /** @inheritDoc */
   public update(): void {
+    if (this.state === DirectorState.Inactive) {
+      return;
+    }
+
+    if (!this.isDataValid()) {
+      this.deactivate();
+      return;
+    }
+
     if (this.state === DirectorState.Active) {
-
-      this.drivePitch && this.drivePitch(-this.captureAltitude(
-        this.apValues.capturedAltitude.get(),
-        SimVar.GetSimVarValue('INDICATED ALTITUDE', SimVarValueType.Feet),
-        this.initialFpa,
-        SimVar.GetSimVarValue('AIRSPEED TRUE', SimVarValueType.Knots)
-      ), true, true);
-
-    } else if (this.state === DirectorState.Armed) {
+      this.drivePitch && this.drivePitch(
+        -this.captureAltitude(
+          this.apValues.capturedAltitude.get(),
+          this.indicatedAltitude.getValue(),
+          this.initialFpa,
+          this.tas.getActualValue()
+        ),
+        true,
+        true
+      );
+    } else {
       this.tryActivate();
     }
   }
@@ -195,11 +226,11 @@ export class APAltCapDirector implements PlaneDirector {
     }
 
     const selectedAltitude = this.apValues.selectedAltitude.get();
-    const vs = SimVar.GetSimVarValue('VERTICAL SPEED', SimVarValueType.FPM);
-    const alt = SimVar.GetSimVarValue('INDICATED ALTITUDE', SimVarValueType.Feet);
+    const vs = this.indicatedVerticalSpeed.getValue();
+    const alt = this.indicatedAltitude.getValue();
     if (this.shouldActivate(vs, selectedAltitude, alt)) {
       this.apValues.capturedAltitude.set(Math.round(selectedAltitude));
-      this.activate(vs, alt);
+      this.activate();
     }
   }
 
@@ -228,7 +259,7 @@ export class APAltCapDirector implements PlaneDirector {
       vs = Math.min(-400, vs);
     }
 
-    const tas = SimVar.GetSimVarValue('AIRSPEED TRUE', SimVarValueType.FPM);
+    const tas = UnitType.KNOT.convertTo(this.tas.getActualValue(), UnitType.FPM);
     this.initialFpa = VNavUtils.getFpa(tas, vs);
   }
 

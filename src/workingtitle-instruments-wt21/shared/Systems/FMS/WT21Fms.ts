@@ -5,7 +5,8 @@ import {
 } from '@microsoft/msfs-sdk';
 
 import {
-  BasePerformanceDataManager, PerformancePlan, PerformancePlanProxy, PerformancePlanRepository, WTLineFixInfoManager,
+  BasePerformanceDataManager, FlightPlanIndexType, PerformancePlan, PerformancePlanProxy, PerformancePlanRepository,
+  WTLineFixInfoManager,
   WTLineFms, WTLineFmsUtils, WTLineLegacyDefaultFlightPlanRepository, WTLineLegacyFlightPlanIndexTypes,
   WTLineLegacyFlightPlans,
 } from '@microsoft/msfs-wtlinesdk';
@@ -471,5 +472,34 @@ export class WT21Fms extends WTLineFms<WTLineLegacyFlightPlanIndexTypes> {
    */
   public getUserFacilities(): UserFacility[] {
     return this.userFacilities.getArray().map(it => it.facility.get());
+  }
+
+  /**
+   * Gets the ALTN airport of a flight plan
+   *
+   * @param planIndex the flight plan index
+   *
+   * @returns the ALTN airport FS ICAO, or undefined
+   *
+   * @deprecated use {@link WTLineFmsUtils.getFlightPlanAlternate} instead
+   */
+  public getFlightPlanAlternate(planIndex?: FlightPlanIndexType<WTLineLegacyFlightPlanIndexTypes>): string | undefined {
+    const plan = this.getFlightPlan(planIndex);
+
+    return plan.getUserData(WTLineFmsUtils.USER_DATA_KEY_ALTN);
+  }
+
+  /**
+   * Sets the ALTN airport of a flight plan
+   *
+   * @param facility the ALTN airport facility, or undefined
+   * @param planIndex the flight plan index
+   *
+   * @deprecated use {@link WTLineFmsUtils.setFlightPlanAlternate} instead
+   */
+  public setFlightPlanAlternate(facility: AirportFacility | undefined, planIndex = WTLineLegacyFlightPlans.Active): void {
+    const plan = this.getPlanToEdit(planIndex);
+
+    plan.setUserData(WTLineFmsUtils.USER_DATA_KEY_ALTN, facility?.icao ?? undefined);
   }
 }

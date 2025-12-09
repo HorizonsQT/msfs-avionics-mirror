@@ -1,0 +1,705 @@
+import {
+  Facility, FacilityLoader, FacilityWaypoint, FlightPlan, GeoCircle, GeoPoint, ICAO, IcaoValue, LegType, UnitType, UserFacility,
+  UserFacilityUtils,
+} from '@microsoft/msfs-sdk';
+
+import { WTLineFms } from '../fms/WTLineFms';
+import { CoordinatesInput, WTLineCoordinatesUtils } from '../fms/WTLineCoordinatesUtils';
+import { WTLineFacilityUtils } from './WTLineFacilityUtils';
+import { FlightPlanIndexTypes, WTLineLegacyFlightPlanIndexTypes, WTLineLegacyFlightPlans } from '../fms';
+
+export const PBD_REGEX = /^(\w+) ?(\d{3}(?:\.\d)?)\/(\d{1,3}(?:\.\d)?)(?:\/(\w+))?$/;
+
+export const PBPB_REGEX = /^(\w+)(\d{3}(?:\.\d)?)\/(\w+)(\d{3}(?:\.\d)?)(?:\/(\w+))?$/;
+
+export const ATO_REGEX = /^(\w+)\/([+-]?\d{1,3}(?:\.\d)?)(?:\/(\w+))?$/;
+
+// This should technically be only TF, but that doesn't make much sense and seems like a mistake
+const ATO_VALID_PREVIOUS_LEG_TYPES = [LegType.CF, LegType.DF, LegType.IF, LegType.TF, LegType.RF];
+
+const ATO_VALID_NEXT_LEG_TYPES = [LegType.IF, LegType.TF];
+
+/**
+ * Input/output data for a PBD entry
+ */
+export interface PlaceBearingDistanceInput {
+  /**
+   * Place identifier
+   */
+  placeIdent: string,
+  /**
+   * Bearing
+   */
+  bearing: number,
+  /**
+   * Distance
+   */
+  distance: number,
+  /**
+   * Ident to give to the new facility
+   */
+  newIdent?: string,
+}
+
+/**
+ * Input/output data for a PB/PB entry
+ */
+export interface PlaceBearingPlaceBearingInput {
+  /**
+   * Place A identifier
+   */
+  placeAIdent: string,
+
+  /**
+   * Bearing from place A
+   */
+  bearingA: number,
+
+  /**
+   * Place B identifier
+   */
+  placeBIdent: string,
+
+  /**
+   * Bearing from place B
+   */
+  bearingB: number,
+
+  /**
+   * Ident to give to the new facility
+   */
+  newIdent: string,
+}
+
+/**
+ * Input/output data for an ATO entry
+ */
+export interface AlongTrackOffsetInput {
+  /**
+   * Place identifier
+   */
+  placeIdent: string;
+
+  /**
+   * Distance
+   */
+  distance: number;
+
+  /**
+   * Ident to give to the new facility
+   */
+  newIdent: string;
+}
+
+/**
+ * Error that can occur when creating an ATO waypoint
+ */
+export enum AlongTrackOffsetError {
+  /** Along-track offset is not available for the provided leg */
+  NotAvailable,
+
+  /** The distance given for an along-track offset is too large */
+  DistanceTooLarge,
+
+  /** The reference fix is in the polar region */
+  ReferenceFixInPolarRegion,
+
+  /** The reference fix does not match the provided leg */
+  FixNotMatched,
+}
+
+export enum PilotWaypointType {
+  LatLong,
+  PlaceBearingDistance,
+  PlaceBearingPlaceBearing,
+  AlongTrackOffset,
+}
+
+/**
+ * A pilot waypoint entry parsing result
+ */
+export type PilotWaypointResult = {
+  /** The user facility that was created */
+  facility: UserFacility;
+} & ({
+  /** The type of entry */
+  type: PilotWaypointType.LatLong;
+
+  /** The input data */
+  input: CoordinatesInput;
+} | {
+  /** The type of entry */
+  type: PilotWaypointType.PlaceBearingDistance;
+
+  /** The input data */
+  input: PlaceBearingDistanceInput;
+} | {
+  /** The type of entry */
+  type: PilotWaypointType.PlaceBearingPlaceBearing;
+
+  /** The input data */
+  input: PlaceBearingPlaceBearingInput;
+} | {
+  /** The type of entry */
+  type: PilotWaypointType.AlongTrackOffset;
+
+  /** The input data */
+  input: AlongTrackOffsetInput;
+
+  /** Whether the resulting facility should be inserted after the leg it was referenced to. Only applicable to along-track offset. */
+  insertAfter: boolean;
+});
+
+export enum PilotWaypointError {
+  /** The pilot waypoint list is full (>= 100 entries) */
+  PilotWaypointListFull,
+
+  /** The reference fix is in the polar region */
+  ReferenceFixInPolarRegion,
+
+  /** There is no intersection between the provided PB/PB radials */
+  NoIntersection,
+
+  /** The distance given for an along-track offset is too large */
+  AlongTrackOffsetDistanceTooLarge,
+
+  /** Along-track offset is not available for the provided leg */
+  AlongTrackOffsetNotAvailable,
+
+  /** The reference fix for an along-track offset does not match the provided leg */
+  AlongTrackOffsetFixNotMatched,
+}
+
+/**
+ * Utilities for WT21 pilot defined waypoints
+ */
+export class WTLinePilotWaypointUtils {
+  private static readonly geoPointCache = [new GeoPoint(0, 0)];
+
+  /**
+   * Returns whether the limit number of pilot defined waypoints is reached
+   *
+   * @param facilities the existing user facilities
+   *
+   * @returns a boolean
+   */
+  public static isLimitReached(facilities: readonly FacilityWaypoint<UserFacility>[]): boolean {
+    return facilities.length >= 100;
+  }
+
+  /**
+   * Returns the next available auto-generated name, given existing pilot-defined waypoints and an ident
+   *
+   * @param pilotDefinedWaypoints the existing pilot-defined waypoints
+   * @param ident the ident of the reference facility to get a name for
+   *
+   * @returns a string to be used as an ident for a user facility
+   */
+  public static nextAutoGeneratedName(pilotDefinedWaypoints: readonly (UserFacility | FacilityWaypoint<UserFacility>)[], ident: string): string {
+    let suffix = 1;
+
+    for (const waypoint of pilotDefinedWaypoints) {
+      const facIdent = ('facility' in waypoint ? waypoint.facility.get() : waypoint).icaoStruct.ident;
+
+      if (facIdent.match(`${ident.substring(0, 3)}\\d\\d`)) {
+        suffix++;
+      }
+    }
+
+    return `${ident.substring(0, 3)}${suffix.toString().padStart(2, '0')}`;
+  }
+
+  /**
+   * Converts a textual user waypoint entry to a {@link UserFacility} if applicable
+   *
+   * @param fms                  the {@link WTLineFms} instance
+   * @param selectWptFromIdent   the function called to select a facility
+   * @param scratchpadContents   the scratchpad contents
+   * @param targetGlobalLegIndex the target global leg index, if applicable
+   *
+   * @returns an array of possible interpretations of the entry as a pilot waypoint;
+   * or an error encountered while parsing the pilot waypoint;
+   * or `null``, if no format was matched
+   */
+  public static async parseFromString<T extends FlightPlanIndexTypes<number, number> = WTLineLegacyFlightPlanIndexTypes>(
+    fms: WTLineFms<T>,
+    selectWptFromIdent: (ident: string, refPos: GeoPoint) => Promise<Facility | null>,
+    scratchpadContents: string,
+    targetGlobalLegIndex?: number,
+  ): Promise<PilotWaypointResult[] | PilotWaypointError | null> {
+    const results: PilotWaypointResult[] = [];
+
+    let error: PilotWaypointError | null = null;
+
+    const pbdMatch = WTLinePilotWaypointUtils.parsePlaceBearingDistance(scratchpadContents);
+
+    if (pbdMatch) {
+      const existingUserFacilities = fms.getPilotDefinedWaypointsArray();
+
+      if (WTLinePilotWaypointUtils.isLimitReached(existingUserFacilities)) {
+        error = PilotWaypointError.PilotWaypointListFull;
+      } else {
+        const facility = await selectWptFromIdent(pbdMatch.placeIdent, fms.ppos);
+
+        if (facility) {
+          if (Math.abs(facility.lat) > 80) {
+            error = PilotWaypointError.ReferenceFixInPolarRegion;
+          } else {
+            const ident = pbdMatch.newIdent ?? WTLinePilotWaypointUtils.nextAutoGeneratedName(existingUserFacilities, facility.icaoStruct.ident);
+            const icao = ICAO.value('U', '', WTLineFacilityUtils.USER_FACILITY_SCOPE, ident);
+            const fac = UserFacilityUtils.createFromRadialDistance(icao, facility, pbdMatch.bearing, pbdMatch.distance, false, pbdMatch.newIdent);
+
+            results.push({
+              type: PilotWaypointType.PlaceBearingDistance,
+              facility: fac,
+              input: pbdMatch,
+            });
+          }
+        }
+      }
+    }
+
+    const pbpbMatch = WTLinePilotWaypointUtils.parsePlaceBearingPlaceBearing(scratchpadContents);
+
+    if (pbpbMatch) {
+      const existingUserFacilities = fms.getPilotDefinedWaypointsArray();
+
+      if (WTLinePilotWaypointUtils.isLimitReached(existingUserFacilities)) {
+        error = PilotWaypointError.PilotWaypointListFull;
+      } else {
+        const facilityA = await selectWptFromIdent(pbpbMatch.placeAIdent, fms.ppos);
+        const facilityB = await selectWptFromIdent(pbpbMatch.placeBIdent, fms.ppos);
+
+        if (facilityA && facilityB) {
+          if (Math.abs(facilityA.lat) > 80 || Math.abs(facilityB.lat) > 80) {
+            error = PilotWaypointError.ReferenceFixInPolarRegion;
+          } else {
+            const ident = pbpbMatch.newIdent ?? WTLinePilotWaypointUtils.nextAutoGeneratedName(existingUserFacilities, facilityA.icaoStruct.ident);
+            const icao = ICAO.value('U', '', WTLineFacilityUtils.USER_FACILITY_SCOPE, ident);
+            const facility = UserFacilityUtils.createFromRadialRadial(icao, facilityA, pbpbMatch.bearingA, facilityB, pbpbMatch.bearingB, false, ident);
+
+            if (facility) {
+              results.push({
+                type: PilotWaypointType.PlaceBearingPlaceBearing,
+                facility: facility,
+                input: pbpbMatch,
+              });
+            } else {
+              error = PilotWaypointError.NoIntersection;
+            }
+          }
+        }
+      }
+    }
+
+    const atoMatch = WTLinePilotWaypointUtils.parseAlongTrackOffset(scratchpadContents);
+
+    if (atoMatch && targetGlobalLegIndex !== undefined) {
+      const existingUserFacilities = fms.getPilotDefinedWaypointsArray();
+
+      if (WTLinePilotWaypointUtils.isLimitReached(existingUserFacilities)) {
+        error = PilotWaypointError.PilotWaypointListFull;
+      } else {
+        const plan = fms.getPlanToDisplay(WTLineLegacyFlightPlans.Active); // FIXME use correct index
+
+        const lnavActiveLegIndex = fms.lnavTrackedLegIndex.get();
+        const lnavActiveLegDistanceAlong = fms.lnavLegDistanceAlong.get();
+
+        const result = await WTLinePilotWaypointUtils.createAlongTrackOffset(
+          fms.facLoader, plan, targetGlobalLegIndex, lnavActiveLegIndex, lnavActiveLegDistanceAlong, atoMatch.placeIdent, atoMatch.distance,
+        );
+
+        if (Array.isArray(result)) {
+          const [usrPos, insertAfter] = result;
+
+          const leg = plan.getLeg(targetGlobalLegIndex);
+
+          const ident = atoMatch.newIdent ?? WTLinePilotWaypointUtils.nextAutoGeneratedName(existingUserFacilities, leg.name ?? 'USR');
+          const icao = ICAO.value('U', '', WTLineFacilityUtils.USER_FACILITY_SCOPE, ident);
+          const fac = UserFacilityUtils.createFromLatLon(icao, usrPos.lat, usrPos.lon, false, ident);
+
+          results.push({
+            type: PilotWaypointType.AlongTrackOffset,
+            facility: fac,
+            input: atoMatch,
+            insertAfter,
+          });
+        } else {
+          switch (result) {
+            case AlongTrackOffsetError.NotAvailable:
+              error = PilotWaypointError.AlongTrackOffsetNotAvailable;
+              break;
+            case AlongTrackOffsetError.DistanceTooLarge:
+              error = PilotWaypointError.AlongTrackOffsetDistanceTooLarge;
+              break;
+            case AlongTrackOffsetError.ReferenceFixInPolarRegion:
+              error = PilotWaypointError.ReferenceFixInPolarRegion;
+              break;
+            case AlongTrackOffsetError.FixNotMatched:
+              error = PilotWaypointError.AlongTrackOffsetFixNotMatched;
+              break;
+          }
+        }
+      }
+    }
+
+    const coordinatesMatch = WTLineCoordinatesUtils.parseLatLong(scratchpadContents);
+
+    if (coordinatesMatch) {
+      const existingUserFacilities = fms.getPilotDefinedWaypointsArray();
+
+      if (WTLinePilotWaypointUtils.isLimitReached(existingUserFacilities)) {
+        error = PilotWaypointError.PilotWaypointListFull;
+      } else {
+        const ident = coordinatesMatch.ident ?? WTLinePilotWaypointUtils.nextAutoGeneratedName(existingUserFacilities, 'LL');
+        const icao = ICAO.value('U', '', WTLineFacilityUtils.USER_FACILITY_SCOPE, ident);
+        const fac = UserFacilityUtils.createFromLatLon(icao, coordinatesMatch.lla.lat, coordinatesMatch.lla.long, false, ident);
+
+        results.push({
+          type: PilotWaypointType.LatLong,
+          facility: fac,
+          input: coordinatesMatch,
+        });
+      }
+    }
+
+    return results.length > 0 ? results : error;
+  }
+
+  /**
+   * Converts a scratchpad entry made on a provided CDU page to a {@link UserFacility} if applicable
+   *
+   * @param fms                  the {@link WTLineFms} instance
+   * @param selectWptFromIdent   the function called to select a facility
+   * @param scratchpadContents   the scratchpad contents
+   * @param targetGlobalLegIndex the target global leg index, if applicable
+   *
+   * @deprecated Does not return all possible matches - use {@link parseFromString} instead
+   *
+   * @returns a user facility, or null if none is parsed
+   */
+  public static async createFromScratchpadEntry<T extends FlightPlanIndexTypes<number, number> = WTLineLegacyFlightPlanIndexTypes>(
+    fms: WTLineFms<T>,
+    selectWptFromIdent: (ident: string, refPos: GeoPoint) => Promise<Facility | null>,
+    scratchpadContents: string,
+    targetGlobalLegIndex?: number,
+  ): Promise<[fac: UserFacility, insertAfter: boolean] | null> {
+    const results = await WTLinePilotWaypointUtils.parseFromString(fms, selectWptFromIdent, scratchpadContents, targetGlobalLegIndex);
+
+    if (Array.isArray(results)) {
+      return [results[0].facility, 'insertAfter' in results[0] ? results[0].insertAfter : false];
+    } else if (results !== null && results in PilotWaypointError) {
+      switch (results) {
+        case PilotWaypointError.PilotWaypointListFull:
+          return Promise.reject('PILOT WPT LIST FULL');
+        case PilotWaypointError.ReferenceFixInPolarRegion:
+          return Promise.reject('N/A IN POLAR REGION');
+        case PilotWaypointError.NoIntersection:
+          return Promise.reject('NO INTERSECTION');
+        case PilotWaypointError.AlongTrackOffsetDistanceTooLarge:
+          return Promise.reject('DISTANCE TOO LARGE');
+        case PilotWaypointError.AlongTrackOffsetNotAvailable:
+          return Promise.reject('ALONG TRK WPT N/A');
+        case PilotWaypointError.AlongTrackOffsetFixNotMatched:
+          return Promise.reject('WPT NOT MATCHED');
+        default:
+          throw new Error('');
+      }
+    } else {
+      return null;
+    }
+  }
+
+  /**
+   * Parses a string according to the PB/D format
+   *
+   * @param str the string to parse
+   *
+   * @returns a {@link PlaceBearingDistanceInput} object if a valid PBD definition and `null` otherwise
+   */
+  public static parsePlaceBearingDistance(str: string): PlaceBearingDistanceInput | null {
+    const match = str.match(PBD_REGEX);
+
+    if (!match) {
+      return null;
+    }
+
+    const bearing = parseFloat(match[2]);
+
+    if (bearing < 0 || bearing > 360) {
+      return null;
+    }
+
+    const distance = parseFloat(match[3]);
+
+    if (distance < 0.1 || distance > 199.9) {
+      return null;
+    }
+
+    return {
+      placeIdent: match[1],
+      bearing,
+      distance,
+      newIdent: match[4],
+    };
+  }
+
+  /**
+   * Creates a PB/D position with input data
+   *
+   * @param facility    the facility representing the origin
+   * @param bearing     the bearing to use
+   * @param bearingTrue whether the bearing is already provided in TRUE form
+   * @param distance    the distance to use
+   *
+   * @returns a {@link GeoPoint}
+   *
+   * @deprecated use {@link FacilityUtils} methods instead
+   */
+  public static createPlaceBearingDistance(
+    facility: Facility,
+    bearing: number,
+    bearingTrue: boolean,
+    distance: number,
+  ): GeoPoint {
+    const outPoint = new GeoPoint(0, 0);
+    const inPoint = new GeoPoint(facility.lat, facility.lon);
+
+    let finalBearing;
+    if (bearingTrue) {
+      finalBearing = bearing;
+    } else {
+      const magvar = Facilities.getMagVar(facility.lat, facility.lon);
+
+      finalBearing = bearing + magvar;
+    }
+
+    inPoint.offset(finalBearing, UnitType.GA_RADIAN.convertFrom(distance, UnitType.NMILE), outPoint);
+
+    return outPoint;
+  }
+
+  /**
+   * Parses a string according to the PB/PB format
+   *
+   * @param str the string to parse
+   *
+   * @returns a {@link PlaceBearingPlaceBearingInput} object if a valid PBPB definition and `null` otherwise
+   */
+  public static parsePlaceBearingPlaceBearing(str: string): PlaceBearingPlaceBearingInput | null {
+    const match = str.match(PBPB_REGEX);
+
+    if (!match) {
+      return null;
+    }
+
+    const bearingA = parseFloat(match[2]);
+    const bearingB = parseFloat(match[4]);
+
+    if (bearingA < 0 || bearingA > 360 || bearingA < 0 || bearingB > 360) {
+      return null;
+    }
+
+    return {
+      placeAIdent: match[1],
+      bearingA,
+      placeBIdent: match[3],
+      bearingB,
+      newIdent: match[5],
+    };
+  }
+
+  /**
+   * Creates a PB/PB position with input data
+   *
+   * @param facilityA   the facility representing the first origin
+   * @param bearingA     the bearing to use from the first origin
+   * @param facilityB   the facility representing the second origin
+   * @param bearingB    the distance to use from the second origin
+   *
+   * @returns a {@link GeoPoint}
+   *
+   * @deprecated use {@link FacilityUtils} methods instead
+   */
+  public static createPlaceBearingPlaceBearing(
+    facilityA: Facility,
+    bearingA: number,
+    facilityB: Facility,
+    bearingB: number,
+  ): GeoPoint | null {
+    const inPointA = new GeoPoint(facilityA.lat, facilityA.lon);
+    const circleA = GeoCircle.createGreatCircleFromPointBearing(inPointA, bearingA);
+
+    const inPointB = new GeoPoint(facilityB.lat, facilityB.lon);
+    const circleB = GeoCircle.createGreatCircleFromPointBearing(inPointB, bearingB);
+
+    const out: GeoPoint[] = [];
+
+    const numIntersections = circleA.intersectionGeoPoint(circleB, out);
+
+    if (numIntersections !== 2) {
+      return null;
+    }
+
+    const intersection1 = out[0];
+    const intersection2 = out[1];
+
+    const distance1 = intersection1.distance(inPointA);
+    const distance2 = intersection2.distance(inPointA);
+
+    if (distance1 < distance2) {
+      return intersection1;
+    } else {
+      return intersection2;
+    }
+  }
+
+  /**
+   * Parses a string according to the along-track offset format
+   *
+   * @param str the string to parse
+   *
+   * @returns a {@link AlongTrackOffsetInput} object if a valid ATO definition and `null` otherwise
+   */
+  public static parseAlongTrackOffset(str: string): AlongTrackOffsetInput | null {
+    const match = str.match(ATO_REGEX);
+
+    if (!match) {
+      return null;
+    }
+
+    return {
+      placeIdent: match[1],
+      distance: parseFloat(match[2]),
+      newIdent: match[3],
+    };
+  }
+
+  /**
+   * Creates an along-track offset position with input data
+   *
+   * @param facLoader the facility loader
+   * @param plan the flight plan the ATO is being created from
+   * @param globalLegIndex the global leg index in the plan the ATO is being created from (WT21: LSK position)
+   * @param lnavActiveLegIndex the active lnav leg index (not nominal)
+   * @param lnavDistanceAlongActiveLeg the distance flown along the active lnav leg
+   * @param inputPlaceIdent the place ident given as an input
+   * @param inputDistance the distance given as an input
+   *
+   * @returns a {@link GeoPoint}
+   */
+  public static async createAlongTrackOffset(
+    facLoader: FacilityLoader,
+    plan: FlightPlan,
+    globalLegIndex: number,
+    lnavActiveLegIndex: number,
+    lnavDistanceAlongActiveLeg: number,
+    inputPlaceIdent: string,
+    inputDistance: number,
+  ): Promise<[point: GeoPoint, insertAfter: boolean] | AlongTrackOffsetError> {
+    const planLeg = plan.tryGetLeg(globalLegIndex);
+
+    if (!planLeg) {
+      return AlongTrackOffsetError.NotAvailable;
+    }
+
+    if (planLeg.leg.fixIcaoStruct.ident !== inputPlaceIdent) {
+      return AlongTrackOffsetError.FixNotMatched;
+    }
+
+    const distanceNegative = inputDistance < 0;
+
+    // Check for the previous leg type being valid if the distance is negative
+    if (distanceNegative) {
+      const previousPlanLeg = plan.tryGetLeg(globalLegIndex - 1);
+
+      if (previousPlanLeg) {
+        const previousLegType = previousPlanLeg.leg.type;
+
+        if (!ATO_VALID_PREVIOUS_LEG_TYPES.includes(previousLegType)) {
+          return AlongTrackOffsetError.NotAvailable;
+        }
+      } else {
+        return AlongTrackOffsetError.NotAvailable;
+      }
+    }
+
+    let fixIcao1: IcaoValue | undefined = undefined;
+    let fixIcao2: IcaoValue | undefined = undefined;
+    let facility1: Facility | undefined = undefined;
+    let facility2: Facility | undefined = undefined;
+
+    if (distanceNegative) {
+      const previousPlanLeg = plan.tryGetLeg(globalLegIndex - 1);
+
+      if (previousPlanLeg) {
+        const previousLegType = previousPlanLeg.leg.type;
+        const legType = planLeg.leg.type;
+
+        if (ATO_VALID_PREVIOUS_LEG_TYPES.includes(previousLegType) && ATO_VALID_NEXT_LEG_TYPES.includes(legType)) {
+          let maxDistance = planLeg.calculated ? UnitType.NMILE.convertFrom(planLeg.calculated.distance, UnitType.METER) : -1;
+
+          if (lnavActiveLegIndex === globalLegIndex) {
+            maxDistance -= lnavDistanceAlongActiveLeg;
+            maxDistance = Math.max(0, maxDistance);
+          }
+
+          if (Math.abs(inputDistance) < maxDistance) {
+            fixIcao1 = previousPlanLeg.leg.fixIcaoStruct;
+            fixIcao2 = planLeg.leg.fixIcaoStruct;
+          } else {
+            return AlongTrackOffsetError.DistanceTooLarge;
+          }
+        }
+      }
+    } else {
+      const nextPlanLeg = plan.tryGetLeg(globalLegIndex + 1);
+
+      if (nextPlanLeg) {
+        const legType = planLeg.leg.type;
+        const nextLegType = nextPlanLeg.leg.type;
+
+        if (ATO_VALID_PREVIOUS_LEG_TYPES.includes(legType) && ATO_VALID_NEXT_LEG_TYPES.includes(nextLegType)) {
+          const maxDistance = nextPlanLeg.calculated ? UnitType.NMILE.convertFrom(nextPlanLeg.calculated.distance, UnitType.METER) : -1;
+
+          let minDistance = 0;
+          if (lnavActiveLegIndex === globalLegIndex + 1) {
+            minDistance = lnavDistanceAlongActiveLeg;
+          }
+
+          if (inputDistance > minDistance && inputDistance < maxDistance) {
+            fixIcao1 = planLeg.leg.fixIcaoStruct;
+            fixIcao2 = nextPlanLeg.leg.fixIcaoStruct;
+          } else {
+            return AlongTrackOffsetError.DistanceTooLarge;
+          }
+        } else {
+          return AlongTrackOffsetError.NotAvailable;
+        }
+      }
+    }
+
+    if (fixIcao1 && !ICAO.isValueEmpty(fixIcao1) && fixIcao2 && !ICAO.isValueEmpty(fixIcao2)) {
+      facility1 = await facLoader.getFacility(ICAO.getFacilityTypeFromIcaoType(fixIcao1.type), fixIcao1);
+      facility2 = await facLoader.getFacility(ICAO.getFacilityTypeFromValue(fixIcao2), fixIcao2);
+
+      if (Math.abs(facility1.lat) > 80 || Math.abs(facility2.lat) > 80) {
+        return AlongTrackOffsetError.ReferenceFixInPolarRegion;
+      }
+
+      if (facility1 && facility2) {
+        const circle = GeoCircle.createGreatCircle(facility1, facility2);
+
+        const offsetOut = new Float64Array(3);
+        circle.offsetDistanceAlong(distanceNegative ? facility2 : facility1, UnitType.GA_RADIAN.convertFrom(inputDistance, UnitType.NMILE), offsetOut);
+
+        const geoPoint = new GeoPoint(0, 0);
+        geoPoint.setFromCartesian(offsetOut);
+
+        return [geoPoint, !distanceNegative];
+      }
+    }
+
+    return AlongTrackOffsetError.NotAvailable;
+  }
+}

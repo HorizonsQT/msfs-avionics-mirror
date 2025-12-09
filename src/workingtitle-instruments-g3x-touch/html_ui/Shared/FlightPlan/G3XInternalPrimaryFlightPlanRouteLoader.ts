@@ -575,7 +575,7 @@ export class G3XInternalPrimaryFlightPlanRouteLoader implements GarminFlightPlan
       indexes.push(...this.getInUseUserFacilityIndexesFromPlan(this.fms.getPrimaryFlightPlan()));
     }
 
-    return indexes.sort();
+    return indexes.sort((a, b) => a - b);
   }
 
   /**

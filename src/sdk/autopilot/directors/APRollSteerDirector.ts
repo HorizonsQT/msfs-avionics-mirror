@@ -96,8 +96,11 @@ export type APRollSteerDirectorOptions = {
 /**
  * An autopilot roll-steering director. This director uses roll-steering commands to drive flight director bank
  * commands.
+ * 
+ * The director requires valid bank data to arm or activate.
  */
 export class APRollSteerDirector implements PlaneDirector {
+  /** @inheritDoc */
   public state: DirectorState;
 
   /** @inheritDoc */
@@ -127,6 +130,8 @@ export class APRollSteerDirector implements PlaneDirector {
   private readonly canRemainArmedFunc: (apValues: APValues, state: Readonly<APRollSteerDirectorState>) => boolean;
   private readonly canActivateFunc: (apValues: APValues, state: Readonly<APRollSteerDirectorState>) => boolean;
   private readonly canRemainActiveFunc: (apValues: APValues, state: Readonly<APRollSteerDirectorState>) => boolean;
+
+  private readonly bank = this.apValues.dataProvider.getItem('bank');
 
   /**
    * Creates a new instance of APRollSteerDirector.
@@ -188,36 +193,67 @@ export class APRollSteerDirector implements PlaneDirector {
     this.state = DirectorState.Inactive;
   }
 
+  /**
+   * Checks whether the data required for this director to function are valid.
+   * @returns Whether the data required for this director to function are valid.
+   */
+  private isDataValid(): boolean {
+    return this.bank.isValueValid();
+  }
+
   /** @inheritDoc */
   public activate(): void {
+    if (this.state === DirectorState.Active || !this.isDataValid()) {
+      return;
+    }
+
     this.state = DirectorState.Active;
+
+    this.onActivate && this.onActivate();
+
     this.updateCallbackState();
     this.onActivateFunc && this.onActivateFunc(this.apValues, this.callbackState);
-    this.onActivate && this.onActivate();
   }
 
   /** @inheritDoc */
   public arm(): void {
-    if (this.state === DirectorState.Inactive) {
-      this.updateCallbackState();
-      if (this.canArmFunc(this.apValues, this.callbackState)) {
-        this.state = DirectorState.Armed;
-        this.onArmFunc && this.onArmFunc(this.apValues, this.callbackState);
-        this.onArm && this.onArm();
-      }
+    if (this.state !== DirectorState.Inactive || !this.isDataValid()) {
+      return;
+    }
+
+    this.updateCallbackState();
+    if (this.canArmFunc(this.apValues, this.callbackState)) {
+      this.state = DirectorState.Armed;
+      this.onArm && this.onArm();
+      this.onArmFunc && this.onArmFunc(this.apValues, this.callbackState);
     }
   }
 
   /** @inheritDoc */
   public deactivate(): void {
+    if (this.state === DirectorState.Inactive) {
+      return;
+    }
+
     this.state = DirectorState.Inactive;
+
+    this.onDeactivate && this.onDeactivate();
+
     this.updateCallbackState();
     this.onDeactivateFunc && this.onDeactivateFunc(this.apValues, this.callbackState);
-    this.onDeactivate && this.onDeactivate();
   }
 
   /** @inheritDoc */
   public update(): void {
+    if (this.state === DirectorState.Inactive) {
+      return;
+    }
+
+    if (!this.isDataValid()) {
+      this.deactivate();
+      return;
+    }
+
     this.updateCallbackState();
 
     if (this.state === DirectorState.Armed) {
